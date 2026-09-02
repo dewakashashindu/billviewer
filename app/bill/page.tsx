@@ -2000,7 +2000,7 @@ function BillContent() {
               }}
             >
               <a
-                href="tel:+94112345678"
+                href="tel:+94772336233"
                 className="nav-lnk"
                 style={{
                   color: "#434654",
