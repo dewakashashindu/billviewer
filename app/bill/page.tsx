@@ -1046,6 +1046,7 @@ function ReceiptLoader({ text }: { text: string }) {
 function BillContent() {
   const searchParams = useSearchParams();
   const [bill, setBill] = useState<Bill | null>(null);
+  const MIN_DELAY = 1500;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPromo, setShowPromo] = useState(false);
@@ -1059,16 +1060,18 @@ function BillContent() {
       return;
     }
 
-    fetch(`/api/bill?id=${encryptedId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.bill) {
-          setBill(data.bill);
-          setTimeout(() => setShowPromo(true), 800);
-        } else {
-          setError(data.error || "Bill not found");
-        }
-      })
+   Promise.all([
+  fetch(`/api/bill?id=${encryptedId}`).then((res) => res.json()),
+  new Promise((r) => setTimeout(r, 1500)), // ← minimum loading time (ms)
+])
+  .then(([data]) => {
+    if (data.success && data.bill) {
+      setBill(data.bill);
+      setTimeout(() => setShowPromo(true), 800);
+    } else {
+      setError(data.error || "Bill not found");
+    }
+  })
       .catch((err) => {
         console.error("Error fetching bill:", err);
         setError("Failed to load bill");
