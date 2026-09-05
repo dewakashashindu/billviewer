@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@prisma/client": "^7.10.0",
     "@react-pdf/renderer": "^4.9.0",
     "mssql": "^10.0.2",
     "next": "16.3.4",
@@ -23,6 +24,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "prisma": "^8.0.0-rc.13",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
