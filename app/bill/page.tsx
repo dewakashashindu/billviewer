@@ -3,25 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-
-// --- Types ---
-interface BillItem {
-  name: string;
-  price: number;
-}
-
-interface Bill {
-  billNumber: string;
-  tableName: string;
-  serverName: string;
-  date: string;
-  items: BillItem[];
-  subtotal: number;
-  tax: number;
-  tip: number;
-  grandTotal: number;
-  status: "PAID" | "PENDING" | "CANCELLED";
-}
+import { getBillTotalRows, STATUS_META, RESTAURANT_INFO, statusReceiptWord, type Bill } from "@/lib/billFormat";
 
 // --- Promotions Data ---
 const promotions = [
@@ -695,573 +677,119 @@ function PromoCards() {
   );
 }
 
-// =============================================
-// PDF DOWNLOAD BUTTON
-// =============================================
 function PDFDownloadButton({ bill }: { bill: Bill }) {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const handlePDFDownload = async () => {
     setPdfLoading(true);
-
     try {
       const ReactPDF = await import("@react-pdf/renderer");
-      const React = await import("react");
+      const { BillPDFDocument } = await import("@/lib/BillPDF");
 
-      const { Document, Page, Text, View, StyleSheet, pdf } = ReactPDF;
-
-      const styles = StyleSheet.create({
-        page: {
-          backgroundColor: "#FFFFFF",
-          padding: 40,
-          fontFamily: "Helvetica",
-        },
-        accentBar: {
-          height: 5,
-          backgroundColor: "#003D9B",
-          marginBottom: 32,
-          borderRadius: 2,
-        },
-        header: {
-          alignItems: "center",
-          marginBottom: 24,
-          paddingBottom: 20,
-          borderBottomWidth: 1,
-          borderBottomColor: "#EEEEEE",
-          borderBottomStyle: "solid",
-        },
-        restaurantName: {
-          color: "#003D9B",
-          fontSize: 11,
-          fontFamily: "Helvetica-Bold",
-          letterSpacing: 2,
-          textTransform: "uppercase",
-          marginBottom: 6,
-        },
-        billTitle: {
-          color: "#191C1E",
-          fontSize: 24,
-          fontFamily: "Helvetica-Bold",
-          marginBottom: 6,
-        },
-        billMeta: {
-          color: "#434654",
-          fontSize: 10,
-          fontFamily: "Helvetica",
-          marginBottom: 10,
-        },
-        statusBadge: {
-          paddingHorizontal: 12,
-          paddingVertical: 4,
-          borderRadius: 99,
-          marginTop: 4,
-        },
-        statusText: {
-          fontSize: 10,
-          fontFamily: "Helvetica-Bold",
-        },
-        billNumberRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          backgroundColor: "#F0F4FF",
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 24,
-        },
-        billNumberLabel: {
-          color: "#434654",
-          fontSize: 10,
-          fontFamily: "Helvetica",
-        },
-        billNumberValue: {
-          color: "#003D9B",
-          fontSize: 12,
-          fontFamily: "Helvetica-Bold",
-        },
-        sectionTitle: {
-          color: "#191C1E",
-          fontSize: 9,
-          fontFamily: "Helvetica-Bold",
-          letterSpacing: 1,
-          textTransform: "uppercase",
-          marginBottom: 10,
-        },
-        itemRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingVertical: 8,
-          borderBottomWidth: 1,
-          borderBottomColor: "#F5F5F5",
-          borderBottomStyle: "solid",
-        },
-        itemName: {
-          color: "#191C1E",
-          fontSize: 11,
-          fontFamily: "Helvetica",
-          flex: 1,
-        },
-        itemPrice: {
-          color: "#191C1E",
-          fontSize: 11,
-          fontFamily: "Helvetica-Bold",
-        },
-        dashedDivider: {
-          borderBottomWidth: 1,
-          borderBottomColor: "#DDDDDD",
-          borderBottomStyle: "dashed",
-          marginVertical: 16,
-        },
-        totalRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 6,
-        },
-        totalLabel: {
-          color: "#434654",
-          fontSize: 11,
-          fontFamily: "Helvetica",
-        },
-        totalValue: {
-          color: "#434654",
-          fontSize: 11,
-          fontFamily: "Helvetica",
-        },
-        grandTotalBox: {
-          backgroundColor: "#F0F4FF",
-          borderRadius: 10,
-          padding: 16,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 10,
-          borderWidth: 1,
-          borderColor: "#D0DBF5",
-          borderStyle: "solid",
-        },
-        grandTotalLabel: {
-          color: "#191C1E",
-          fontSize: 16,
-          fontFamily: "Helvetica-Bold",
-        },
-        grandTotalValue: {
-          color: "#003D9B",
-          fontSize: 18,
-          fontFamily: "Helvetica-Bold",
-        },
-        promoBox: {
-          marginTop: 24,
-          backgroundColor: "#FFF8F0",
-          borderRadius: 8,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: "#FFD49A",
-          borderStyle: "solid",
-        },
-        promoTitle: {
-          color: "#FF8C00",
-          fontSize: 12,
-          fontFamily: "Helvetica-Bold",
-          marginBottom: 4,
-        },
-        promoDesc: {
-          color: "#434654",
-          fontSize: 9,
-          fontFamily: "Helvetica",
-          marginBottom: 8,
-          lineHeight: 1.5,
-        },
-        promoCodeRow: {
-          flexDirection: "row",
-          alignItems: "center",
-        },
-        promoCodeLabel: {
-          color: "#434654",
-          fontSize: 9,
-          fontFamily: "Helvetica",
-          marginRight: 6,
-        },
-        promoCode: {
-          color: "#003D9B",
-          fontSize: 12,
-          fontFamily: "Helvetica-Bold",
-          letterSpacing: 2,
-        },
-        footer: {
-          marginTop: 32,
-          paddingTop: 16,
-          borderTopWidth: 1,
-          borderTopColor: "#EEEEEE",
-          borderTopStyle: "solid",
-          alignItems: "center",
-        },
-        footerBrand: {
-          color: "#003D9B",
-          fontSize: 10,
-          fontFamily: "Helvetica-Bold",
-          marginBottom: 4,
-        },
-        footerText: {
-          color: "#9496A1",
-          fontSize: 8,
-          fontFamily: "Helvetica",
-          textAlign: "center",
-          marginBottom: 2,
-        },
-      });
-
-      // ✅ Document directly create කරනවා
-      const docElement = React.createElement(
-        Document,
-        {
-          title: `MICROECHEF Bill - ${bill.billNumber}`,
-          author: "MICROECHEF",
-        },
-        React.createElement(
-          Page,
-          { size: "A4", style: styles.page },
-
-          // Accent Bar
-          React.createElement(View, { style: styles.accentBar }),
-
-          // Header
-          React.createElement(
-            View,
-            { style: styles.header },
-            React.createElement(
-              Text,
-              { style: styles.restaurantName },
-              "MICROECHEF"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.billTitle },
-              "Your Bill"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.billMeta },
-              `${bill.tableName}  •  Server: ${bill.serverName}  •  ${bill.date}`
-            ),
-            React.createElement(
-              View,
-              {
-                style: [
-                  styles.statusBadge,
-                  {
-                    backgroundColor:
-                      bill.status === "PAID" ? "#DCFCE7" : "#FEF9C3",
-                  },
-                ],
-              },
-              React.createElement(
-                Text,
-                {
-                  style: [
-                    styles.statusText,
-                    {
-                      color:
-                        bill.status === "PAID" ? "#16a34a" : "#ca8a04",
-                    },
-                  ],
-                },
-                bill.status === "PAID" ? "PAID" : "PENDING"
-              )
-            )
-          ),
-
-          // Bill Number Row
-          React.createElement(
-            View,
-            { style: styles.billNumberRow },
-            React.createElement(
-              Text,
-              { style: styles.billNumberLabel },
-              "Bill Number"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.billNumberValue },
-              `#${bill.billNumber}`
-            )
-          ),
-
-          // Section Title
-          React.createElement(
-            Text,
-            { style: styles.sectionTitle },
-            "ORDER ITEMS"
-          ),
-
-          // Items
-          ...bill.items.map((item, idx) =>
-            React.createElement(
-              View,
-              { style: styles.itemRow, key: `item-${idx}` },
-              React.createElement(
-                Text,
-                { style: styles.itemName },
-                item.name
-              ),
-              React.createElement(
-                Text,
-                { style: styles.itemPrice },
-                `Rs. ${item.price.toLocaleString("en-LK", {
-                  minimumFractionDigits: 2,
-                })}`
-              )
-            )
-          ),
-
-          // Dashed Divider
-          React.createElement(View, { style: styles.dashedDivider }),
-
-          // Subtotal
-          React.createElement(
-            View,
-            { style: styles.totalRow },
-            React.createElement(
-              Text,
-              { style: styles.totalLabel },
-              "Subtotal"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.totalValue },
-              `Rs. ${bill.subtotal.toLocaleString("en-LK", {
-                minimumFractionDigits: 2,
-              })}`
-            )
-          ),
-
-          // Tax
-          React.createElement(
-            View,
-            { style: styles.totalRow },
-            React.createElement(
-              Text,
-              { style: styles.totalLabel },
-              "Tax (8%)"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.totalValue },
-              `Rs. ${bill.tax.toLocaleString("en-LK", {
-                minimumFractionDigits: 2,
-              })}`
-            )
-          ),
-
-          // Tip
-          React.createElement(
-            View,
-            { style: styles.totalRow },
-            React.createElement(
-              Text,
-              { style: styles.totalLabel },
-              "Tip"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.totalValue },
-              `Rs. ${bill.tip.toLocaleString("en-LK", {
-                minimumFractionDigits: 2,
-              })}`
-            )
-          ),
-
-          // Grand Total
-          React.createElement(
-            View,
-            { style: styles.grandTotalBox },
-            React.createElement(
-              Text,
-              { style: styles.grandTotalLabel },
-              "Grand Total"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.grandTotalValue },
-              `Rs. ${bill.grandTotal.toLocaleString("en-LK", {
-                minimumFractionDigits: 2,
-              })}`
-            )
-          ),
-
-          // Promo Box
-          React.createElement(
-            View,
-            { style: styles.promoBox },
-            React.createElement(
-              Text,
-              { style: styles.promoTitle },
-              "Special Offer - 15% OFF on your next visit!"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.promoDesc },
-              "Get an exclusive discount on your next dine-in. Valid for 30 days from today."
-            ),
-            React.createElement(
-              View,
-              { style: styles.promoCodeRow },
-              React.createElement(
-                Text,
-                { style: styles.promoCodeLabel },
-                "Use Code: "
-              ),
-              React.createElement(
-                Text,
-                { style: styles.promoCode },
-                "CHEF15"
-              )
-            )
-          ),
-
-          // Footer
-          React.createElement(
-            View,
-            { style: styles.footer },
-            React.createElement(
-              Text,
-              { style: styles.footerBrand },
-              "MICROECHEF"
-            ),
-            React.createElement(
-              Text,
-              { style: styles.footerText },
-              "Thank you for dining with us! We look forward to serving you again."
-            ),
-            React.createElement(
-              Text,
-              { style: styles.footerText },
-              "© 2026 MICROECHEF. All rights reserved."
-            )
-          )
-        )
-      );
-
-      // ✅ docElement directly pass කරනවා pdf() ට
-      const blob = await pdf(docElement).toBlob();
-
-      // Download
+      const blob = await ReactPDF.pdf(<BillPDFDocument bill={bill} />).toBlob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `MICROECHEF-Bill-${bill.billNumber}.pdf`;
+      link.download = `eReceipt-${bill.billNumber}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error("PDF generation failed:", err);
-      alert("PDF download failed. Please try again.");
+      alert("PDF eka hadanna beri una. Aye try karanna.");
     } finally {
       setPdfLoading(false);
     }
   };
 
   return (
-    <>
-      <style>{`
-        @keyframes btnSpin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-      <button
-        onClick={handlePDFDownload}
-        disabled={pdfLoading}
-        style={{
-          height: 50,
-          paddingLeft: 32,
-          paddingRight: 32,
-          borderRadius: 10,
-          background: pdfLoading
-            ? "linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)"
-            : "linear-gradient(135deg, #003D9B 0%, #0052CC 100%)",
-          border: "none",
-          cursor: pdfLoading ? "not-allowed" : "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          transition: "all 0.2s",
-          boxShadow: pdfLoading
-            ? "none"
-            : "0 4px 16px rgba(0,61,155,0.3)",
-          opacity: pdfLoading ? 0.8 : 1,
-        }}
-        onMouseEnter={(e) => {
-          if (!pdfLoading) e.currentTarget.style.opacity = "0.88";
-        }}
-        onMouseLeave={(e) => {
-          if (!pdfLoading) e.currentTarget.style.opacity = "1";
-        }}
-      >
-        {pdfLoading ? (
-          <>
-            <div
-              style={{
-                width: 16,
-                height: 16,
-                border: "2px solid rgba(255,255,255,0.3)",
-                borderTop: "2px solid white",
-                borderRadius: "50%",
-                animation: "btnSpin 1s linear infinite",
-              }}
-            />
-            <span
-              style={{
-                color: "white",
-                fontSize: 14,
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 600,
-                letterSpacing: 0.5,
-              }}
-            >
-              Generating PDF...
-            </span>
-          </>
-        ) : (
-          <>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7,10 12,15 17,10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            <span
-              style={{
-                color: "white",
-                fontSize: 14,
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 600,
-                letterSpacing: 0.5,
-              }}
-            >
-              Download PDF Bill
-            </span>
-          </>
-        )}
-      </button>
-    </>
+    <button
+      onClick={handlePDFDownload}
+      disabled={pdfLoading}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "13px 24px",
+        background: "#1a1a1a",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: 8,
+        fontFamily: "'Courier New', ui-monospace, monospace",
+        fontSize: 13.5,
+        fontWeight: 700,
+        letterSpacing: 0.5,
+        cursor: pdfLoading ? "wait" : "pointer",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+      }}
+    >
+      {pdfLoading ? "Preparing PDF..." : "\u2B07 Download eReceipt (PDF)"}
+    </button>
   );
 }
 
-// =============================================
-// BILL CONTENT
-// =============================================
+const MONO =
+  '"Courier New", ui-monospace, SFMono-Regular, Menlo, monospace';
+
+const INK = "#1a1a1a";
+const INK_SOFT = "#555555";
+const DASH_C = "#2b2b2b";
+
+const fmtAmt = (n: number) =>
+  n.toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+function Dashed() {
+  return (
+    <div
+      style={{
+        borderTop: `1.5px dashed ${DASH_C}`,
+        margin: "14px 0",
+      }}
+    />
+  );
+}
+
+function ReceiptLoader({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#e9e9ee",
+        fontFamily: MONO,
+      }}
+    >
+      <div style={{ textAlign: "center" }}>
+        <div
+          style={{
+            width: 46,
+            height: 46,
+            border: "3px solid #cfcfd6",
+            borderTop: `3px solid ${INK}`,
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+            margin: "0 auto 16px",
+          }}
+        />
+        <p style={{ color: "#333", fontSize: 14, fontWeight: 600 }}>{text}</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    </div>
+  );
+}
+
 function BillContent() {
   const searchParams = useSearchParams();
   const [bill, setBill] = useState<Bill | null>(null);
@@ -1297,54 +825,10 @@ function BillContent() {
       });
   }, [searchParams]);
 
-  // Loading
   if (loading) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          minHeight: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          background:
-            "linear-gradient(135deg, #F0F4FF 0%, #F8F9FB 50%, #FFF8F0 100%)",
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              border: "4px solid #E8EAF6",
-              borderTop: "4px solid #003D9B",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-              margin: "0 auto 20px",
-            }}
-          />
-          <p
-            style={{
-              color: "#434654",
-              fontSize: 16,
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-            }}
-          >
-            Loading your bill...
-          </p>
-        </div>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
+    return <ReceiptLoader text="Loading your bill..." />;
   }
 
-  // Error
   if (error || !bill) {
     return (
       <div
@@ -1354,719 +838,399 @@ function BillContent() {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          background:
-            "linear-gradient(135deg, #F0F4FF 0%, #F8F9FB 50%, #FFF8F0 100%)",
+          background: "#e9e9ee",
           padding: 20,
+          fontFamily: MONO,
         }}
       >
         <div
           style={{
-            maxWidth: 500,
-            background: "white",
-            borderRadius: 16,
-            padding: "40px",
+            background: "#fff",
+            border: `1.5px dashed ${DASH_C}`,
+            borderRadius: 8,
+            padding: "28px 26px",
+            maxWidth: 380,
             textAlign: "center",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.1)",
           }}
         >
-          <div
-            style={{
-              width: 80,
-              height: 80,
-              background: "rgba(239,68,68,0.1)",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px",
-            }}
-          >
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
-                fill="#ef4444"
-              />
-            </svg>
-          </div>
-          <h2
-            style={{
-              color: "#191C1E",
-              fontSize: 24,
-              fontFamily: "Montserrat, sans-serif",
-              fontWeight: 700,
-              marginBottom: 12,
-            }}
-          >
-            Bill Not Found
-          </h2>
           <p
             style={{
-              color: "#434654",
-              fontSize: 14,
-              fontFamily: "Inter, sans-serif",
-              lineHeight: "22px",
-              marginBottom: 24,
+              fontSize: 15,
+              fontWeight: 700,
+              color: INK,
+              margin: 0,
             }}
           >
-            {error ||
-              "The bill you are looking for does not exist or the link is invalid."}
+            {error || "Bill not found"}
           </p>
-          <a
-            href="/"
+          <p
             style={{
-              display: "inline-block",
-              padding: "12px 24px",
-              background: "#003D9B",
-              color: "white",
-              fontSize: 14,
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              borderRadius: 8,
-              textDecoration: "none",
+              fontSize: 12.5,
+              color: INK_SOFT,
+              lineHeight: "20px",
+              margin: "10px 0 0",
             }}
           >
-            Go to Homepage
-          </a>
+            Please contact the restaurant if you believe this link is valid.
+          </p>
         </div>
       </div>
     );
   }
 
-  // Bill Display
+  const isTakeaway = bill.orderMode?.toUpperCase() === "TA";
+  const boxLabel = isTakeaway
+    ? (bill.orderModeDes || "TAKE AWAY").toUpperCase()
+    : `TBL : ${bill.tableName}`;
+  const showModeLine =
+    bill.orderModeDes && !isTakeaway ? bill.orderModeDes : null;
+
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; }
-        @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(18px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .anim-up { animation: fadeUp 0.55s ease both; }
-        .anim-delay-1 { animation-delay: 0.1s; }
-        .anim-delay-2 { animation-delay: 0.2s; }
-        .nav-lnk:hover { color: #003D9B !important; }
-      `}</style>
-
       {showPromo && <PromoPopup onClose={() => setShowPromo(false)} />}
-
-      {/* NAVBAR */}
-      <nav
-        className="no-print"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 100,
-          background: "rgba(255,255,255,0.95)",
-          boxShadow: "0 1px 0 #EEEEEE",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 1200,
-            paddingLeft: 20,
-            paddingRight: 20,
-            paddingTop: 10,
-            paddingBottom: 10,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Image
-              src="/CAPTURE 1.png"
-              alt="MICROECHEF Logo"
-              width={36}
-              height={36}
-              style={{ borderRadius: 8, objectFit: "contain" }}
-              priority
-            />
-            <span
-              style={{
-                color: "#003D9B",
-                fontSize: 20,
-                fontFamily: "Montserrat, sans-serif",
-                fontWeight: 800,
-                letterSpacing: 0.5,
-              }}
-            >
-              MICROECHEF
-            </span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span
-              style={{
-                color: "#434654",
-                fontSize: 13,
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 600,
-                letterSpacing: 0.5,
-              }}
-            >
-              Order #{bill.billNumber}
-            </span>
-            <div
-              style={{
-                paddingLeft: 12,
-                paddingRight: 12,
-                paddingTop: 4,
-                paddingBottom: 4,
-                background:
-                  bill.status === "PAID"
-                    ? "rgba(22,163,74,0.10)"
-                    : "rgba(234,179,8,0.10)",
-                borderRadius: 9999,
-                border: `1px solid ${
-                  bill.status === "PAID"
-                    ? "rgba(22,163,74,0.2)"
-                    : "rgba(234,179,8,0.2)"
-                }`,
-              }}
-            >
-              <span
-                style={{
-                  color: bill.status === "PAID" ? "#16a34a" : "#ca8a04",
-                  fontSize: 12,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 700,
-                  letterSpacing: 0.5,
-                }}
-              >
-                {bill.status === "PAID" ? "✓ PAID" : "⏳ PENDING"}
-              </span>
-            </div>
-          </div>
-        </div>
-      </nav>
 
       {/* PAGE WRAPPER */}
       <div
         style={{
           width: "100%",
           minHeight: "100vh",
-          background:
-            "linear-gradient(135deg, #F0F4FF 0%, #F8F9FB 50%, #FFF8F0 100%)",
-          display: "flex",
-          flexDirection: "column",
+          background: "#e9e9ee",
+          padding: "30px 12px 60px",
+          fontFamily: MONO,
         }}
       >
+        {/* RECEIPT CARD */}
         <div
           style={{
-            flex: 1,
-            paddingLeft: 20,
-            paddingRight: 20,
-            display: "flex",
-            justifyContent: "center",
+            maxWidth: 400,
+            margin: "0 auto",
+            background: "#fff",
+            padding: "28px 22px 30px",
+            boxShadow: "0 2px 16px rgba(0,0,0,0.12)",
           }}
         >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 712,
-              paddingTop: 110,
-              paddingBottom: 80,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-          >
-            {/* BILL CARD */}
-            <div
-              className="anim-up"
-              style={{ width: "100%", maxWidth: 672 }}
-            >
-              <div
-                style={{
-                  width: "100%",
-                  background: "rgba(255,255,255,0.96)",
-                  boxShadow:
-                    "0 20px 60px rgba(0,61,155,0.10), 0 4px 16px rgba(0,0,0,0.04)",
-                  borderRadius: 16,
-                  outline: "1px #EEEEEE solid",
-                  outlineOffset: -1,
-                  backdropFilter: "blur(10px)",
-                  WebkitBackdropFilter: "blur(10px)",
-                  overflow: "hidden",
-                }}
-              >
-                {/* Top Accent */}
-                <div
-                  style={{
-                    height: 5,
-                    background:
-                      "linear-gradient(90deg, #003D9B 0%, #0066FF 50%, #FF8C00 100%)",
-                  }}
-                />
-
-                <div
-                  style={{
-                    padding: "40px 44px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 0,
-                  }}
-                >
-                  {/* Header */}
-                  <div
-                    style={{
-                      paddingBottom: 24,
-                      borderBottom: "1px solid #EEEEEE",
-                      marginBottom: 24,
-                      textAlign: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 52,
-                        height: 52,
-                        margin: "0 auto 16px",
-                        borderRadius: 14,
-                        overflow: "hidden",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        boxShadow: "0 4px 12px rgba(0,61,155,0.15)",
-                      }}
-                    >
-                      <Image
-                        src="/CAPTURE 1.png"
-                        alt="MICROECHEF"
-                        width={52}
-                        height={52}
-                        style={{ objectFit: "cover" }}
-                      />
-                    </div>
-                    <p
-                      style={{
-                        color: "#003D9B",
-                        fontSize: 13,
-                        fontFamily: "Inter, sans-serif",
-                        fontWeight: 700,
-                        letterSpacing: 2,
-                        textTransform: "uppercase",
-                        marginBottom: 6,
-                      }}
-                    >
-                      MICROECHEF
-                    </p>
-                    <p
-                      style={{
-                        color: "#191C1E",
-                        fontSize: 26,
-                        fontFamily: "Montserrat, sans-serif",
-                        fontWeight: 700,
-                        lineHeight: "1.3",
-                        marginBottom: 8,
-                      }}
-                    >
-                      Your Bill
-                    </p>
-                    <p
-                      style={{
-                        color: "#434654",
-                        fontSize: 12,
-                        fontFamily: "Inter, sans-serif",
-                        fontWeight: 500,
-                        lineHeight: "16.8px",
-                      }}
-                    >
-                      {bill.tableName} &bull; Server: {bill.serverName} &bull;{" "}
-                      {bill.date}
-                    </p>
-                  </div>
-
-                  {/* Items */}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 14,
-                      paddingBottom: 24,
-                      borderBottom: "1px dashed #DDDDDD",
-                      marginBottom: 20,
-                    }}
-                  >
-                    {bill.items.map((item, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "6px 0",
-                        }}
-                      >
-                        <p
-                          style={{
-                            color: "#191C1E",
-                            fontSize: 14.5,
-                            fontFamily: "Inter, sans-serif",
-                            fontWeight: 400,
-                            lineHeight: "24px",
-                          }}
-                        >
-                          {item.name}
-                        </p>
-                        <p
-                          style={{
-                            color: "#191C1E",
-                            fontSize: 14.5,
-                            fontFamily: "'Courier New', monospace",
-                            fontWeight: 600,
-                            lineHeight: "24px",
-                          }}
-                        >
-                          Rs.{" "}
-                          {item.price.toLocaleString("en-LK", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Totals */}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 10,
-                    }}
-                  >
-                    {[
-                      { label: "Subtotal", value: bill.subtotal },
-                      { label: "Tax (8%)", value: bill.tax },
-                      { label: "Tip", value: bill.tip },
-                    ].map((row) => (
-                      <div
-                        key={row.label}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <p
-                          style={{
-                            color: "#434654",
-                            fontSize: 14,
-                            fontFamily: "Inter, sans-serif",
-                            fontWeight: 400,
-                            lineHeight: "25.6px",
-                          }}
-                        >
-                          {row.label}
-                        </p>
-                        <p
-                          style={{
-                            color: "#434654",
-                            fontSize: 14,
-                            fontFamily: "'Courier New', monospace",
-                            fontWeight: 400,
-                            lineHeight: "25.6px",
-                          }}
-                        >
-                          Rs.{" "}
-                          {row.value.toLocaleString("en-LK", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </p>
-                      </div>
-                    ))}
-
-                    {/* Grand Total */}
-                    <div
-                      style={{
-                        marginTop: 12,
-                        padding: "20px 20px",
-                        background:
-                          "linear-gradient(135deg, rgba(0,61,155,0.05) 0%, rgba(0,102,255,0.04) 100%)",
-                        borderRadius: 12,
-                        border: "1px solid rgba(0,61,155,0.1)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <p
-                        style={{
-                          color: "#191C1E",
-                          fontSize: 20,
-                          fontFamily: "Montserrat, sans-serif",
-                          fontWeight: 700,
-                          lineHeight: "33.6px",
-                        }}
-                      >
-                        Grand Total
-                      </p>
-                      <p
-                        style={{
-                          color: "#003D9B",
-                          fontSize: 22,
-                          fontFamily: "'Courier New', monospace",
-                          fontWeight: 800,
-                          lineHeight: "33.6px",
-                        }}
-                      >
-                        Rs.{" "}
-                        {bill.grandTotal.toLocaleString("en-LK", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Download Button */}
-                  <div
-                    className="no-print"
-                    style={{
-                      marginTop: 28,
-                      display: "flex",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <PDFDownloadButton bill={bill} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* PROMO CARDS */}
-            <div
-              className="anim-up anim-delay-1 no-print"
-              style={{ width: "100%", maxWidth: 672 }}
-            >
-              <PromoCards />
-            </div>
-
-            {/* THANK YOU */}
-            <div
-              className="anim-up anim-delay-2 no-print"
+          {/* ── Restaurant header ── */}
+          <div style={{ textAlign: "center" }}>
+            <Image
+              src={RESTAURANT_INFO.logoPath}
+              alt={RESTAURANT_INFO.name}
+              width={150}
+              height={75}
               style={{
-                width: "100%",
-                maxWidth: 672,
-                marginTop: 56,
-                background: "rgba(255,255,255,0.92)",
-                borderRadius: 14,
-                outline: "1px #EEEEEE solid",
-                outlineOffset: -1,
-                boxShadow: "0 10px 40px rgba(0,82,204,0.07)",
-                padding: "40px 44px",
-                textAlign: "center",
+                objectFit: "contain",
+                margin: "0 auto 14px",
+                display: "block",
+              }}
+            />
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 21,
+                fontWeight: 700,
+                color: INK,
+                fontFamily: "Georgia, 'Times New Roman', serif",
               }}
             >
-              <div
-                style={{
-                  width: 64,
-                  height: 64,
-                  background: "rgba(0,61,155,0.10)",
-                  borderRadius: 9999,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto 20px",
-                }}
-              >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
-                    fill="#003D9B"
-                  />
-                </svg>
-              </div>
+              {RESTAURANT_INFO.name}
+            </h1>
+            {RESTAURANT_INFO.city && (
               <p
                 style={{
-                  color: "#191C1E",
-                  fontSize: 22,
-                  fontFamily: "Montserrat, sans-serif",
+                  margin: "4px 0 0",
+                  fontSize: 13,
+                  color: INK,
+                }}
+              >
+                {RESTAURANT_INFO.city}
+              </p>
+            )}
+            {RESTAURANT_INFO.addressLines.map((line) => (
+              <p
+                key={line}
+                style={{
+                  margin: "2px 0 0",
+                  fontSize: 12.5,
+                  color: INK,
+                }}
+              >
+                {line}
+              </p>
+            ))}
+            {bill.locationName && (
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: 13,
                   fontWeight: 700,
-                  marginBottom: 12,
+                  color: INK,
                 }}
               >
-                Thank You for Dining With Us! 🎉
+                {bill.locationName}
               </p>
-              <p
-                style={{
-                  color: "#434654",
-                  fontSize: 14,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 400,
-                  lineHeight: "22px",
-                  marginBottom: 8,
-                }}
-              >
-                We hope you enjoyed your meal at MICROECHEF. We look forward
-                to serving you again soon!
-              </p>
-              <p
-                style={{
-                  color: "#9496A1",
-                  fontSize: 12,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                  lineHeight: "18px",
-                }}
-              >
-                Don&apos;t forget to use your exclusive discount codes on your
-                next visit.
-              </p>
-            </div>
+            )}
           </div>
-        </div>
 
-        {/* FOOTER */}
-        <footer
-          className="no-print"
-          style={{
-            paddingLeft: 20,
-            paddingRight: 20,
-            display: "flex",
-            justifyContent: "center",
-            background: "rgba(255,255,255,0.6)",
-            backdropFilter: "blur(8px)",
-          }}
-        >
+          <Dashed />
+
+          {/* ── TBL / TAKEAWAY box ── */}
           <div
             style={{
-              width: "100%",
-              maxWidth: 1160,
-              paddingTop: 32,
-              paddingBottom: 32,
-              borderTop: "1px solid #EEEEEE",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 20,
+              border: `1.5px dashed ${DASH_C}`,
+              borderRadius: 6,
+              padding: "10px 12px",
+              textAlign: "center",
+              margin: "16px 0",
+              fontWeight: 700,
+              fontSize: 15,
+              letterSpacing: 1,
+              color: INK,
             }}
           >
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: 4 }}
-            >
-              <div
-                style={{ display: "flex", alignItems: "center", gap: 8 }}
-              >
-                <Image
-                  src="/CAPTURE 1.png"
-                  alt="MICROECHEF"
-                  width={24}
-                  height={24}
-                  style={{ borderRadius: 6, objectFit: "contain" }}
-                />
-                <span
-                  style={{
-                    color: "#003D9B",
-                    fontSize: 14,
-                    fontFamily: "Montserrat, sans-serif",
-                    fontWeight: 800,
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  MICROECHEF
-                </span>
-              </div>
-              <span
-                style={{
-                  color: "#9496A1",
-                  fontSize: 11,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                }}
-              >
-                © 2026 MICROECHEF. All rights reserved.
-              </span>
-            </div>
+            {boxLabel}
+          </div>
 
+          <Dashed />
+
+          {/* ── Meta block ── */}
+          <div style={{ fontSize: 12.5, color: INK }}>
             <div
               style={{
                 display: "flex",
-                alignItems: "center",
-                gap: 24,
-                flexWrap: "wrap",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 6,
               }}
             >
-              <a
-                href="tel:+94772336233"
-                className="nav-lnk"
-                style={{
-                  color: "#434654",
-                  fontSize: 13,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  transition: "color 0.2s",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012.18 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 8.15a16 16 0 006.29 6.29l1.42-1.42a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
-                </svg>
-                Contact Us
-              </a>
-              <a
-                href="#"
-                className="nav-lnk"
-                style={{
-                  color: "#434654",
-                  fontSize: 13,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  transition: "color 0.2s",
-                }}
-              >
-                Privacy Policy
-              </a>
-              <a
-                href="#"
-                className="nav-lnk"
-                style={{
-                  color: "#434654",
-                  fontSize: 13,
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  transition: "color 0.2s",
-                }}
-              >
-                Terms of Service
-              </a>
+              <span>
+                <b>INV:</b> {bill.billNumber}
+              </span>
+              <span>
+                <b>STS:</b> {statusReceiptWord(bill.status)}
+              </span>
             </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 6,
+              }}
+            >
+              <span>
+                <b>DAT:</b> {bill.date}
+              </span>
+              {bill.time && (
+                <span>
+                  <b>TIM:</b> {bill.time}
+                </span>
+              )}
+            </div>
+            {bill.noOfPax != null && bill.noOfPax > 0 && (
+              <div style={{ marginBottom: 6 }}>
+                <b>PAX:</b> {bill.noOfPax}
+              </div>
+            )}
+            {showModeLine && (
+              <div style={{ marginBottom: 6 }}>
+                <b>Mode:</b> {showModeLine}
+              </div>
+            )}
+
+            {/* Steward / Cashier / Customer */}
+            {bill.stewardName && (
+              <div style={{ marginBottom: 6 }}>
+                <b>Steward:</b> {bill.stewardName}
+              </div>
+            )}
+            {bill.cashierName && (
+              <div style={{ marginBottom: 6 }}>
+                <b>Cashier:</b> {bill.cashierName}
+              </div>
+            )}
+            {!bill.stewardName && !bill.cashierName && bill.serverName && (
+              <div style={{ marginBottom: 6 }}>
+                <b>Server:</b> {bill.serverName}
+              </div>
+            )}
+            {(bill.customerName || bill.customerPhone) && (
+              <div style={{ marginBottom: 6, wordBreak: "break-word" }}>
+                <b>Customer:</b>
+                {bill.customerName ? ` ${bill.customerName}` : ""}{" "}
+                {bill.customerPhone && (
+                  <a
+                    href={`tel:${bill.customerPhone}`}
+                    style={{ color: "#1a0dab" }}
+                  >
+                    ({bill.customerPhone})
+                  </a>
+                )}
+              </div>
+            )}
           </div>
-        </footer>
+
+          <Dashed />
+
+          {/* ── Items header ── */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontWeight: 700,
+              fontSize: 12.5,
+              letterSpacing: 0.5,
+              color: INK,
+              marginBottom: 12,
+            }}
+          >
+            <span>DESCRIPTION</span>
+            <span>AMOUNT</span>
+          </div>
+
+          {/* ── Items ── */}
+          <div
+            style={{
+              paddingBottom: 4,
+            }}
+          >
+            {bill.items.map((item, idx) => (
+              <div key={idx} style={{ marginBottom: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 14,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontSize: 13.5,
+                      color: INK,
+                      lineHeight: "19px",
+                    }}
+                  >
+                    {item.name}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13.5,
+                      color: INK,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtAmt(item.price)}
+                  </span>
+                </div>
+                {item.unitPrice != null && item.qty != null && (
+                  <div
+                    style={{
+                      color: INK_SOFT,
+                      fontSize: 11.5,
+                      marginTop: 2,
+                    }}
+                  >
+                    {item.qty} x Rs. {fmtAmt(item.unitPrice)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <Dashed />
+
+          {/* ── Totals breakdown ── */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 7,
+            }}
+          >
+            {getBillTotalRows(bill).map((row) => (
+              <div
+                key={row.label}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 13,
+                  color: INK,
+                }}
+              >
+                <span>{row.label}</span>
+                <span>{fmtAmt(row.value)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Grand total ── */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontWeight: 700,
+              fontSize: 15.5,
+              color: INK,
+              marginTop: 12,
+              paddingTop: 10,
+              borderTop: `1.5px dashed ${DASH_C}`,
+            }}
+          >
+            <span>GRAND TOTAL</span>
+            <span>Rs. {fmtAmt(bill.grandTotal)}</span>
+          </div>
+
+          {/* ── Payments ── */}
+          {bill.payments && bill.payments.length > 0 && (
+            <p
+              style={{
+                margin: "12px 0 0",
+                textAlign: "center",
+                color: INK_SOFT,
+                fontSize: 11.5,
+                lineHeight: "18px",
+              }}
+            >
+              Paid via{" "}
+              {bill.payments
+                .map((p) => `${p.method} (Rs. ${fmtAmt(p.amount)})`)
+                .join(", ")}
+            </p>
+          )}
+
+          <p
+            style={{
+              margin: "16px 0 0",
+              textAlign: "center",
+              color: INK_SOFT,
+              fontSize: 11.5,
+            }}
+          >
+            Thank you for dining with {RESTAURANT_INFO.name}!
+          </p>
+
+          {/* ── PDF download ── */}
+          <div
+            className="no-print"
+            style={{
+              marginTop: 18,
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <PDFDownloadButton bill={bill} />
+          </div>
+        </div>
+
+        {/* ── Promotions ── */}
+        <div style={{ maxWidth: 420, margin: "26px auto 0" }}>
+          <PromoCards />
+        </div>
       </div>
     </>
   );
 }
 
-// =============================================
-// MAIN EXPORT
-// =============================================
+
 export default function BillPage() {
   return (
     <Suspense

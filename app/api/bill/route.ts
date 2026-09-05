@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getBillByNumber } from "@/lib/mockBills";
+import { getBillFromDb } from "@/lib/billService";
+import { isDbConfigured } from "@/lib/db";
 
 const IV = Buffer.from([
   0x00, 0x01, 0x02, 0x03,
@@ -34,6 +36,10 @@ function decryptBillNumber(encryptedText: string): string | null {
     return decrypted.toString("utf8");
   } catch (error) {
     console.error("Decryption error:", error);
+    console.error(
+      "💡 Hint: me error eka wenne ENCRYPTION_KEY eka link eka encrypt karapu key ekata aduwa nisa. " +
+        "Check: node scripts/diagnose-link.mjs <link-id>"
+    );
     return null;
   }
 }
@@ -65,7 +71,29 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const bill = getBillByNumber(billNumber);
+  let bill;
+  let source: "database" | "mock";
+
+  if (isDbConfigured()) {
+    try {
+      bill = await getBillFromDb(billNumber);
+      source = "database";
+    } catch (error) {
+      console.error("❌ MSSQL error while fetching bill:", error);
+      return NextResponse.json(
+        { success: false, error: "Database error while fetching bill" },
+        { status: 500 }
+      );
+    }
+  } else {
+    // Dev fallback — DB env vars not set, serve mock data so the
+    // app stays usable locally. Set DB_* vars in .env.local for real data.
+    console.warn(
+      "⚠️ DB_* env vars not configured — serving MOCK bill (dev fallback)"
+    );
+    bill = getBillByNumber(billNumber);
+    source = "mock";
+  }
 
   if (!bill) {
     return NextResponse.json(
@@ -74,5 +102,5 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ success: true, bill });
+  return NextResponse.json({ success: true, source, bill });
 }

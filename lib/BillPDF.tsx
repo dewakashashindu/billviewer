@@ -4,375 +4,271 @@ import {
   Text,
   View,
   StyleSheet,
-  Font,
+  Image,
 } from "@react-pdf/renderer";
+import {
+  getBillTotalRows,
+  RESTAURANT_INFO,
+  statusReceiptWord,
+  type Bill,
+} from "./billFormat";
 
-interface BillItem {
-  name: string;
-  price: number;
-}
+// Built-in Courier / Courier-Bold / Times-Bold families are used (no external fonts)
 
-interface Bill {
-  billNumber: string;
-  tableName: string;
-  serverName: string;
-  date: string;
-  items: BillItem[];
-  subtotal: number;
-  tax: number;
-  tip: number;
-  grandTotal: number;
-  status: "PAID" | "PENDING" | "CANCELLED";
-}
+const INK = "#1a1a1a";
+const SOFT = "#555555";
 
-// Styles
+const fmt = (n: number) =>
+  n.toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 const styles = StyleSheet.create({
   page: {
     backgroundColor: "#FFFFFF",
-    padding: 40,
-    fontFamily: "Helvetica",
+    padding: 36,
+    fontFamily: "Courier",
+    color: INK,
+    fontSize: 10.5,
   },
-
-  // Top accent bar
-  accentBar: {
-    height: 5,
-    backgroundColor: "#003D9B",
-    marginBottom: 32,
-    borderRadius: 2,
-  },
-
-  // Header
-  header: {
-    alignItems: "center",
-    marginBottom: 28,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
-    borderBottomStyle: "solid",
-  },
+  header: { alignItems: "center", marginBottom: 6 },
+  logo: { width: 110, height: 55, objectFit: "contain", marginBottom: 8 },
   restaurantName: {
-    color: "#003D9B",
-    fontSize: 11,
-    fontFamily: "Helvetica-Bold",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    marginBottom: 6,
+    fontSize: 17,
+    fontFamily: "Times-Bold",
+    color: INK,
+    marginBottom: 3,
   },
-  billTitle: {
-    color: "#191C1E",
-    fontSize: 24,
-    fontFamily: "Helvetica-Bold",
-    marginBottom: 8,
+  addressLine: { fontSize: 9.5, color: INK, marginTop: 1 },
+  dashed: {
+    borderTopWidth: 1,
+    borderTopColor: "#2b2b2b",
+    borderTopStyle: "dashed",
+    marginVertical: 10,
   },
-  billMeta: {
-    color: "#434654",
-    fontSize: 10,
-    fontFamily: "Helvetica",
-  },
-
-  // Status badge
-  statusBadge: {
-    marginTop: 10,
+  tblBox: {
+    borderWidth: 1,
+    borderColor: "#2b2b2b",
+    borderStyle: "dashed",
+    borderRadius: 4,
+    paddingVertical: 7,
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: "#DCFCE7",
-    borderRadius: 99,
-  },
-  statusText: {
-    color: "#16a34a",
-    fontSize: 10,
-    fontFamily: "Helvetica-Bold",
-  },
-
-  // Bill number row
-  billNumberRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#F0F4FF",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 24,
-  },
-  billNumberLabel: {
-    color: "#434654",
-    fontSize: 10,
-    fontFamily: "Helvetica",
-  },
-  billNumberValue: {
-    color: "#003D9B",
+    textAlign: "center",
+    fontFamily: "Courier-Bold",
     fontSize: 12,
-    fontFamily: "Helvetica-Bold",
-  },
-
-  // Items section
-  sectionTitle: {
-    color: "#191C1E",
-    fontSize: 10,
-    fontFamily: "Helvetica-Bold",
     letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 12,
+    marginVertical: 4,
   },
-  itemRow: {
+  metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F5F5",
-    borderBottomStyle: "solid",
+    marginBottom: 3,
   },
-  itemName: {
-    color: "#191C1E",
-    fontSize: 11,
-    fontFamily: "Helvetica",
-    flex: 1,
+  metaLine: { marginBottom: 3 },
+  itemsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    fontFamily: "Courier-Bold",
+    fontSize: 10,
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
-  itemPrice: {
-    color: "#191C1E",
-    fontSize: 11,
-    fontFamily: "Helvetica-Bold",
-  },
-
-  // Divider
-  divider: {
-    height: 1,
-    backgroundColor: "#DDDDDD",
-    marginVertical: 20,
-  },
-  dashedDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#DDDDDD",
-    borderBottomStyle: "dashed",
-    marginVertical: 20,
-  },
-
-  // Totals
+  itemBlock: { marginBottom: 7 },
+  itemRow: { flexDirection: "row", justifyContent: "space-between" },
+  itemName: { fontFamily: "Courier-Bold", fontSize: 10.5, maxWidth: 280 },
+  itemAmt: { fontSize: 10.5 },
+  itemSub: { fontSize: 8.5, color: SOFT, marginTop: 1 },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  totalLabel: {
-    color: "#434654",
-    fontSize: 11,
-    fontFamily: "Helvetica",
-  },
-  totalValue: {
-    color: "#434654",
-    fontSize: 11,
-    fontFamily: "Helvetica",
-  },
-
-  // Grand Total
-  grandTotalBox: {
-    backgroundColor: "#F0F4FF",
-    borderRadius: 10,
-    padding: 16,
+  grandRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,61,155,0.1)",
-    borderStyle: "solid",
-  },
-  grandTotalLabel: {
-    color: "#191C1E",
-    fontSize: 16,
-    fontFamily: "Helvetica-Bold",
-  },
-  grandTotalValue: {
-    color: "#003D9B",
-    fontSize: 18,
-    fontFamily: "Helvetica-Bold",
-  },
-
-  // Footer
-  footer: {
-    marginTop: 40,
-    paddingTop: 20,
+    fontFamily: "Courier-Bold",
+    fontSize: 12.5,
+    marginTop: 6,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
-    borderTopStyle: "solid",
-    alignItems: "center",
+    borderTopColor: "#2b2b2b",
+    borderTopStyle: "dashed",
   },
-  footerText: {
-    color: "#9496A1",
-    fontSize: 9,
-    fontFamily: "Helvetica",
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  footerBrand: {
-    color: "#003D9B",
-    fontSize: 10,
-    fontFamily: "Helvetica-Bold",
-  },
-
-  // Promo section
-  promoBox: {
-    marginTop: 24,
-    backgroundColor: "#FFF8F0",
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,140,0,0.25)",
-    borderStyle: "solid",
-  },
-  promoTitle: {
-    color: "#FF8C00",
-    fontSize: 13,
-    fontFamily: "Helvetica-Bold",
-    marginBottom: 4,
-  },
-  promoDesc: {
-    color: "#434654",
-    fontSize: 9,
-    fontFamily: "Helvetica",
-    marginBottom: 8,
-    lineHeight: 1.5,
-  },
-  promoCodeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  promoCodeLabel: {
-    color: "#434654",
-    fontSize: 9,
-    fontFamily: "Helvetica",
-  },
-  promoCode: {
-    color: "#003D9B",
-    fontSize: 12,
-    fontFamily: "Helvetica-Bold",
-    letterSpacing: 2,
-  },
+  center: { textAlign: "center", fontSize: 9, color: SOFT },
 });
 
-// PDF Document Component
 export function BillPDFDocument({ bill }: { bill: Bill }) {
+  const isTakeaway = bill.orderMode?.toUpperCase() === "TA";
+  const boxLabel = isTakeaway
+    ? (bill.orderModeDes || "TAKE AWAY").toUpperCase()
+    : `TBL : ${bill.tableName}`;
+  const showModeLine =
+    bill.orderModeDes && !isTakeaway ? bill.orderModeDes : null;
+
   return (
     <Document
-      title={`MICROECHEF Bill - ${bill.billNumber}`}
-      author="MICROECHEF"
-      subject="Digital Bill"
+      title={`eReceipt - ${bill.billNumber}`}
+      author={RESTAURANT_INFO.name}
+      subject="Digital eReceipt"
     >
       <Page size="A4" style={styles.page}>
-        {/* Accent Bar */}
-        <View style={styles.accentBar} />
-
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.restaurantName}>MICROECHEF</Text>
-          <Text style={styles.billTitle}>Your Bill</Text>
-          <Text style={styles.billMeta}>
-            {bill.tableName} • Server: {bill.serverName} • {bill.date}
-          </Text>
-          <View
-            style={[
-              styles.statusBadge,
-              {
-                backgroundColor:
-                  bill.status === "PAID" ? "#DCFCE7" : "#FEF9C3",
-              },
-            ]}
-          >
+          <Image style={styles.logo} src={RESTAURANT_INFO.logoPath} />
+          <Text style={styles.restaurantName}>{RESTAURANT_INFO.name}</Text>
+          {RESTAURANT_INFO.city ? (
+            <Text style={styles.addressLine}>{RESTAURANT_INFO.city}</Text>
+          ) : null}
+          {RESTAURANT_INFO.addressLines.map((l) => (
+            <Text key={l} style={styles.addressLine}>
+              {l}
+            </Text>
+          ))}
+          {bill.locationName ? (
             <Text
-              style={[
-                styles.statusText,
-                { color: bill.status === "PAID" ? "#16a34a" : "#ca8a04" },
-              ]}
+              style={{
+                fontSize: 11,
+                marginTop: 5,
+                fontFamily: "Courier-Bold",
+                color: INK,
+              }}
             >
-              {bill.status === "PAID" ? "✓ PAID" : "⏳ PENDING"}
+              {bill.locationName}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.dashed} />
+
+        {/* TBL / TAKEAWAY */}
+        <View style={styles.tblBox}>
+          <Text>{boxLabel}</Text>
+        </View>
+
+        <View style={styles.dashed} />
+
+        {/* Meta */}
+        <View style={styles.metaRow}>
+          <Text>
+            <Text style={{ fontFamily: "Courier-Bold" }}>INV: </Text>
+            {bill.billNumber}
+          </Text>
+          <Text>
+            <Text style={{ fontFamily: "Courier-Bold" }}>STS: </Text>
+            {statusReceiptWord(bill.status)}
+          </Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Text>
+            <Text style={{ fontFamily: "Courier-Bold" }}>DAT: </Text>
+            {bill.date}
+          </Text>
+          {bill.time ? (
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>TIM: </Text>
+              {bill.time}
+            </Text>
+          ) : null}
+        </View>
+        {bill.noOfPax != null && bill.noOfPax > 0 ? (
+          <View style={styles.metaLine}>
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>PAX: </Text>
+              {bill.noOfPax}
             </Text>
           </View>
-        </View>
-
-        {/* Bill Number Row */}
-        <View style={styles.billNumberRow}>
-          <Text style={styles.billNumberLabel}>Bill Number</Text>
-          <Text style={styles.billNumberValue}>#{bill.billNumber}</Text>
-        </View>
-
-        {/* Items Section */}
-        <Text style={styles.sectionTitle}>Order Items</Text>
-        {bill.items.map((item, idx) => (
-          <View key={idx} style={styles.itemRow}>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemPrice}>
-              Rs.{" "}
-              {item.price.toLocaleString("en-LK", {
-                minimumFractionDigits: 2,
-              })}
+        ) : null}
+        {showModeLine ? (
+          <View style={styles.metaLine}>
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>Mode: </Text>
+              {showModeLine}
             </Text>
+          </View>
+        ) : null}
+        {bill.stewardName ? (
+          <View style={styles.metaLine}>
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>Steward: </Text>
+              {bill.stewardName}
+            </Text>
+          </View>
+        ) : null}
+        {bill.cashierName ? (
+          <View style={styles.metaLine}>
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>Cashier: </Text>
+              {bill.cashierName}
+            </Text>
+          </View>
+        ) : null}
+        {!bill.stewardName && !bill.cashierName && bill.serverName ? (
+          <View style={styles.metaLine}>
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>Server: </Text>
+              {bill.serverName}
+            </Text>
+          </View>
+        ) : null}
+        {bill.customerName || bill.customerPhone ? (
+          <View style={styles.metaLine}>
+            <Text>
+              <Text style={{ fontFamily: "Courier-Bold" }}>Customer: </Text>
+              {bill.customerName ? `${bill.customerName} ` : ""}
+              {bill.customerPhone ? `(${bill.customerPhone})` : ""}
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.dashed} />
+
+        {/* Items */}
+        <View style={styles.itemsHeader}>
+          <Text>DESCRIPTION</Text>
+          <Text>AMOUNT</Text>
+        </View>
+        {bill.items.map((item, idx) => (
+          <View key={idx} style={styles.itemBlock}>
+            <View style={styles.itemRow}>
+              <Text style={styles.itemName}>{item.name}</Text>
+              <Text style={styles.itemAmt}>{fmt(item.price)}</Text>
+            </View>
+            {item.unitPrice != null && item.qty != null ? (
+              <Text style={styles.itemSub}>
+                {item.qty} x Rs. {fmt(item.unitPrice)}
+              </Text>
+            ) : null}
           </View>
         ))}
 
-        {/* Dashed Divider */}
-        <View style={styles.dashedDivider} />
+        <View style={styles.dashed} />
 
         {/* Totals */}
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Subtotal</Text>
-          <Text style={styles.totalValue}>
-            Rs.{" "}
-            {bill.subtotal.toLocaleString("en-LK", {
-              minimumFractionDigits: 2,
-            })}
-          </Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Tax (8%)</Text>
-          <Text style={styles.totalValue}>
-            Rs.{" "}
-            {bill.tax.toLocaleString("en-LK", { minimumFractionDigits: 2 })}
-          </Text>
-        </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Tip</Text>
-          <Text style={styles.totalValue}>
-            Rs.{" "}
-            {bill.tip.toLocaleString("en-LK", { minimumFractionDigits: 2 })}
-          </Text>
-        </View>
-
-        {/* Grand Total */}
-        <View style={styles.grandTotalBox}>
-          <Text style={styles.grandTotalLabel}>Grand Total</Text>
-          <Text style={styles.grandTotalValue}>
-            Rs.{" "}
-            {bill.grandTotal.toLocaleString("en-LK", {
-              minimumFractionDigits: 2,
-            })}
-          </Text>
-        </View>
-
-        {/* Promo Box */}
-        <View style={styles.promoBox}>
-          <Text style={styles.promoTitle}>🎁 15% OFF on your next visit!</Text>
-          <Text style={styles.promoDesc}>
-            Get an exclusive discount on your next dine-in. Valid for 30 days.
-          </Text>
-          <View style={styles.promoCodeRow}>
-            <Text style={styles.promoCodeLabel}>Use Code:</Text>
-            <Text style={styles.promoCode}>CHEF15</Text>
+        {getBillTotalRows(bill).map((row) => (
+          <View key={row.label} style={styles.totalRow}>
+            <Text>{row.label}</Text>
+            <Text>{fmt(row.value)}</Text>
           </View>
+        ))}
+
+        {/* Grand total */}
+        <View style={styles.grandRow}>
+          <Text>GRAND TOTAL</Text>
+          <Text>Rs. {fmt(bill.grandTotal)}</Text>
         </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerBrand}>MICROECHEF</Text>
-          <Text style={styles.footerText}>
-            Thank you for dining with us! We look forward to serving you again.
+        {/* Payments */}
+        {bill.payments && bill.payments.length > 0 ? (
+          <Text style={[styles.center, { marginTop: 10 }]}>
+            Paid via{" "}
+            {bill.payments.map((p) => `${p.method} (Rs. ${fmt(p.amount)})`).join(", ")}
           </Text>
-          <Text style={styles.footerText}>
-            © 2026 MICROECHEF. All rights reserved.
-          </Text>
-        </View>
+        ) : null}
+
+        <Text style={[styles.center, { marginTop: 12 }]}>
+          Thank you for dining with {RESTAURANT_INFO.name}!
+        </Text>
       </Page>
     </Document>
   );
