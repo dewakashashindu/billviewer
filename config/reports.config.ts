@@ -10,7 +10,7 @@ export interface ReportConfig {
   id: string;
   title: string;
   subtitle?: string;
-  fetchAction: (filters: any) => Promise<{ success: boolean; data?: any[] }>;
+  fetchAction: (filters: any) => Promise<{ success: boolean; data?: any[]; error?: string }>;
   columns: ColumnConfig[];
 }
 

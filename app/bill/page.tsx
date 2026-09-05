@@ -753,6 +753,273 @@ function Dashed() {
   );
 }
 
+// =============================================
+// COFFEE LOADER (spinning cup animation)
+// =============================================
+const COFFEE_CSS = `
+  .coffee {
+    --coffee-bg: #e9e9ee;
+    --coffee-fg: #1a1a1a;
+    font-size: 0.6em;
+    position: relative;
+    width: 21.5em;
+    height: 9em;
+  }
+  .coffee:before {
+    border-bottom: 0.25em dashed var(--coffee-fg);
+    content: "";
+    display: block;
+    position: absolute;
+    top: 7.5em;
+    width: 100%;
+  }
+  .coffee__cup,
+  .coffee__cup-part,
+  .coffee__cup-handle,
+  .coffee__steam-part {
+    animation-duration: 8s;
+    animation-iteration-count: infinite;
+  }
+  .coffee__cup,
+  .coffee__cup-part,
+  .coffee__cup-handle {
+    animation-timing-function: cubic-bezier(0.9,0,0.1,1);
+  }
+  .coffee__cup {
+    animation-name: coffee-cup;
+    position: relative;
+    width: 11.25em;
+    height: 9em;
+  }
+  .coffee__cup-part {
+    background-color: var(--coffee-bg);
+    position: absolute;
+  }
+  .coffee__cup-part--a {
+    animation-name: coffee-cup-part-a;
+    border-radius: 5.625em 5.625em 5.625em 5.625em / 2em 2em 2.7em 2.7em;
+    box-shadow: 0 0 0 0.3em var(--coffee-fg) inset;
+    top: 4.3em;
+    width: 11.25em;
+    height: 4.7em;
+  }
+  .coffee__cup-part--b {
+    animation-name: coffee-cup-part-b;
+    background-color: transparent;
+    border-radius: 5.625em / 2em;
+    box-shadow: 0 0 0 0.2em var(--coffee-fg) inset;
+    top: 4.3em;
+    width: 11.25em;
+    height: 4em;
+  }
+  .coffee__cup-part--c {
+    animation-name: coffee-cup-part-c;
+    border-radius: 1.7em / 0.45em;
+    box-shadow: 0 0 0 0.2em var(--coffee-fg) inset;
+    top: 7.1em;
+    left: 3.925em;
+    width: 3.4em;
+    height: 0.9em;
+  }
+  .coffee__cup-part--d,
+  .coffee__cup-part--e,
+  .coffee__cup-part--f {
+    z-index: 1;
+  }
+  .coffee__cup-part--d {
+    animation-name: coffee-cup-part-d;
+    border-radius: 3.6em 3.6em 3.3em 3.3em / 1em 1em 3.5em 3.5em;
+    box-shadow: 0 0 0 0.2em var(--coffee-fg) inset;
+    top: 2.55em;
+    left: 2.025em;
+    width: 7.2em;
+    height: 5.15em;
+  }
+  .coffee__cup-part--e {
+    animation-name: coffee-cup-part-e;
+    background-color: var(--coffee-fg);
+    box-shadow:
+      0 0 0 0.2em var(--coffee-fg) inset,
+      0 1em 0 var(--coffee-bg) inset;
+    border-radius: 3.5em / 1em;
+    top: 2.65em;
+    left: 2.125em;
+    width: 7em;
+    height: 2em;
+  }
+  .coffee__cup-part--f {
+    animation-name: coffee-cup-part-f;
+    background-color: transparent;
+    color: var(--coffee-fg);
+    top: 4.1em;
+    left: 5.925em;
+    width: 4.8em;
+    height: 3em;
+  }
+  .coffee__cup-handle {
+    animation-name: coffee-cup-handle;
+  }
+  .coffee__cup,
+  .coffee__steam {
+    transform: translateX(-50%);
+  }
+  .coffee__steam {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3.5em;
+    height: 3.5em;
+    color: var(--coffee-fg);
+  }
+  .coffee__steam--right {
+    right: 0;
+    left: auto;
+    transform: translateX(50%);
+  }
+  .coffee__steam-part {
+    animation-name: coffee-steam-left;
+    animation-timing-function: linear;
+    stroke-dashoffset: 48;
+  }
+  .coffee__steam--right .coffee__steam-part {
+    animation-name: coffee-steam-right;
+    stroke-dashoffset: 35;
+  }
+  .coffee__steam-part--a { stroke-dasharray: 24 142; }
+  .coffee__steam-part--b { stroke-dasharray: 30 8 10 130; }
+  .coffee__steam-part--c { stroke-dasharray: 15 6 1 134; }
+  .coffee__steam-part--d { stroke-dasharray: 18 6 1 90; }
+  .coffee__steam-part--e { stroke-dasharray: 25 6 4 76; }
+
+  @keyframes coffee-cup {
+    from, 25%, 75%, to { left: 0; }
+    50% { left: 21.5em; }
+  }
+  @keyframes coffee-cup-part-a {
+    from, 50%, to { width: 11.25em; }
+    25%, 75% { width: calc(11.25em + 21.5em); }
+  }
+  @keyframes coffee-cup-part-b {
+    from, 50%, to { width: 11.25em; }
+    25%, 75% { width: calc(11.25em + 21.5em); }
+  }
+  @keyframes coffee-cup-part-c {
+    from, 50%, to { width: 3.4em; }
+    25%, 75% { width: calc(3.4em + 21.5em); }
+  }
+  @keyframes coffee-cup-part-d {
+    from, 50%, to { width: 7.2em; }
+    25%, 75% { width: calc(7.2em + 21.5em); }
+  }
+  @keyframes coffee-cup-part-e {
+    from, 50%, to {
+      box-shadow: 0 0 0 0.2em var(--coffee-fg) inset, 0 1em 0 var(--coffee-bg) inset;
+      width: 7em;
+    }
+    25%, 75% {
+      box-shadow: 0 0 0 0.2em var(--coffee-fg) inset, 0 1.5em 0 var(--coffee-bg) inset;
+      width: calc(7em + 21.5em);
+    }
+  }
+  @keyframes coffee-cup-part-f {
+    from { left: 5.925em; z-index: 0; }
+    25% { left: calc(5.925em + 8.35em); z-index: 0; }
+    50% { left: 0.525em; z-index: 0; }
+    50.01% { left: 0.525em; z-index: 1; }
+    75% { left: calc(5.925em + 8.35em); z-index: 1; }
+    to { left: 5.925em; z-index: 1; }
+  }
+  @keyframes coffee-cup-handle {
+    from, to {
+      animation-timing-function: ease-in;
+      d: path("M64,4.413s6.64-2.913,11-2.913c11.739,0,19.5,10.759,19.5,22.497,0,23.475-45,22.497-45,22.497");
+      transform: translate(0,0);
+    }
+    10%, 40%, 60%, 90% {
+      animation-timing-function: ease-out;
+      d: path("M48.036,4.415s-.03-2.913-.049-2.913c-.052,0-.087,10.759-.087,22.497,0,23.475,.2,22.497,.2,22.497");
+      transform: translate(0,15px);
+    }
+    50% {
+      animation-timing-function: ease-in;
+      d: path("M32,4.413s-6.64-2.913-11-2.913C9.261,1.5,1.5,12.259,1.5,23.997c0,23.475,45,22.497,45,22.497");
+      transform: translate(0,0);
+    }
+  }
+  @keyframes coffee-steam-left {
+    from { stroke-dashoffset: 48; }
+    25%, to { stroke-dashoffset: -66; }
+  }
+  @keyframes coffee-steam-right {
+    from, 50% { stroke-dashoffset: 35; }
+    75%, to { stroke-dashoffset: -76; }
+  }
+`;
+
+function CoffeeLoader() {
+  return (
+    <div className="coffee" role="img" aria-label="Coffee cup loading animation">
+      <style>{COFFEE_CSS}</style>
+      <div className="coffee__cup">
+        <div className="coffee__cup-part coffee__cup-part--a"></div>
+        <div className="coffee__cup-part coffee__cup-part--b"></div>
+        <div className="coffee__cup-part coffee__cup-part--c"></div>
+        <div className="coffee__cup-part coffee__cup-part--d"></div>
+        <div className="coffee__cup-part coffee__cup-part--e"></div>
+        <svg
+          className="coffee__cup-part coffee__cup-part--f"
+          width="96px"
+          height="60px"
+          viewBox="0 0 96 60"
+          aria-hidden="true"
+        >
+          <g fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+            <path
+              className="coffee__cup-handle"
+              d="M64,4.413s6.64-2.913,11-2.913c11.739,0,19.5,10.759,19.5,22.497,0,23.475-45,22.497-45,22.497"
+            />
+          </g>
+        </svg>
+      </div>
+      <svg className="coffee__steam" width="56px" height="56px" viewBox="0 0 56 56" aria-hidden="true">
+        <g fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+          <path
+            className="coffee__steam-part coffee__steam-part--a"
+            d="M13.845,54s-5.62-10.115-4.496-16.859,6.83-11.497,8.992-17.983c1.037-3.11,.161-6.937-1.083-10.158"
+          />
+          <path
+            className="coffee__steam-part coffee__steam-part--b"
+            d="M27.844,54s-5.652-10.174-4.522-16.957,6.869-11.564,9.043-18.087c2.261-6.783-4.522-16.957-4.522-16.957"
+          />
+          <path
+            className="coffee__steam-part coffee__steam-part--c"
+            d="M40.434,50.999c-1.577-3.486-3.818-9.462-3.071-13.944,1.121-6.723,6.809-11.462,8.964-17.928,1.033-3.1,.161-6.916-1.08-10.127"
+          />
+        </g>
+      </svg>
+      <svg
+        className="coffee__steam coffee__steam--right"
+        width="56px"
+        height="56px"
+        viewBox="0 0 56 56"
+        aria-hidden="true"
+      >
+        <g fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+          <path
+            className="coffee__steam-part coffee__steam-part--d"
+            d="M19.845,54s-5.62-10.115-4.496-16.859,6.83-11.497,8.992-17.983c1.037-3.11,.161-6.937-1.083-10.158"
+          />
+          <path
+            className="coffee__steam-part coffee__steam-part--e"
+            d="M34.434,44c-1.577-3.486-3.818-9.462-3.071-13.944,1.121-6.723,6.809-11.462,8.964-17.928,1.033-3.1,.161-6.916-1.08-10.127"
+          />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 function ReceiptLoader({ text }: { text: string }) {
   return (
     <div
@@ -760,32 +1027,18 @@ function ReceiptLoader({ text }: { text: string }) {
         width: "100%",
         minHeight: "100vh",
         display: "flex",
+        flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
         background: "#e9e9ee",
         fontFamily: MONO,
+        overflow: "hidden",
       }}
     >
-      <div style={{ textAlign: "center" }}>
-        <div
-          style={{
-            width: 46,
-            height: 46,
-            border: "3px solid #cfcfd6",
-            borderTop: `3px solid ${INK}`,
-            borderRadius: "50%",
-            animation: "spin 1s linear infinite",
-            margin: "0 auto 16px",
-          }}
-        />
-        <p style={{ color: "#333", fontSize: 14, fontWeight: 600 }}>{text}</p>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
+      <CoffeeLoader />
+      <p style={{ marginTop: 24, color: "#333", fontSize: 14, fontWeight: 600 }}>
+        {text}
+      </p>
     </div>
   );
 }
@@ -1246,34 +1499,26 @@ export default function BillPage() {
               "linear-gradient(135deg, #F0F4FF 0%, #F8F9FB 50%, #FFF8F0 100%)",
           }}
         >
-          <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                width: 60,
-                height: 60,
-                border: "4px solid #E8EAF6",
-                borderTop: "4px solid #003D9B",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
-                margin: "0 auto 20px",
-              }}
-            />
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <CoffeeLoader />
             <p
               style={{
-                color: "#434654",
-                fontSize: 16,
-                fontFamily: "Inter, sans-serif",
+                marginTop: 24,
+                color: "#333",
+                fontSize: 14,
                 fontWeight: 600,
+                fontFamily: "'Courier New', ui-monospace, monospace",
               }}
             >
               Loading...
             </p>
-            <style>{`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            `}</style>
           </div>
         </div>
       }
