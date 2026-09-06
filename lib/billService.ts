@@ -88,6 +88,7 @@ interface HeaderRow {
   TxnTime: string;
   TxnTimeCol: string;
   Gross: number;
+  DisPre: number;
   DisVal: number;
   GrossAfterDis: number;
   SerChg: number;
@@ -206,6 +207,7 @@ export async function getBillFromDb(
     status,
     gross,
     discount,
+    discountPre: round2(header.DisPre ?? 0),
     serviceCharge,
     tdl,
     packingCharge,

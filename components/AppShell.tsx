@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import DateRangeModal from "./DateRangeModal";
+import { IconFileText } from "./reports/ReportIcons";
 
 /* ── Icons ── */
 function IGrid() {
@@ -84,6 +85,16 @@ const NAV: NavItem[] = [
             key: "r-trans-summary",
             label: "Transaction Summary By Date",
             reportId: "transaction-summary",
+          },
+          {
+            key: "r-sales-summary",
+            label: "Sales Summary",
+            reportId: "sales-summary",
+          },
+          {
+            key: "r-sales-details",
+            label: "Sales Details",
+            reportId: "sales-details",
           },
           { key: "r-item-sales", label: "Item-wise Sales" },
           { key: "r-dept-sales", label: "Department-wise Sales" },
@@ -163,15 +174,15 @@ const SHELL_CSS = `
   .sh-leaf-btn {
     width:100%; border:none; background:transparent; cursor:pointer;
     font-family:'Inter',sans-serif; font-size:12px; font-weight:500;
-    display:flex; align-items:center; gap:8px;
-    height:31px; border-radius:7px;
-    padding:0 10px 0 40px;
+    display:flex; align-items:center; gap:9px;
+    height:34px; border-radius:8px;
+    padding:0 10px 0 12px;
     color:rgba(255,255,255,0.42);
     transition:background 0.13s,color 0.13s;
     text-align:left;
   }
   .sh-leaf-btn:hover { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.85); }
-  .sh-leaf-btn.active { background:rgba(255,255,255,0.11); color:#fff; }
+  .sh-leaf-btn.active { background:rgba(255,255,255,0.05); color:#eb9b46; }
 
   .sh-children { overflow:hidden; transition:max-height 0.28s cubic-bezier(.4,0,.2,1), opacity 0.22s ease; }
 
@@ -260,9 +271,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <Image
           src="/CAPTURE 1.png"
           alt="MICROECHEF"
-          width={open ? 130 : 34}
-          height={open ? 44 : 34}
-          style={{ objectFit: "contain" }}
+          width={130}
+          height={44}
+          priority
+          style={{
+            objectFit: "contain",
+            width: open ? 130 : 34,
+            height: "auto",
+          }}
         />
       </div>
 
@@ -426,15 +442,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
                                 >
                                   <span
                                     style={{
-                                      width: 4,
-                                      height: 4,
-                                      borderRadius: "50%",
+                                      width: 21,
+                                      height: 21,
+                                      borderRadius: 6,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
                                       flexShrink: 0,
+                                      border: `1px solid ${
+                                        active
+                                          ? "rgba(235,155,70,0.35)"
+                                          : "rgba(255,255,255,0.10)"
+                                      }`,
                                       background: active
-                                        ? "#7dd3d8"
-                                        : "rgba(255,255,255,0.22)",
+                                        ? "rgba(235,155,70,0.10)"
+                                        : "rgba(255,255,255,0.04)",
+                                      color: active
+                                        ? "#eb9b46"
+                                        : "rgba(255,255,255,0.55)",
                                     }}
-                                  />
+                                  >
+                                    <IconFileText size={11} strokeWidth={2} />
+                                  </span>
                                   <span
                                     style={{
                                       whiteSpace: "nowrap",

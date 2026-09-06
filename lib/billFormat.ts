@@ -30,6 +30,7 @@ export interface Bill {
   // ── Extended fields (populated for real DB bills) ──
   gross?: number;
   discount?: number;
+  discountPre?: number;
   serviceCharge?: number;
   tdl?: number;
   packingCharge?: number;
@@ -54,10 +55,13 @@ export interface Bill {
 //    Me values oyage restaurant ekata wenas karanna.
 // ============================================================
 export const RESTAURANT_INFO = {
-  name: "MICROECHEF",
+  name: "MicroEChef",
   city: "", // ← ain kala (oke watina nam city name eka daganna)
   addressLines: [] as string[], // ← ain kala (address one nam "No.528, Galle Road" wage daganna)
   logoPath: "/CAPTURE 1.png", // public/ folder eke thiyena image eka
+  // 📱 Review QR — receipt eke "Scan to rate us" QR ekata link eka.
+  //    oyage Google review link eka dananna (g.page link eka wage)
+  reviewUrl: "https://www.google.com/search?q=MicroEChef+reviews",
 };
 
 // Tbl_OrderModes table eka empty nam me fallback names use wenawa
@@ -138,14 +142,23 @@ const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export function getBillTotalRows(bill: Bill): BillTotalRow[] {
   if (bill.gross == null) {
     return [
-      { label: "Subtotal", value: bill.subtotal },
+      { label: "Gross Total", value: bill.subtotal },
       { label: "Tax (8%)", value: bill.tax },
       { label: "Tip", value: bill.tip },
     ];
   }
 
-  const rows: BillTotalRow[] = [{ label: "Subtotal", value: r2(bill.gross) }];
-  if (bill.discount) rows.push({ label: "Discount", value: -r2(bill.discount) });
+  const rows: BillTotalRow[] = [{ label: "Gross Total", value: r2(bill.gross) }];
+  if (bill.discount)
+    rows.push({
+      // percentage thiyenawa nam "Discount (10%)" wage
+      label: `Discount${
+        bill.discountPre
+          ? ` (${Math.round(bill.discountPre * 100) / 100}%)`
+          : ""
+      }`,
+      value: -r2(bill.discount),
+    });
   if (bill.serviceCharge)
     rows.push({ label: "Service Charge", value: r2(bill.serviceCharge) });
   if (bill.tax) rows.push({ label: "VAT", value: r2(bill.tax) });

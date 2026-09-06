@@ -13,6 +13,13 @@ const REPORTS = [
     linked: true,
   },
   {
+    id: "sales-summary",
+    title: "Sales Summary",
+    desc: "Bill-wise daily collection grouped by date",
+    icon: "🧾",
+    linked: true,
+  },
+  {
     id: null,
     title: "Item-wise Sales",
     desc: "Menu item level sales breakdown",

@@ -135,3 +135,328 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     return { success: false, error: "Database Data Fetching Failed." };
   }
 }
+
+// ============================================================
+// Sales Summary (bill-wise) — POS "Sales Summery" PDF eka wage
+// Bill-level rows VW_SalesSummery eken → date eken group wenawa
+// ============================================================
+export async function getSalesSummaryAction(filters: ReportFilter) {
+  try {
+    if (!isDbConfigured()) {
+      return {
+        success: false,
+        error: "Database not configured (DB_* env vars missing)",
+      };
+    }
+
+    const { startDate, endDate, outletId } = filters;
+    const pool = await getPool();
+
+    // View columns detect (TxnTime wage optional columns guard karanna)
+    const req0 = pool.request();
+    req0.input("viewName", sql.NVarChar(200), `dbo.${SUMMARY_VIEW}`);
+    const colsRes = await req0.query(
+      `SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(@viewName)`
+    );
+    const cols = new Set(colsRes.recordset.map((r: any) => String(r.name)));
+    if (cols.size === 0) {
+      return {
+        success: false,
+        error: `View 'dbo.${SUMMARY_VIEW}' not found in database`,
+      };
+    }
+
+    const req = pool.request();
+    req.input("startDate", sql.DateTime2, new Date(startDate));
+    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+
+    const txnTimeExpr = cols.has("TxnTime") ? "v.TxnTime" : "NULL";
+    const billTypeExpr = cols.has("BillType") ? "LTRIM(RTRIM(v.BillType))" : "''";
+    const orderModeExpr = cols.has("OrderMode") ? "LTRIM(RTRIM(v.OrderMode))" : "''";
+
+    const result = await req.query(`
+      SELECT
+        LTRIM(RTRIM(v.LocCode)) AS LocCode,
+        ISNULL(NULLIF(LTRIM(RTRIM(v.LocDes)), ''), LTRIM(RTRIM(v.LocCode))) AS LocDes,
+        LTRIM(RTRIM(v.BillNo)) AS BillNo,
+        v.Txndate,
+        ${txnTimeExpr} AS TxnTimeVal,
+        ISNULL(v.NetTotal, 0) AS NetTotal,
+        ${billTypeExpr} AS BillType,
+        ${orderModeExpr} AS OrderMode,
+        ISNULL(NULLIF(LTRIM(RTRIM(su.UserName)), ''), LTRIM(RTRIM(v.StewID))) AS StewardName,
+        ISNULL(NULLIF(LTRIM(RTRIM(cu.UserName)), ''), LTRIM(RTRIM(v.CasherID))) AS CasherName
+      FROM dbo.${SUMMARY_VIEW} v WITH (NOLOCK)
+      LEFT JOIN Tbl_UserDetails su WITH (NOLOCK)
+        ON LTRIM(RTRIM(su.UserId)) = LTRIM(RTRIM(v.StewID))
+      LEFT JOIN Tbl_UserDetails cu WITH (NOLOCK)
+        ON LTRIM(RTRIM(cu.UserId)) = LTRIM(RTRIM(v.CasherID))
+      WHERE v.Txndate >= @startDate
+        AND v.Txndate < DATEADD(day, 1, @endDate)
+        ${outletId ? "AND v.LocCode = @outletId" : ""}
+      ORDER BY v.Txndate, v.BillNo
+    `);
+
+    const BILL_TYPE_MAP: Record<string, string> = { SD: "Standered" };
+    const ORDER_MODE_MAP: Record<string, string> = {
+      DI: "Dining",
+      TA: "TakeAway",
+      DL: "Delivery",
+      PU: "PickUp",
+      OT: "Other",
+    };
+
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const time12 = (d: Date): string => {
+      let h = d.getHours();
+      const ap = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${p2(d.getMinutes())}:${p2(d.getSeconds())}${ap}`;
+    };
+    const dayStr = (d: Date) =>
+      `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
+    const isMidnight = (d: Date) =>
+      d.getHours() + d.getMinutes() + d.getSeconds() === 0;
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+    let location = "";
+    const groupMap = new Map<string, { rows: any[]; dayTotal: number }>();
+
+    for (const row of result.recordset as any[]) {
+      if (!location) {
+        // code eka pennanne neha — name eka witharai (fallback: code eka)
+        location =
+          String(row.LocDes ?? "").trim() ||
+          String(row.LocCode ?? "").trim();
+      }
+
+      const txnd: Date =
+        row.Txndate instanceof Date ? row.Txndate : new Date(row.Txndate);
+      const key = dayStr(txnd);
+      if (!groupMap.has(key)) groupMap.set(key, { rows: [], dayTotal: 0 });
+      const g = groupMap.get(key)!;
+
+      const t1 = row.TxnTimeVal instanceof Date ? row.TxnTimeVal : null;
+      let timeStr = "";
+      if (t1 && !isMidnight(t1)) timeStr = time12(t1);
+      else if (!isMidnight(txnd)) timeStr = time12(txnd);
+
+      const bt = String(row.BillType ?? "").trim();
+      const om = String(row.OrderMode ?? "").trim();
+
+      g.rows.push({
+        billNo: String(row.BillNo ?? "").trim(),
+        netTotal: r2(row.NetTotal ?? 0),
+        steward: String(row.StewardName ?? "").trim(),
+        billType: BILL_TYPE_MAP[bt] ?? bt,
+        orderMode: ORDER_MODE_MAP[om] ?? om,
+        txnTime: timeStr,
+        casher: String(row.CasherName ?? "").trim(),
+      });
+      g.dayTotal = r2(g.dayTotal + (row.NetTotal ?? 0));
+    }
+
+    const dateGroups = Array.from(groupMap.entries()).map(([date, g]) => ({
+      date,
+      ...g,
+    }));
+    const grandTotal = r2(dateGroups.reduce((s, g) => s + g.dayTotal, 0));
+
+    return { success: true, data: { location, dateGroups, grandTotal } };
+  } catch (error) {
+    console.error("Sales Summary Action Error:", error);
+    return { success: false, error: "Database Data Fetching Failed." };
+  }
+}
+
+// ============================================================
+// Sales Details (bill-wise ITEM details) — POS "Sales Details"
+// PDF eka wage. Source: Tbl_BillDetails (items) JOIN
+// Tbl_BillHeader (bill meta + totals) + masters.
+// Shape:
+//   { dateGroups: [{ date, bills: [{ billNo, billType, userName,
+//       steward, noPax, tableNo, orderMode, items: [{ name, qty,
+//       salesPrice, totItemPrice }], totals: {...} }], dayNetTotal }] }
+// ============================================================
+export async function getSalesDetailsAction(filters: ReportFilter) {
+  try {
+    if (!isDbConfigured()) {
+      return {
+        success: false,
+        error: "Database not configured (DB_* env vars missing)",
+      };
+    }
+
+    const { startDate, endDate, outletId } = filters;
+    const pool = await getPool();
+    const req = pool.request();
+    req.input("startDate", sql.VarChar(10), startDate);
+    req.input("endDate", sql.VarChar(10), endDate);
+    if (outletId) req.input("outletId", sql.Int, outletId);
+
+    const result = await req.query(`
+      SET NOCOUNT ON;
+
+      SELECT
+        CONVERT(varchar(12), h.Txndate, 103)            AS BillDate,
+        LTRIM(RTRIM(h.BillNo))                          AS BillNo,
+        h.BillType                                      AS BillTypeRaw,
+        ISNULL(NULLIF(LTRIM(RTRIM(cu.UserName)), ''), LTRIM(RTRIM(h.CasherID))) AS UserName,
+        ISNULL(NULLIF(LTRIM(RTRIM(su.UserName)), ''), LTRIM(RTRIM(h.StewID)))   AS Steward,
+        h.NOPax                                         AS NOPax,
+        LTRIM(RTRIM(h.TableNo))                         AS TableNo,
+        ISNULL(NULLIF(LTRIM(RTRIM(om.ModeDes)), ''), LTRIM(RTRIM(h.OrderMode))) AS OrderModeRaw,
+        d.Qty                                           AS Qty,
+        d.SalesPrice                                    AS SalesPrice,
+        d.TotalItmPrice                                 AS TotItmPrice,
+        ISNULL(
+          NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''),
+          ISNULL(NULLIF(LTRIM(RTRIM(m.PrintDes)), ''), LTRIM(RTRIM(d.SubItmId)))
+        )                                               AS ItemName,
+        h.Gross        AS Gross,
+        h.DisPre       AS DisPre,
+        h.DisVal       AS DisVal,
+        h.GrossAfterDis AS GrossAfterDis,
+        h.SerChg       AS SerChg,
+        h.OtherSerChg  AS OtherSerChg,
+        h.VAT          AS VAT,
+        h.OtherVAT     AS OtherVAT,
+        h.TDL          AS TDL,
+        h.PackChg      AS PackChg,
+        h.DelChg       AS DelChg,
+        h.DeleveryAreaChg AS DelAreaChg,
+        h.NetTotal     AS NetTotal
+      FROM Tbl_BillDetails d WITH (NOLOCK)
+      INNER JOIN Tbl_BillHeader h WITH (NOLOCK)
+        ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(d.BillNo))
+      LEFT JOIN Tbl_MenuItems m WITH (NOLOCK)
+        ON LTRIM(RTRIM(m.MenuItmId)) = LTRIM(RTRIM(d.SubItmId))
+      LEFT JOIN Tbl_UserDetails cu WITH (NOLOCK)
+        ON LTRIM(RTRIM(cu.UserId)) = LTRIM(RTRIM(h.CasherID))
+      LEFT JOIN Tbl_UserDetails su WITH (NOLOCK)
+        ON LTRIM(RTRIM(su.UserId)) = LTRIM(RTRIM(h.StewID))
+      LEFT JOIN Tbl_OrderModes om WITH (NOLOCK)
+        ON LTRIM(RTRIM(om.ModeID)) = LTRIM(RTRIM(h.OrderMode))
+      WHERE h.Txndate >= @startDate
+        AND h.Txndate < DATEADD(day, 1, @endDate)
+        AND ISNULL(h.DoNotShowInSales, 0) = 0
+        ${outletId ? "AND h.LocCode = @outletId" : ""}
+      ORDER BY h.Txndate, h.BillNo, d.KOTBOTNO, d.SubItmId;
+    `);
+
+    const BILL_TYPE_MAP: Record<string, string> = { SD: "Standered" };
+    const ORDER_MODE_MAP: Record<string, string> = {
+      DI: "Dining",
+      TA: "TakeAway",
+      DL: "Delivery",
+      PU: "PickUp",
+      OT: "Other",
+    };
+
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const num = (v: unknown) => (v == null ? 0 : Number(v) || 0);
+
+    interface DetBill {
+      billNo: string;
+      billType: string;
+      userName: string;
+      steward: string;
+      noPax: string;
+      tableNo: string;
+      orderMode: string;
+      items: {
+        name: string;
+        qty: number;
+        salesPrice: number;
+        totItemPrice: number;
+      }[];
+      totals: {
+        gross: number;
+        discount: number;
+        discountPre: number;
+        grossAfterDis: number;
+        serviceCharge: number;
+        otherServiceCharge: number;
+        vat: number;
+        otherVat: number;
+        tdl: number;
+        packingCharge: number;
+        deliveryCharge: number;
+        netTotal: number;
+      };
+    }
+
+    const dateMap = new Map<
+      string,
+      { bills: DetBill[]; billMap: Map<string, DetBill>; dayNetTotal: number }
+    >();
+
+    for (const row of result.recordset as any[]) {
+      const billDate = String(row.BillDate ?? "").trim();
+      const billNo = String(row.BillNo ?? "").trim();
+
+      if (!dateMap.has(billDate)) {
+        dateMap.set(billDate, {
+          bills: [],
+          billMap: new Map(),
+          dayNetTotal: 0,
+        });
+      }
+      const grp = dateMap.get(billDate)!;
+
+      if (!grp.billMap.has(billNo)) {
+        grp.billMap.set(billNo, {
+          billNo,
+          billType: BILL_TYPE_MAP[String(row.BillTypeRaw ?? "").trim()] ??
+            String(row.BillTypeRaw ?? "").trim(),
+          userName: String(row.UserName ?? "").trim(),
+          steward: String(row.Steward ?? "").trim(),
+          noPax: row.NOPax != null ? num(row.NOPax).toFixed(2) : "",
+          tableNo: String(row.TableNo ?? "").trim(),
+          orderMode: ORDER_MODE_MAP[String(row.OrderModeRaw ?? "").trim()] ??
+            String(row.OrderModeRaw ?? "").trim(),
+          items: [],
+          totals: {
+            gross: r2(num(row.Gross)),
+            discount: r2(num(row.DisVal)),
+            discountPre: r2(num(row.DisPre)),
+            grossAfterDis: r2(num(row.GrossAfterDis)),
+            serviceCharge: r2(num(row.SerChg)),
+            otherServiceCharge: r2(num(row.OtherSerChg)),
+            vat: r2(num(row.VAT)),
+            otherVat: r2(num(row.OtherVAT)),
+            tdl: r2(num(row.TDL)),
+            packingCharge: r2(num(row.PackChg)),
+            deliveryCharge: r2(num(row.DelChg) + num(row.DelAreaChg)),
+            netTotal: r2(num(row.NetTotal)),
+          },
+        });
+        grp.bills.push(grp.billMap.get(billNo)!);
+        grp.dayNetTotal = r2(grp.dayNetTotal + num(row.NetTotal));
+      }
+
+      const bill = grp.billMap.get(billNo)!;
+      if (row.ItemName || row.Qty != null) {
+        bill.items.push({
+          name: String(row.ItemName ?? "").trim(),
+          qty: r2(num(row.Qty)),
+          salesPrice: r2(num(row.SalesPrice)),
+          totItemPrice: r2(num(row.TotItmPrice)),
+        });
+      }
+    }
+
+    const dateGroups = Array.from(dateMap.entries()).map(([date, g]) => ({
+      date,
+      bills: g.bills,
+      dayNetTotal: g.dayNetTotal,
+    }));
+
+    return { success: true, data: { dateGroups } };
+  } catch (error) {
+    console.error("Sales Details Action Error:", error);
+    return { success: false, error: "Database Data Fetching Failed." };
+  }
+}

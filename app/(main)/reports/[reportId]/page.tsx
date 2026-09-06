@@ -1,11 +1,89 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// ============================================================
+// LOCATION: app/(main)/reports/[reportId]/page.tsx
+// FULL REPLACE — unified report page (identical structure for
+// ALL reports — generic table + sales-summary custom render):
+//   • single fetch effect (sales summary includes)
+//   • toolbar (search/dates/zoom/chart/share/PDF) — same props
+//   • page-level loading + error blocks (same style)
+//   • sales summary gets pdfDocument too (share/PDF identical)
+// ============================================================
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+import ReportToolbar from "@/components/ReportToolbar";
+import ReportChart from "@/components/ReportChart";
 import ReportPdfDocument from "@/components/reports/ReportPdfDocument";
+import SalesSummaryReport, {
+  filterSalesSummary,
+} from "@/components/reports/SalesSummaryReport";
+import SalesDetailsReport, {
+  filterSalesDetails,
+} from "@/components/reports/SalesDetailsReport";
+import SalesSummaryPdfDocument from "@/components/reports/SalesSummaryPdfDocument";
+import SalesDetailsPdfDocument from "@/components/reports/SalesDetailsPdfDocument";
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+const p2 = (n: number) => String(n).padStart(2, "0");
+const fmtDMonY = (iso: string) => {
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${MONTHS[Number(m) - 1]}/${y}`;
+};
+
+// ── shared loading block (identical for every report) ──
+function LoadingBlock() {
+  return (
+    <div style={{ padding: "60px 20px", textAlign: "center" }}>
+      <style>{`@keyframes rep-spin{to{transform:rotate(360deg)}}`}</style>
+      <svg
+        width="30"
+        height="30"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#94a3b8"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        style={{
+          margin: "0 auto 12px",
+          display: "block",
+          animation: "rep-spin 0.9s linear infinite",
+        }}
+      >
+        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      </svg>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#64748b" }}>
+        Loading Report Data...
+      </p>
+    </div>
+  );
+}
+
+// ── shared error banner (identical for every report) ──
+function ErrorBlock({ message }: { message: string }) {
+  return (
+    <div style={{ padding: "18px 24px 0" }}>
+      <div
+        style={{
+          background: "#fef2f2",
+          border: "1px solid #fecaca",
+          color: "#b91c1c",
+          fontSize: 13,
+          fontWeight: 500,
+          borderRadius: 10,
+          padding: "11px 15px",
+        }}
+      >
+        {message}
+      </div>
+    </div>
+  );
+}
 
 export default function DynamicReportPage() {
   const params = useParams();
@@ -13,22 +91,29 @@ export default function DynamicReportPage() {
   const reportId = params?.reportId as string;
   const config = REPORTS_CONFIG[reportId];
 
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [chartMode, setChartMode] = useState(false);
+  const [printedAt] = useState(() => new Date());
 
-  // URL params: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sidebar date popup eken enawa)
-  const yearStart = new Date(new Date().getFullYear(), 0, 1)
-    .toISOString()
-    .split("T")[0];
-  const today = new Date().toISOString().split("T")[0];
+  // URL params: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sidebar date popup eken)
+  // local date — toISOString UTC nisa day shift wenna (31/Dec bug)
+  const p2l = (n: number) => String(n).padStart(2, "0");
+  const localIso = (d: Date) =>
+    `${d.getFullYear()}-${p2l(d.getMonth() + 1)}-${p2l(d.getDate())}`;
+  const yearStart = localIso(
+    new Date(new Date().getFullYear(), 0, 1)
+  );
+  const today = localIso(new Date());
 
   const [startDate, setStartDate] = useState(
     searchParams.get("from") || yearStart
   );
   const [endDate, setEndDate] = useState(searchParams.get("to") || today);
 
-  // URL change (sidebar modal eken aluth date range ekak) nam state update
+  // URL change (sidebar modal eken aluth range) -> state update
   useEffect(() => {
     const f = searchParams.get("from");
     const t = searchParams.get("to");
@@ -36,86 +121,308 @@ export default function DynamicReportPage() {
     if (t) setEndDate(t);
   }, [searchParams]);
 
+  // ── single fetch effect — ALL reports (sales summary includes) ──
   useEffect(() => {
     if (!config) return;
-
-    async function loadReportData() {
+    let alive = true;
+    (async () => {
       setLoading(true);
       setError(null);
-      const res = await config.fetchAction({ startDate, endDate });
-
-      if (res.success && res.data) {
-        setData(res.data);
-      } else {
-        setData([]);
-        setError(res.error || "Failed to load report data");
+      try {
+        const res = await config.fetchAction({ startDate, endDate });
+        if (!alive) return;
+        if (res?.success && res.data != null) {
+          setData(res.data);
+        } else {
+          setData(null);
+          setError(res?.error || "Failed to load report data");
+        }
+      } catch (e: any) {
+        if (!alive) return;
+        setData(null);
+        setError(e?.message || "Failed to load report data");
+      } finally {
+        if (alive) setLoading(false);
       }
-      setLoading(false);
-    }
-
-    loadReportData();
+    })();
+    return () => {
+      alive = false;
+    };
   }, [reportId, config, startDate, endDate]);
 
-  if (!config) return <div className="p-6">Report Not Found.</div>;
+  // reset view state on report change
+  useEffect(() => {
+    setSearch("");
+    setChartMode(false);
+  }, [reportId]);
+
+  // generic rows (array data) + search filter
+  const rows: any[] = Array.isArray(data) ? data : [];
+  const filteredRows = useMemo(() => {
+    if (!search.trim()) return rows;
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) =>
+      Object.values(row ?? {}).some((v) =>
+        String(v ?? "").toLowerCase().includes(q)
+      )
+    );
+  }, [rows, search]);
+
+  // chart series — config eke chart block eka thiyenawa nam
+  // ekema labelKey/valueKey, nathnam default (date-wise totals)
+  const chartData = useMemo(
+    () =>
+      filteredRows.map((r) => {
+        if (config?.chart) {
+          return {
+            label: String(r[config.chart.labelKey] ?? ""),
+            value: Number(r[config.chart.valueKey] ?? 0),
+          };
+        }
+        return {
+          label: String(r.txnDate ?? r.date ?? ""),
+          value: Number(
+            r.salesVolume ?? r.totalSales ?? r.netTotal ?? r.total ?? 0
+          ),
+        };
+      }),
+    [filteredRows, config]
+  );
+
+  // sales-summary data (object shape) + search filter
+  const summary =
+    data && !Array.isArray(data) ? (data as any) : null;
+  const filteredSummary = useMemo(
+    () => (summary ? filterSalesSummary(summary, search) : null),
+    [summary, search]
+  );
+
+  // ── hooks dariyata PASSEDU early returns ──
+  if (!config) {
+    return (
+      <div
+        style={{
+          padding: "60px 20px",
+          textAlign: "center",
+          fontFamily: "Inter, sans-serif",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#334155" }}>
+          Report Not Found.
+        </p>
+      </div>
+    );
+  }
+
+  const printDate = `${p2(printedAt.getDate())}-${
+    MONTHS[printedAt.getMonth()]
+  }-${printedAt.getFullYear()}`;
+  const printTime = (() => {
+    let h = printedAt.getHours();
+    const ap = h >= 12 ? "pm" : "am";
+    h = h % 12 || 12;
+    return `${h}:${p2(printedAt.getMinutes())}:${p2(printedAt.getSeconds())} ${ap}`;
+  })();
+
+  const rangeChange = (f: string, t: string) => {
+    setStartDate(f);
+    setEndDate(t);
+  };
+
+  // ── Sales Summary (custom render — SAME toolbar/loading/error/chart) ──
+  if (config.render === "sales-summary") {
+    // chart series — per-date dayTotal (generic reports ekema)
+    const sChartData = filteredSummary
+      ? filteredSummary.dateGroups.map((g) => ({
+          label: g.date,
+          value: g.dayTotal,
+        }))
+      : [];
+
+    const pdfDoc = filteredSummary ? (
+      <SalesSummaryPdfDocument
+        title={config.title}
+        printDate={printDate}
+        printTime={printTime}
+        from={fmtDMonY(startDate)}
+        to={fmtDMonY(endDate)}
+        location={filteredSummary.location || ""}
+        dateGroups={filteredSummary.dateGroups}
+        grandTotal={filteredSummary.grandTotal}
+      />
+    ) : undefined;
+
+    return (
+      <>
+        <ReportToolbar
+          title={config.title}
+          subtitle={config.subtitle}
+          from={startDate}
+          to={endDate}
+          onRangeChange={rangeChange}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search bill no, steward, mode..."
+          pdfDocument={pdfDoc}
+          pdfFileName={`sales-summary-${startDate}_to_${endDate}.pdf`}
+          chartSupported={sChartData.length > 0 || chartMode}
+          chartMode={chartMode}
+          onChartToggle={() => setChartMode((c) => !c)}
+        />
+        <div id="report-zoom-area" style={{ flex: 1 }}>
+          {loading ? (
+            <LoadingBlock />
+          ) : error ? (
+            <ErrorBlock message={error} />
+          ) : chartMode ? (
+            <ReportChart
+              data={sChartData}
+              title={config.title}
+              valuePrefix="Rs. "
+            />
+          ) : filteredSummary ? (
+            <SalesSummaryReport report={filteredSummary} />
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+  // ── Sales Details (custom render — bill-wise items + totals box) ──
+  if (config.render === "sales-details") {
+    const details =
+      summary
+        ? (summary as {
+            dateGroups: {
+              date: string;
+              bills: never[];
+              dayNetTotal: number;
+            }[];
+          })
+        : null;
+    const filteredDetails = details
+      ? filterSalesDetails(details, search)
+      : null;
+
+    // chart — report ekata GALAPENA view: item-wise ranking
+    // (range eke okkoma bills wala items aggregate karala Top 12 hbars)
+    const itemTotals = new Map<string, number>();
+    if (filteredDetails) {
+      for (const g of filteredDetails.dateGroups) {
+        for (const b of g.bills) {
+          for (const it of b.items) {
+            const key = it.name || "Unknown Item";
+            itemTotals.set(
+              key,
+              (itemTotals.get(key) ?? 0) + it.totItemPrice
+            );
+          }
+        }
+      }
+    }
+    const chartDataDetails = Array.from(itemTotals.entries())
+      .map(([label, value]) => ({
+        label,
+        value: Math.round(value * 100) / 100,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+
+    const pdfDocDetails = filteredDetails ? (
+      <SalesDetailsPdfDocument
+        title={config.title}
+        printDate={printDate}
+        printTime={printTime}
+        from={fmtDMonY(startDate)}
+        to={fmtDMonY(endDate)}
+        dateGroups={filteredDetails.dateGroups}
+      />
+    ) : undefined;
+
+    return (
+      <>
+        <ReportToolbar
+          title={config.title}
+          subtitle={config.subtitle}
+          from={startDate}
+          to={endDate}
+          onRangeChange={rangeChange}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search bill no, item, steward..."
+          pdfDocument={pdfDocDetails}
+          pdfFileName={`sales-details-${startDate}_to_${endDate}.pdf`}
+          chartSupported={chartDataDetails.length > 0 || chartMode}
+          chartMode={chartMode}
+          onChartToggle={() => setChartMode((c) => !c)}
+        />
+        <div id="report-zoom-area" style={{ flex: 1 }}>
+          {loading ? (
+            <LoadingBlock />
+          ) : error ? (
+            <ErrorBlock message={error} />
+          ) : chartMode ? (
+            <ReportChart
+              data={chartDataDetails}
+              title={`${config.title} — Top Items`}
+              valuePrefix="Rs. "
+              type="hbars"
+            />
+          ) : filteredDetails ? (
+            <SalesDetailsReport report={filteredDetails} />
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+  // ── Generic reports (Transaction Summary etc.) ──
+  const pdfDoc = (
+    <ReportPdfDocument
+      title={config.title}
+      from={fmtDMonY(startDate)}
+      to={fmtDMonY(endDate)}
+      columns={config.columns}
+      data={filteredRows}
+    />
+  );
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex justify-between items-center flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold">{config.title}</h1>
-          <p className="text-sm text-slate-500">{config.subtitle}</p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* ── Date range filter ── */}
-          <label className="text-xs text-slate-500">From</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1.5 text-xs"
+    <>
+      <ReportToolbar
+        title={config.title}
+        subtitle={config.subtitle}
+        from={startDate}
+        to={endDate}
+        onRangeChange={rangeChange}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search..."
+        pdfDocument={pdfDoc}
+        pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
+        chartSupported={chartData.length > 0 || chartMode}
+        chartMode={chartMode}
+        onChartToggle={() => setChartMode((c) => !c)}
+      />
+      <div id="report-zoom-area" style={{ flex: 1 }}>
+        {loading ? (
+          <LoadingBlock />
+        ) : error ? (
+          <ErrorBlock message={error} />
+        ) : chartMode ? (
+          <ReportChart
+            data={chartData}
+            title={config.title}
+            valuePrefix="Rs. "
+            type={config.chart?.type ?? "bars"}
           />
-          <label className="text-xs text-slate-500">To</label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="border border-slate-300 rounded px-2 py-1.5 text-xs"
+        ) : (
+          <DynamicReportTable
+            columns={config.columns}
+            data={filteredRows}
           />
-
-          {!loading && (
-            <PDFDownloadLink
-              document={
-                <ReportPdfDocument
-                  title={config.title}
-                  columns={config.columns}
-                  data={data}
-                />
-              }
-              fileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-              className="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded shadow hover:bg-blue-700"
-            >
-              {({ loading: pdfLoading }) =>
-                pdfLoading ? "Preparing PDF..." : "Download PDF"
-              }
-            </PDFDownloadLink>
-          )}
-        </div>
+        )}
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="py-10 text-center text-slate-500">
-          Loading Report Data...
-        </div>
-      ) : (
-        <DynamicReportTable columns={config.columns} data={data} />
-      )}
-    </div>
+    </>
   );
 }

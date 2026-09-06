@@ -1,4 +1,8 @@
-import { getTransactionSummaryAction } from "@/app/actions/reports";
+import {
+  getTransactionSummaryAction,
+  getSalesSummaryAction,
+  getSalesDetailsAction,
+} from "@/app/actions/reports";
 
 export interface ColumnConfig {
   header: string;
@@ -10,7 +14,16 @@ export interface ReportConfig {
   id: string;
   title: string;
   subtitle?: string;
-  fetchAction: (filters: any) => Promise<{ success: boolean; data?: any[]; error?: string }>;
+  // "sales-summary" / "sales-details" wage custom renderers wenuwata — generic table eka nemei
+  render?: "sales-summary" | "sales-details";
+  // 📊 Graphic view — report ekata galapenna chart eka (default: date-wise bars)
+  //   bars  = vertical (date-wise) | hbars = horizontal ranking | pie = share donut
+  chart?: {
+    type: "bars" | "hbars" | "pie";
+    labelKey: string; // SQL row eke label column (accessorKey)
+    valueKey: string; // SQL row eke value column
+  };
+  fetchAction: (filters: any) => Promise<{ success: boolean; data?: any; error?: string }>;
   columns: ColumnConfig[];
 }
 
@@ -32,6 +45,22 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
       { header: "Beverage Sales", accessorKey: "beverageSales", type: "currency" },
       { header: "Sales Volume", accessorKey: "salesVolume", type: "currency" },
     ],
+  },
+  "sales-summary": {
+    id: "sales-summary",
+    title: "Sales Summary",
+    subtitle: "Bill-wise daily collection (grouped by date)",
+    render: "sales-summary", // custom renderer — generic table eka wenuwata
+    fetchAction: getSalesSummaryAction,
+    columns: [], // custom render eka nisa columns onepa
+  },
+  "sales-details": {
+    id: "sales-details",
+    title: "Sales Details",
+    subtitle: "Bill-wise item details with totals (grouped by date)",
+    render: "sales-details", // custom renderer — generic table eka wenuwata
+    fetchAction: getSalesDetailsAction,
+    columns: [], // custom render eka nisa columns onepa
   },
   // Reports 50 දක්වා අලුත් Reports මෙතැනට Config එකක් ලෙස පහසුවෙන් Add කළ හැක
 };
