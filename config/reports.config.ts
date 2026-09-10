@@ -57,7 +57,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "sales-details": {
     id: "sales-details",
     title: "Sales Details",
-    subtitle: "Bill-wise item details with totals (grouped by date)",
+    subtitle: "Bill-wise item details with totals (grouped by location & date)",
     render: "sales-details", // custom renderer — generic table eka wenuwata
     fetchAction: getSalesDetailsAction,
     columns: [], // custom render eka nisa columns onepa

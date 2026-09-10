@@ -14,7 +14,7 @@
 //   SalesDetailsData / DetBill / DetItem types
 // ============================================================
 import type { CSSProperties } from "react";
-import { IconCalendar, IconInbox } from "./ReportIcons";
+import { IconCalendar, IconInbox, IconPin } from "./ReportIcons";
 
 export interface DetItem {
   name: string;
@@ -50,12 +50,22 @@ export interface DetBill {
   totals: DetTotals;
 }
 
+export interface DetDateGroup {
+  date: string;
+  bills: DetBill[];
+  dayNetTotal: number;
+}
+
+export interface DetLocationGroup {
+  locCode: string;
+  locName: string;
+  locNetTotal: number;
+  dateGroups: DetDateGroup[];
+}
+
 export interface SalesDetailsData {
-  dateGroups: {
-    date: string;
-    bills: DetBill[];
-    dayNetTotal: number;
-  }[];
+  locationGroups: DetLocationGroup[];
+  grandNetTotal: number;
 }
 
 const fmtAmt = (n: number) =>
@@ -73,21 +83,32 @@ export function filterSalesDetails(
 ): SalesDetailsData {
   const q = query.trim().toLowerCase();
   if (!q) return report;
+  const locationGroups = report.locationGroups
+    .map((loc) => {
+      const dateGroups = loc.dateGroups
+        .map((g) => {
+          const bills = g.bills.filter((b) => {
+            const itemHay = b.items.map((i) => i.name).join(" ");
+            const hay = `${b.billNo} ${b.billType} ${b.userName} ${b.steward} ${b.tableNo} ${b.orderMode} ${b.noPax} ${itemHay} ${b.totals.netTotal}`;
+            return hay.toLowerCase().includes(q);
+          });
+          return {
+            ...g,
+            bills,
+            dayNetTotal: bills.reduce((s, b) => s + b.totals.netTotal, 0),
+          };
+        })
+        .filter((g) => g.bills.length > 0);
+      return {
+        ...loc,
+        dateGroups,
+        locNetTotal: dateGroups.reduce((s, g) => s + g.dayNetTotal, 0),
+      };
+    })
+    .filter((loc) => loc.dateGroups.length > 0);
   return {
-    dateGroups: report.dateGroups
-      .map((g) => {
-        const bills = g.bills.filter((b) => {
-          const itemHay = b.items.map((i) => i.name).join(" ");
-          const hay = `${b.billNo} ${b.billType} ${b.userName} ${b.steward} ${b.tableNo} ${b.orderMode} ${b.noPax} ${itemHay} ${b.totals.netTotal}`;
-          return hay.toLowerCase().includes(q);
-        });
-        return {
-          ...g,
-          bills,
-          dayNetTotal: bills.reduce((s, b) => s + b.totals.netTotal, 0),
-        };
-      })
-      .filter((g) => g.bills.length > 0),
+    locationGroups,
+    grandNetTotal: locationGroups.reduce((s, l) => s + l.locNetTotal, 0),
   };
 }
 
@@ -120,10 +141,13 @@ export default function SalesDetailsReport({
 }: {
   report: SalesDetailsData;
 }) {
-  const billCount = report.dateGroups.reduce((s, g) => s + g.bills.length, 0);
+  const billCount = report.locationGroups.reduce(
+    (s, l) => s + l.dateGroups.reduce((n, g) => n + g.bills.length, 0),
+    0
+  );
 
   // ── Empty state (same family as other reports) ──
-  if (report.dateGroups.length === 0) {
+  if (report.locationGroups.length === 0) {
     return (
       <div style={{ padding: "22px 24px 28px", fontFamily: "Inter, sans-serif" }}>
         <div
@@ -189,9 +213,9 @@ export default function SalesDetailsReport({
 
   return (
     <div style={{ padding: "22px 24px 28px", fontFamily: "Inter, sans-serif" }}>
-      {report.dateGroups.map((g) => (
+      {report.locationGroups.map((loc) => (
         <div
-          key={g.date}
+          key={loc.locCode}
           style={{
             marginTop: 18,
             border: "1px solid #e2e8f0",
@@ -202,34 +226,82 @@ export default function SalesDetailsReport({
               "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
           }}
         >
-          {/* gradient date bar */}
+          {/* location bar — orange accent */}
           <div
             style={{
               padding: "11px 16px",
               fontSize: 13,
               fontWeight: 700,
-              color: "#e0eafc",
-              background: grad,
+              color: "#ffffff",
+              background: "linear-gradient(135deg,#c2660e 0%,#eb9b46 100%)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
             }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <IconCalendar size={13} strokeWidth={2.2} />
+              <IconPin size={13} strokeWidth={2.2} />
+              {loc.locName}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  background: "rgba(255,255,255,0.2)",
+                  borderRadius: 999,
+                  padding: "3px 10px",
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.3,
+                }}
+              >
+                {loc.dateGroups.reduce((s, g) => s + g.bills.length, 0)}{" "}
+                bill{loc.dateGroups.reduce((s, g) => s + g.bills.length, 0) === 1 ? "" : "s"}
+              </span>
+              <span
+                style={{
+                  background: "rgba(255,255,255,0.2)",
+                  borderRadius: 999,
+                  padding: "3px 10px",
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                Rs. {fmtAmt(loc.locNetTotal)}
+              </span>
+            </span>
+          </div>
+
+          {/* date sub-groups */}
+          {loc.dateGroups.map((g) => (
+          <div key={g.date}>
+          {/* light date band */}
+          <div
+            style={{
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#334155",
+              background: "#f1f5f9",
+              borderBottom: "1px solid #e2e8f0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <IconCalendar size={12} strokeWidth={2.2} />
               {g.date}
             </span>
             <span
               style={{
-                background: "rgba(255,255,255,0.14)",
-                borderRadius: 999,
-                padding: "3px 10px",
-                fontSize: 10.5,
-                fontWeight: 600,
-                letterSpacing: 0.3,
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#0f172a",
+                fontVariantNumeric: "tabular-nums",
               }}
             >
-              {g.bills.length} bill{g.bills.length === 1 ? "" : "s"}
+              Rs. {fmtAmt(g.dayNetTotal)}
             </span>
           </div>
 
@@ -445,7 +517,10 @@ export default function SalesDetailsReport({
             </div>
           ))}
 
-          {/* footer strip — generic family style */}
+          </div>
+          ))}
+
+          {/* footer strip — location totals */}
           <div
             style={{
               display: "flex",
@@ -458,8 +533,9 @@ export default function SalesDetailsReport({
             }}
           >
             <span>
-              {g.bills.length} bill{g.bills.length === 1 ? "" : "s"} • net total{" "}
-              {fmtAmt(g.dayNetTotal)}
+              {loc.dateGroups.reduce((s, g) => s + g.bills.length, 0)} bill
+              {loc.dateGroups.reduce((s, g) => s + g.bills.length, 0) === 1 ? "" : "s"} •
+              net total {fmtAmt(loc.locNetTotal)}
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <span
@@ -510,10 +586,7 @@ export default function SalesDetailsReport({
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          Rs.{" "}
-          {fmtAmt(
-            report.dateGroups.reduce((s, g) => s + g.dayNetTotal, 0)
-          )}
+          Rs. {fmtAmt(report.grandNetTotal)}
         </span>
       </div>
     </div>

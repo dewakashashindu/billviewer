@@ -6,90 +6,9 @@ import Image from "next/image";
 import MicroChefLoader from "@/components/MicroChefLoader";
 import CupMascot from "@/components/CupMascot";
 import { QRCodeSVG } from "qrcode.react";
+import { getBillTotalRows, STATUS_META, RESTAURANT_INFO, statusReceiptWord, type Bill } from "@/lib/billFormat";
 
-import {
-  getBillTotalRows,
-  STATUS_META,
-  RESTAURANT_INFO,
-  statusReceiptWord,
-  type Bill,
-} from "@/lib/billFormat";
-
-// =============================================
-// WAVE BACKGROUND (UPDATED - only 2 waves)
-// =============================================
-function WaveBackground() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    function draw() {
-      if (!canvas || !ctx) return;
-      const W = canvas.width;
-      const H = canvas.height;
-
-      // White background
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, W, H);
-
-      // Wave 1 - Top (Light Blue)
-      ctx.beginPath();
-      ctx.moveTo(0, H * 0.28);
-      ctx.bezierCurveTo(W * 0.12, H * 0.12, W * 0.28, H * 0.22, W * 0.42, H * 0.32);
-      ctx.bezierCurveTo(W * 0.58, H * 0.44, W * 0.68, H * 0.52, W * 0.72, H * 0.48);
-      ctx.bezierCurveTo(W * 0.8, H * 0.42, W * 0.9, H * 0.3, W, H * 0.38);
-      ctx.lineTo(W, 0);
-      ctx.lineTo(0, 0);
-      ctx.closePath();
-      ctx.fillStyle = "#d4e6ff";
-      ctx.fill();
-
-      // Wave 2 - Bottom (Light Yellow)
-      ctx.beginPath();
-      ctx.moveTo(0, H * 0.55);
-      ctx.bezierCurveTo(W * 0.15, H * 0.45, W * 0.32, H * 0.62, W * 0.5, H * 0.52);
-      ctx.bezierCurveTo(W * 0.65, H * 0.44, W * 0.78, H * 0.35, W, H * 0.5);
-      ctx.lineTo(W, H);
-      ctx.lineTo(0, H);
-      ctx.closePath();
-      ctx.fillStyle = "#f1ddc9";
-      ctx.fill();
-    }
-
-    function resize() {
-      if (!canvas) return;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      draw();
-    }
-
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: "fixed",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        zIndex: 0,
-        display: "block",
-      }}
-    />
-  );
-}
-
-// =============================================
-// PROMOTIONS DATA
-// =============================================
+// --- Promotions Data ---
 const promotions = [
   {
     id: 1,
@@ -188,6 +107,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
         }
       `}</style>
 
+      {/* Backdrop */}
       <div
         onClick={onClose}
         style={{
@@ -201,6 +121,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
         }}
       />
 
+      {/* Modal */}
       <div
         style={{
           position: "fixed",
@@ -227,6 +148,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             animation: "popupIn 0.45s cubic-bezier(0.34,1.3,0.64,1) both",
           }}
         >
+          {/* Top color bar */}
           <div
             style={{
               height: 5,
@@ -235,6 +157,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             }}
           />
 
+          {/* Close Button */}
           <button
             onClick={onClose}
             style={{
@@ -271,7 +194,9 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             </svg>
           </button>
 
+          {/* Content */}
           <div style={{ padding: "36px 40px 28px" }}>
+            {/* Badge */}
             <div
               style={{
                 display: "inline-flex",
@@ -297,6 +222,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               </span>
             </div>
 
+            {/* Title */}
             <div style={{ marginBottom: 10 }}>
               <p
                 style={{
@@ -324,6 +250,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               </p>
             </div>
 
+            {/* Description */}
             <p
               style={{
                 color: "#434654",
@@ -337,6 +264,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               {promo.desc}
             </p>
 
+            {/* Code Row */}
             <div
               style={{
                 display: "flex",
@@ -391,6 +319,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               </button>
             </div>
 
+            {/* CTA */}
             {promo.link ? (
               <a
                 href={promo.link}
@@ -415,8 +344,12 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
                   transition: "opacity 0.2s",
                   boxSizing: "border-box",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.opacity = "0.88")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.opacity = "1")
+                }
               >
                 {promo.cta}
               </a>
@@ -437,14 +370,19 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
                   cursor: "pointer",
                   transition: "opacity 0.2s",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.opacity = "0.88")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.opacity = "1")
+                }
               >
                 {promo.cta}
               </button>
             )}
           </div>
 
+          {/* Dots */}
           <div
             style={{
               display: "flex",
@@ -473,6 +411,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             ))}
           </div>
 
+          {/* Progress Bar */}
           <div
             style={{
               height: 3,
@@ -520,6 +459,7 @@ function PromoCards() {
         marginTop: 32,
       }}
     >
+      {/* Section Title */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ flex: 1, height: 1, background: "#C3C6D6" }} />
         <p
@@ -552,7 +492,9 @@ function PromoCards() {
           }}
         >
           <div style={{ display: "flex" }}>
-            <div style={{ width: 5, background: promo.color, flexShrink: 0 }} />
+            <div
+              style={{ width: 5, background: promo.color, flexShrink: 0 }}
+            />
             <div style={{ flex: 1, padding: "20px 24px" }}>
               <div
                 style={{
@@ -693,7 +635,9 @@ function PromoCards() {
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.opacity = "0.88")
                     }
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.opacity = "1")
+                    }
                   >
                     {promo.cta}
                   </a>
@@ -720,7 +664,9 @@ function PromoCards() {
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.opacity = "0.88")
                     }
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.opacity = "1")
+                    }
                   >
                     {promo.cta}
                   </button>
@@ -734,9 +680,6 @@ function PromoCards() {
   );
 }
 
-// =============================================
-// PDF DOWNLOAD BUTTON
-// =============================================
 function PDFDownloadButton({ bill }: { bill: Bill }) {
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -745,6 +688,7 @@ function PDFDownloadButton({ bill }: { bill: Bill }) {
     try {
       const ReactPDF = await import("@react-pdf/renderer");
       const { BillPDFDocument } = await import("@/lib/BillPDF");
+
       const blob = await ReactPDF.pdf(<BillPDFDocument bill={bill} />).toBlob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -783,15 +727,13 @@ function PDFDownloadButton({ bill }: { bill: Bill }) {
         boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
       }}
     >
-      {pdfLoading ? "Preparing PDF..." : "⬇ Download eReceipt (PDF)"}
+      {pdfLoading ? "Preparing PDF..." : "\u2B07 Download eReceipt (PDF)"}
     </button>
   );
 }
 
-// =============================================
-// CONSTANTS
-// =============================================
 const SANS = 'Inter, "Helvetica Neue", Arial, sans-serif';
+
 const INK = "#1a1a1a";
 const INK_SOFT = "#555555";
 const DASH_C = "#2b2b2b";
@@ -804,13 +746,19 @@ const fmtAmt = (n: number) =>
 
 function Dashed() {
   return (
-    <div style={{ borderTop: `1.5px dashed ${DASH_C}`, margin: "14px 0" }} />
+    <div
+      style={{
+        borderTop: `1.5px dashed ${DASH_C}`,
+        margin: "14px 0",
+      }}
+    />
   );
 }
 
 // =============================================
-// RECEIPT LOADER
-// =============================================
+// COFFEE LOADER (spinning cup animation)
+
+
 function ReceiptLoader({ text }: { text: string }) {
   return (
     <div
@@ -821,6 +769,7 @@ function ReceiptLoader({ text }: { text: string }) {
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
+        background: "#e9e9ee",
         fontFamily: SANS,
         overflow: "hidden",
       }}
@@ -833,9 +782,6 @@ function ReceiptLoader({ text }: { text: string }) {
   );
 }
 
-// =============================================
-// BILL CONTENT
-// =============================================
 function BillContent() {
   const searchParams = useSearchParams();
   const [bill, setBill] = useState<Bill | null>(null);
@@ -845,6 +791,7 @@ function BillContent() {
 
   useEffect(() => {
     const encryptedId = searchParams.get("id");
+
     if (!encryptedId) {
       setError("No bill ID provided in URL");
       setLoading(false);
@@ -865,7 +812,9 @@ function BillContent() {
         console.error("Error fetching bill:", err);
         setError("Failed to load bill");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+      });
   }, [searchParams]);
 
   if (loading) {
@@ -881,6 +830,7 @@ function BillContent() {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
+          background: "#e9e9ee",
           padding: 20,
           fontFamily: SANS,
         }}
@@ -935,17 +885,7 @@ function BillContent() {
               boxShadow: "0 2px 8px rgba(22,163,74,0.3)",
             }}
           >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
             </svg>
             WhatsApp 077 233 6233
@@ -966,15 +906,17 @@ function BillContent() {
     <>
       {showPromo && <PromoPopup onClose={() => setShowPromo(false)} />}
 
+      {/* PAGE WRAPPER */}
       <div
         style={{
           width: "100%",
           minHeight: "100vh",
-          background: "transparent",
+          background: "#e9e9ee",
           padding: "30px 12px 60px",
           fontFamily: SANS,
         }}
       >
+        {/* RECEIPT CARD */}
         <div
           style={{
             maxWidth: 400,
@@ -985,6 +927,7 @@ function BillContent() {
             lineHeight: 1.35,
           }}
         >
+          {/* ── Restaurant header ── */}
           <div style={{ textAlign: "center" }}>
             <Image
               src={RESTAURANT_INFO.logoPath}
@@ -1009,12 +952,25 @@ function BillContent() {
               {RESTAURANT_INFO.name}
             </h1>
             {RESTAURANT_INFO.city && (
-              <p style={{ margin: "4px 0 0", fontSize: 13, color: INK }}>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 13,
+                  color: INK,
+                }}
+              >
                 {RESTAURANT_INFO.city}
               </p>
             )}
             {RESTAURANT_INFO.addressLines.map((line) => (
-              <p key={line} style={{ margin: "2px 0 0", fontSize: 12.5, color: INK }}>
+              <p
+                key={line}
+                style={{
+                  margin: "2px 0 0",
+                  fontSize: 12.5,
+                  color: INK,
+                }}
+              >
                 {line}
               </p>
             ))}
@@ -1032,10 +988,9 @@ function BillContent() {
             )}
           </div>
 
-          <div
-            style={{ borderTop: `1.5px dashed ${DASH_C}`, margin: "8px 0 0" }}
-          />
+          <div style={{ borderTop: `1.5px dashed ${DASH_C}`, margin: "8px 0 0" }} />
 
+          {/* ── TBL / TAKEAWAY box ── */}
           <div
             style={{
               border: `1.5px dashed ${DASH_C}`,
@@ -1052,10 +1007,9 @@ function BillContent() {
             {boxLabel}
           </div>
 
-          <div
-            style={{ borderTop: `1.5px dashed ${DASH_C}`, margin: "0 0 8px" }}
-          />
+          <div style={{ borderTop: `1.5px dashed ${DASH_C}`, margin: "0 0 8px" }} />
 
+          {/* ── Meta block — left: INV/Date/Steward/Cashier | right: STS/Time/Mode/PAX ── */}
           <div
             style={{
               fontSize: 12.5,
@@ -1099,7 +1053,10 @@ function BillContent() {
                   <b>Customer:</b>
                   {bill.customerName ? ` ${bill.customerName}` : ""}{" "}
                   {bill.customerPhone && (
-                    <a href={`tel:${bill.customerPhone}`} style={{ color: "#1a0dab" }}>
+                    <a
+                      href={`tel:${bill.customerPhone}`}
+                      style={{ color: "#1a0dab" }}
+                    >
                       ({bill.customerPhone})
                     </a>
                   )}
@@ -1138,6 +1095,7 @@ function BillContent() {
 
           <Dashed />
 
+          {/* ── Items header ── */}
           <div
             style={{
               display: "flex",
@@ -1158,7 +1116,12 @@ function BillContent() {
             <span>AMOUNT</span>
           </div>
 
-          <div style={{ paddingBottom: 4 }}>
+          {/* ── Items ── */}
+          <div
+            style={{
+              paddingBottom: 4,
+            }}
+          >
             {bill.items.map((item, idx) => (
               <div key={idx} style={{ marginBottom: 12 }}>
                 <div
@@ -1208,7 +1171,14 @@ function BillContent() {
 
           <Dashed />
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          {/* ── Totals breakdown ── */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 7,
+            }}
+          >
             {getBillTotalRows(bill).map((row) => (
               <div
                 key={row.label}
@@ -1221,18 +1191,25 @@ function BillContent() {
               >
                 <span
                   style={
-                    row.label === "Gross Total" ? { fontWeight: 700 } : undefined
+                    row.label === "Gross Total"
+                      ? { fontWeight: 700 }
+                      : undefined
                   }
                 >
                   {row.label}
                 </span>
-                <span style={{ fontWeight: row.label === "Gross Total" ? 700 : 500 }}>
+                <span
+                  style={{
+                    fontWeight: row.label === "Gross Total" ? 700 : 500,
+                  }}
+                >
                   {fmtAmt(row.value)}
                 </span>
               </div>
             ))}
           </div>
 
+          {/* ── Grand total ── */}
           <div
             style={{
               display: "flex",
@@ -1249,6 +1226,7 @@ function BillContent() {
             <span>Rs. {fmtAmt(bill.grandTotal)}</span>
           </div>
 
+          {/* ── Payments ── */}
           {bill.payments && bill.payments.length > 0 && (
             <div
               style={{
@@ -1262,9 +1240,7 @@ function BillContent() {
                 borderBottom: `1.5px dashed ${DASH_C}`,
               }}
             >
-              <p style={{ margin: 0, fontWeight: 700, color: INK }}>
-                Payment Information
-              </p>
+              <p style={{ margin: 0, fontWeight: 700, color: INK }}>Payment Information</p>
               {bill.payments.map((p, i) => (
                 <div
                   key={i}
@@ -1293,6 +1269,7 @@ function BillContent() {
             Thank you for dining with {RESTAURANT_INFO.name}!
           </p>
 
+          {/* ── Review QR ── */}
           {RESTAURANT_INFO.reviewUrl && (
             <div
               style={{
@@ -1313,7 +1290,14 @@ function BillContent() {
               >
                 <QRCodeSVG value={RESTAURANT_INFO.reviewUrl} size={92} />
               </div>
-              <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: INK }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: INK,
+                }}
+              >
                 Scan to rate us
               </p>
               <p style={{ margin: 0, fontSize: 11, color: INK_SOFT }}>
@@ -1322,16 +1306,28 @@ function BillContent() {
             </div>
           )}
 
-          <div style={{ borderTop: `2px solid ${INK}`, margin: "20px 0 0" }} />
+          {/* ── Bill end — black line ── */}
+          <div
+            style={{
+              borderTop: `2px solid ${INK}`,
+              margin: "20px 0 0",
+            }}
+          />
 
+          {/* ── PDF download ── */}
           <div
             className="no-print"
-            style={{ marginTop: 18, display: "flex", justifyContent: "center" }}
+            style={{
+              marginTop: 18,
+              display: "flex",
+              justifyContent: "center",
+            }}
           >
             <PDFDownloadButton bill={bill} />
           </div>
         </div>
 
+        {/* ── Promotions ── */}
         <div style={{ maxWidth: 420, margin: "26px auto 0" }}>
           <PromoCards />
         </div>
@@ -1340,53 +1336,47 @@ function BillContent() {
   );
 }
 
-// =============================================
-// PAGE EXPORT
-// =============================================
+
 export default function BillPage() {
   return (
-    <div style={{ position: "relative", minHeight: "100vh" }}>
-      <WaveBackground />
-
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <Suspense
-          fallback={
-            <div
+    <Suspense
+      fallback={
+        <div
+          style={{
+            width: "100%",
+            minHeight: "100vh",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            background:
+              "linear-gradient(135deg, #F0F4FF 0%, #F8F9FB 50%, #FFF8F0 100%)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <MicroChefLoader />
+            <p
               style={{
-                width: "100%",
-                minHeight: "100vh",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
+                marginTop: 24,
+                color: "#333",
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: "'Courier New', ui-monospace, monospace",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <MicroChefLoader />
-                <p
-                  style={{
-                    marginTop: 24,
-                    color: "#333",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    fontFamily: "'Courier New', ui-monospace, monospace",
-                  }}
-                >
-                  Loading...
-                </p>
-              </div>
-            </div>
-          }
-        >
-          <BillContent />
-        </Suspense>
-      </div>
-    </div>
+              Loading...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <BillContent />
+    </Suspense>
   );
 }

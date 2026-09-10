@@ -4,7 +4,7 @@
 // AppShell — reporting side eke sidebar + mobile bottom nav
 // (Bill viewer pages meka ain — /bill, / me shell eken wenaskai)
 // ============================================================
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import DateRangeModal from "./DateRangeModal";
@@ -78,46 +78,147 @@ const NAV: NavItem[] = [
     icon: <IChart />,
     children: [
       {
+        // 1.1 – 1.5 Sales
         key: "cat-sales",
         label: "Sales Reports",
         children: [
+          { key: "r-ss-om", label: "Sales Summery – Order Mode Wise" },
+          { key: "r-ss-bt", label: "Sales Summery – Bill Type Wise" },
           {
-            key: "r-trans-summary",
-            label: "Transaction Summary By Date",
-            reportId: "transaction-summary",
-          },
-          {
-            key: "r-sales-summary",
-            label: "Sales Summary",
+            key: "r-ss-all",
+            label: "Sales Summery – ALL",
             reportId: "sales-summary",
           },
+          { key: "r-sd-bt", label: "Sales Detail – Bill Type Wise" },
+          { key: "r-sd-om", label: "Sales Detail – Order Mode Wise" },
           {
-            key: "r-sales-details",
-            label: "Sales Details",
+            key: "r-sd-all",
+            label: "Sales Detail – All",
             reportId: "sales-details",
           },
-          { key: "r-item-sales", label: "Item-wise Sales" },
-          { key: "r-dept-sales", label: "Department-wise Sales" },
+          { key: "r-sbc-s", label: "Sales By Category – Summery" },
+          { key: "r-sbc-d", label: "Sales By Category – Detail" },
           { key: "r-hourly", label: "Hourly Sales" },
         ],
       },
       {
-        key: "cat-bills",
-        label: "Bill Reports",
+        // 2.x Payment Mode
+        key: "cat-payment",
+        label: "Payment Mode",
         children: [
-          { key: "r-bill-audit", label: "Bill Audit" },
-          { key: "r-cancelled", label: "Cancelled Bills" },
+          { key: "r-pay-summary", label: "Payment Summery" },
+          { key: "r-pay-mode", label: "Pay Mode Wise" },
+          { key: "r-pay-grid", label: "Bill Pay Mode Wise Grid" },
+          { key: "r-pay-billtype", label: "Bill Type Wise" },
         ],
       },
       {
-        key: "cat-staff",
-        label: "Staff Reports",
-        children: [{ key: "r-staff-perf", label: "Staff Performance" }],
+        // 3.x Cashier Collection
+        key: "cat-cashier",
+        label: "Cashier Collection",
+        children: [
+          { key: "r-cc-cashier", label: "Cashier Wise Sales" },
+          { key: "r-cc-pbd", label: "Payment Break Down" },
+          { key: "r-cc-pbd-grid", label: "Payment Break Down – Grid" },
+        ],
       },
       {
-        key: "cat-pay",
-        label: "Payment Reports",
-        children: [{ key: "r-pay-summary", label: "Payment Mode Summary" }],
+        // 4.x Menu Item Issue
+        key: "cat-menu-issue",
+        label: "Menu Item Issue",
+        children: [
+          { key: "r-mii-item", label: "Item Issue" },
+          { key: "r-mii-date", label: "Menu Item Issue By Date" },
+        ],
+      },
+      {
+        // 5.1 Item Movement
+        key: "cat-item-move",
+        label: "Item Movement",
+        children: [{ key: "r-im", label: "Item Movement" }],
+      },
+      {
+        // 6.1 Table Management
+        key: "cat-table",
+        label: "Table Management",
+        children: [{ key: "r-tm-steward", label: "Steward Wise" }],
+      },
+      {
+        // 7.1 Transaction reports
+        key: "cat-txn",
+        label: "Transaction Reports",
+        children: [
+          {
+            key: "r-trans-summary",
+            label: "Transaction Summery",
+            reportId: "transaction-summary",
+          },
+        ],
+      },
+      {
+        // 8.x Taxes and Service Charge
+        key: "cat-tax",
+        label: "Taxes & Service Charge",
+        children: [
+          { key: "r-tsc-sc", label: "Service Charge" },
+          { key: "r-tsc-vat", label: "Tax & VAT Report" },
+        ],
+      },
+      {
+        // 9 Complimentary Cost
+        key: "cat-comp",
+        label: "Complimentary Cost",
+        children: [{ key: "r-comp", label: "Complimentary Cost" }],
+      },
+      {
+        // 10 Void
+        key: "cat-void",
+        label: "Void Reports",
+        children: [{ key: "r-void", label: "Void Summery and Detail" }],
+      },
+      {
+        // 11 Pax Count
+        key: "cat-pax",
+        label: "Pax Count",
+        children: [{ key: "r-pax", label: "Pax Count" }],
+      },
+      {
+        // 12 Cash In/Out
+        key: "cat-cash-io",
+        label: "Cash In/Out",
+        children: [{ key: "r-cio", label: "Cash In/Out Report" }],
+      },
+      {
+        // 14 Open tables
+        key: "cat-open",
+        label: "Open Tables",
+        children: [{ key: "r-open", label: "Open (On-Going) Tables" }],
+      },
+      {
+        // 15.x Tracing
+        key: "cat-trace",
+        label: "Tracing",
+        children: [
+          { key: "r-trace-slip", label: "Slip Trace" },
+          { key: "r-trace-inv", label: "Invoice Trace" },
+        ],
+      },
+      {
+        // 16 KOT/BOT
+        key: "cat-kotbot",
+        label: "KOT/BOT Tracing",
+        children: [{ key: "r-kotbot", label: "KOT/BOT Tracing" }],
+      },
+      {
+        // 21.x Credit Settlement
+        key: "cat-credit",
+        label: "Credit Settlement",
+        children: [
+          { key: "r-cred-ccs", label: "Current Credit Summery" },
+          { key: "r-cred-history", label: "Credit History" },
+          { key: "r-cred-payhistory", label: "Payment History" },
+          { key: "r-cred-account", label: "Account Detail" },
+        ],
       },
     ],
   },
@@ -215,6 +316,94 @@ const SHELL_CSS = `
     .sh-main-body { padding-bottom:72px !important; }
   }
 `;
+
+/* ── UserBar — content area top-right: logged-in user + sign-out ── */
+function UserBar() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive && d.success) setName(d.data.userName || d.data.loginName || "");
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    router.replace("/login");
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 10,
+        padding: "10px 18px 0",
+        flexShrink: 0,
+      }}
+    >
+      {name && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg,#1c2f37 0%,#111e25 100%)",
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 800,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textTransform: "uppercase",
+            }}
+          >
+            {name.trim().charAt(0) || "U"}
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#334155" }}>
+            {name}
+          </span>
+        </span>
+      )}
+      <button
+        onClick={logout}
+        title="Sign out"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 30,
+          height: 30,
+          border: "1px solid #e2e8f0",
+          borderRadius: 8,
+          background: "#fff",
+          color: "#64748b",
+          cursor: "pointer",
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -542,6 +731,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           flexDirection: "column",
         }}
       >
+        <UserBar />
         {children}
       </main>
 
@@ -551,10 +741,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
         title={modal?.title ?? ""}
         linked={modal?.reportId != null}
         onClose={() => setModal(null)}
-        onApply={(from, to) => {
+        onApply={(from, to, loc) => {
           const id = modal?.reportId;
           setModal(null);
-          if (id) router.push(`/reports/${id}?from=${from}&to=${to}`);
+          if (id)
+            router.push(
+              `/reports/${id}?from=${from}&to=${to}${
+                loc ? `&loc=${encodeURIComponent(loc)}` : ""
+              }`
+            );
         }}
       />
     </div>

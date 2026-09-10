@@ -3,17 +3,21 @@
 // ============================================================
 // Date range popup — report ekak click kalama wadinna one modal eka
 // ============================================================
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getLocationsAction } from "@/app/actions/reports";
 
 export interface DateRangeModalProps {
   open: boolean;
   title: string;
   linked: boolean; // false nam "coming soon" message eka witharak
   onClose: () => void;
-  onApply: (from: string, to: string) => void;
+  onApply: (from: string, to: string, loc: string) => void;
 }
 
-const iso = (d: Date) => d.toISOString().split("T")[0];
+// local date (toISOString UTC nisa 31/Dec day-shift wenna)
+const p2 = (n: number) => String(n).padStart(2, "0");
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 
 export default function DateRangeModal({
   open,
@@ -26,6 +30,24 @@ export default function DateRangeModal({
   const [from, setFrom] = useState(iso(new Date(now.getFullYear(), 0, 1)));
   const [to, setTo] = useState(iso(now));
   const [err, setErr] = useState<string | null>(null);
+  const [loc, setLoc] = useState(""); // "" = All Locations
+  const [locations, setLocations] = useState<
+    { code: string; name: string }[]
+  >([]);
+
+  // modal eka open unama locations load (DB eken)
+  useEffect(() => {
+    if (!open || locations.length > 0) return;
+    let alive = true;
+    getLocationsAction().then((res) => {
+      if (!alive) return;
+      if (res.success && Array.isArray(res.data)) setLocations(res.data);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
@@ -75,7 +97,7 @@ export default function DateRangeModal({
       return;
     }
     setErr(null);
-    onApply(from, to);
+    onApply(from, to, loc);
   };
 
   return (
@@ -222,6 +244,44 @@ export default function DateRangeModal({
                   {p.label}
                 </button>
               ))}
+            </div>
+
+            {/* Location */}
+            <div style={{ marginBottom: 12 }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  marginBottom: 5,
+                }}
+              >
+                Location
+              </label>
+              <select
+                value={loc}
+                onChange={(e) => setLoc(e.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 8,
+                  padding: "9px 10px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#0f172a",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="">All Locations</option>
+                {locations.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Date inputs */}

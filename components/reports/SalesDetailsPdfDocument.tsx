@@ -39,12 +39,21 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 70 },
   range: { fontWeight: "bold", fontSize: 9, marginTop: 6, marginBottom: 8 },
+  locBand: {
+    backgroundColor: "#1e3a5f",
+    color: "#ffffff",
+    fontWeight: "bold",
+    fontSize: 9.5,
+    padding: "4px 6px",
+    marginTop: 10,
+    marginBottom: 2,
+  },
   dateBand: {
     backgroundColor: "#e5e5e5",
     fontWeight: "bold",
     fontSize: 9,
     padding: "3px 6px",
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 4,
   },
   billNo: { fontWeight: "bold", fontSize: 8.5, marginBottom: 2 },
@@ -93,7 +102,7 @@ interface Props {
   printTime: string;
   from: string;
   to: string;
-  dateGroups: SalesDetailsData["dateGroups"];
+  locationGroups: SalesDetailsData["locationGroups"];
 }
 
 function BillBlock({ bill }: { bill: DetBill }) {
@@ -151,9 +160,9 @@ export default function SalesDetailsPdfDocument({
   printTime,
   from,
   to,
-  dateGroups,
+  locationGroups,
 }: Props) {
-  const grandTotal = dateGroups.reduce((s, g) => s + g.dayNetTotal, 0);
+  const grandTotal = locationGroups.reduce((s, l) => s + l.locNetTotal, 0);
   return (
     <Document title={title} author="MICROECHEF">
       <Page size="A4" style={styles.page}>
@@ -172,11 +181,18 @@ export default function SalesDetailsPdfDocument({
           From {from} To {to}
         </Text>
 
-        {dateGroups.map((g) => (
-          <View key={g.date}>
-            <Text style={styles.dateBand}>{g.date}</Text>
-            {g.bills.map((b) => (
-              <BillBlock bill={b} key={b.billNo} />
+        {locationGroups.map((loc) => (
+          <View key={loc.locCode}>
+            <Text style={styles.locBand}>
+              {loc.locName}  —  Location Total {fmt(loc.locNetTotal)}
+            </Text>
+            {loc.dateGroups.map((g) => (
+              <View key={g.date}>
+                <Text style={styles.dateBand}>{g.date}</Text>
+                {g.bills.map((b) => (
+                  <BillBlock bill={b} key={b.billNo} />
+                ))}
+              </View>
             ))}
           </View>
         ))}

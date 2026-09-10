@@ -21,6 +21,7 @@ import SalesSummaryReport, {
 } from "@/components/reports/SalesSummaryReport";
 import SalesDetailsReport, {
   filterSalesDetails,
+  type SalesDetailsData,
 } from "@/components/reports/SalesDetailsReport";
 import SalesSummaryPdfDocument from "@/components/reports/SalesSummaryPdfDocument";
 import SalesDetailsPdfDocument from "@/components/reports/SalesDetailsPdfDocument";
@@ -112,6 +113,7 @@ export default function DynamicReportPage() {
     searchParams.get("from") || yearStart
   );
   const [endDate, setEndDate] = useState(searchParams.get("to") || today);
+  const [loc, setLoc] = useState(searchParams.get("loc") || "");
 
   // URL change (sidebar modal eken aluth range) -> state update
   useEffect(() => {
@@ -119,6 +121,7 @@ export default function DynamicReportPage() {
     const t = searchParams.get("to");
     if (f) setStartDate(f);
     if (t) setEndDate(t);
+    setLoc(searchParams.get("loc") || "");
   }, [searchParams]);
 
   // ── single fetch effect — ALL reports (sales summary includes) ──
@@ -129,7 +132,11 @@ export default function DynamicReportPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await config.fetchAction({ startDate, endDate });
+        const res = await config.fetchAction({
+          startDate,
+          endDate,
+          outletId: loc || undefined,
+        });
         if (!alive) return;
         if (res?.success && res.data != null) {
           setData(res.data);
@@ -148,7 +155,7 @@ export default function DynamicReportPage() {
     return () => {
       alive = false;
     };
-  }, [reportId, config, startDate, endDate]);
+  }, [reportId, config, startDate, endDate, loc]);
 
   // reset view state on report change
   useEffect(() => {
@@ -290,16 +297,9 @@ export default function DynamicReportPage() {
 
   // ── Sales Details (custom render — bill-wise items + totals box) ──
   if (config.render === "sales-details") {
-    const details =
-      summary
-        ? (summary as {
-            dateGroups: {
-              date: string;
-              bills: never[];
-              dayNetTotal: number;
-            }[];
-          })
-        : null;
+    const details = summary
+      ? (summary as unknown as SalesDetailsData)
+      : null;
     const filteredDetails = details
       ? filterSalesDetails(details, search)
       : null;
@@ -308,14 +308,16 @@ export default function DynamicReportPage() {
     // (range eke okkoma bills wala items aggregate karala Top 12 hbars)
     const itemTotals = new Map<string, number>();
     if (filteredDetails) {
-      for (const g of filteredDetails.dateGroups) {
-        for (const b of g.bills) {
-          for (const it of b.items) {
-            const key = it.name || "Unknown Item";
-            itemTotals.set(
-              key,
-              (itemTotals.get(key) ?? 0) + it.totItemPrice
-            );
+      for (const loc of filteredDetails.locationGroups) {
+        for (const g of loc.dateGroups) {
+          for (const b of g.bills) {
+            for (const it of b.items) {
+              const key = it.name || "Unknown Item";
+              itemTotals.set(
+                key,
+                (itemTotals.get(key) ?? 0) + it.totItemPrice
+              );
+            }
           }
         }
       }
@@ -335,7 +337,7 @@ export default function DynamicReportPage() {
         printTime={printTime}
         from={fmtDMonY(startDate)}
         to={fmtDMonY(endDate)}
-        dateGroups={filteredDetails.dateGroups}
+        locationGroups={filteredDetails.locationGroups}
       />
     ) : undefined;
 

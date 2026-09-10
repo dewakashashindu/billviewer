@@ -11,7 +11,7 @@ import { getPool, isDbConfigured } from "@/lib/db";
 export interface ReportFilter {
   startDate: string;
   endDate: string;
-  outletId?: number;
+  outletId?: number | string;
 }
 
 const SUMMARY_VIEW = process.env.SALES_SUMMARY_VIEW || "VW_SalesSummery";
@@ -84,7 +84,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
       FROM dbo.${SUMMARY_VIEW} WITH (NOLOCK)
       WHERE Txndate >= @startDate
         AND Txndate < DATEADD(day, 1, @endDate)
-        ${outletId ? "AND LocCode = @outletId" : ""}
+        ${outletId ? "AND LTRIM(RTRIM(LocCode)) = @outletId" : ""}
       GROUP BY CONVERT(varchar(10), Txndate, 23)
       ORDER BY txnDate ASC
     `;
@@ -194,7 +194,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
         ON LTRIM(RTRIM(cu.UserId)) = LTRIM(RTRIM(v.CasherID))
       WHERE v.Txndate >= @startDate
         AND v.Txndate < DATEADD(day, 1, @endDate)
-        ${outletId ? "AND v.LocCode = @outletId" : ""}
+        ${outletId ? "AND LTRIM(RTRIM(v.LocCode)) = @outletId" : ""}
       ORDER BY v.Txndate, v.BillNo
     `);
 
@@ -293,7 +293,8 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.VarChar(10), startDate);
     req.input("endDate", sql.VarChar(10), endDate);
-    if (outletId) req.input("outletId", sql.Int, outletId);
+    if (outletId)
+      req.input("outletId", sql.VarChar(20), String(outletId));
 
     const result = await req.query(`
       SET NOCOUNT ON;
@@ -326,7 +327,9 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
         h.PackChg      AS PackChg,
         h.DelChg       AS DelChg,
         h.DeleveryAreaChg AS DelAreaChg,
-        h.NetTotal     AS NetTotal
+        h.NetTotal        AS NetTotal,
+        LTRIM(RTRIM(h.LocCode)) AS LocCodeRaw,
+        ISNULL(NULLIF(LTRIM(RTRIM(lm.LocDes)), ''), LTRIM(RTRIM(h.LocCode))) AS LocDes
       FROM Tbl_BillDetails d WITH (NOLOCK)
       INNER JOIN Tbl_BillHeader h WITH (NOLOCK)
         ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(d.BillNo))
@@ -338,10 +341,12 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
         ON LTRIM(RTRIM(su.UserId)) = LTRIM(RTRIM(h.StewID))
       LEFT JOIN Tbl_OrderModes om WITH (NOLOCK)
         ON LTRIM(RTRIM(om.ModeID)) = LTRIM(RTRIM(h.OrderMode))
+      LEFT JOIN Tbl_LocationMaster lm WITH (NOLOCK)
+        ON LTRIM(RTRIM(lm.LocCode)) = LTRIM(RTRIM(h.LocCode))
       WHERE h.Txndate >= @startDate
         AND h.Txndate < DATEADD(day, 1, @endDate)
         AND ISNULL(h.DoNotShowInSales, 0) = 0
-        ${outletId ? "AND h.LocCode = @outletId" : ""}
+        ${outletId ? "AND LTRIM(RTRIM(h.LocCode)) = @outletId" : ""}
       ORDER BY h.Txndate, h.BillNo, d.KOTBOTNO, d.SubItmId;
     `);
 
@@ -388,14 +393,33 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
       };
     }
 
-    const dateMap = new Map<
-      string,
-      { bills: DetBill[]; billMap: Map<string, DetBill>; dayNetTotal: number }
-    >();
+    interface LocEntry {
+      locCode: string;
+      locName: string;
+      locNetTotal: number;
+      dateMap: Map<
+        string,
+        { bills: DetBill[]; billMap: Map<string, DetBill>; dayNetTotal: number }
+      >;
+    }
+    const locMap = new Map<string, LocEntry>();
 
     for (const row of result.recordset as any[]) {
       const billDate = String(row.BillDate ?? "").trim();
       const billNo = String(row.BillNo ?? "").trim();
+      const locCode = String(row.LocCodeRaw ?? "").trim() || "-";
+      const locName = String(row.LocDes ?? "").trim() || locCode;
+
+      if (!locMap.has(locCode)) {
+        locMap.set(locCode, {
+          locCode,
+          locName,
+          locNetTotal: 0,
+          dateMap: new Map(),
+        });
+      }
+      const loc = locMap.get(locCode)!;
+      const dateMap = loc.dateMap;
 
       if (!dateMap.has(billDate)) {
         dateMap.set(billDate, {
@@ -435,6 +459,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
         });
         grp.bills.push(grp.billMap.get(billNo)!);
         grp.dayNetTotal = r2(grp.dayNetTotal + num(row.NetTotal));
+        loc.locNetTotal = r2(loc.locNetTotal + num(row.NetTotal));
       }
 
       const bill = grp.billMap.get(billNo)!;
@@ -448,15 +473,52 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
       }
     }
 
-    const dateGroups = Array.from(dateMap.entries()).map(([date, g]) => ({
-      date,
-      bills: g.bills,
-      dayNetTotal: g.dayNetTotal,
-    }));
+    const locationGroups = Array.from(locMap.values())
+      .sort((a, b) => a.locCode.localeCompare(b.locCode))
+      .map((loc) => ({
+        locCode: loc.locCode,
+        locName: loc.locName,
+        locNetTotal: loc.locNetTotal,
+        dateGroups: Array.from(loc.dateMap.entries()).map(([date, g]) => ({
+          date,
+          bills: g.bills,
+          dayNetTotal: g.dayNetTotal,
+        })),
+      }));
 
-    return { success: true, data: { dateGroups } };
+    const grandNetTotal = r2(
+      locationGroups.reduce((s, l) => s + l.locNetTotal, 0)
+    );
+
+    return { success: true, data: { locationGroups, grandNetTotal } };
   } catch (error) {
     console.error("Sales Details Action Error:", error);
+    return { success: false, error: "Database Data Fetching Failed." };
+  }
+}
+
+// ============================================================
+// Locations — Tbl_LocationMaster (date-range popup eke dropdown eka)
+// ============================================================
+export async function getLocationsAction() {
+  try {
+    if (!isDbConfigured()) {
+      return {
+        success: false,
+        error: "Database not configured (DB_* env vars missing)",
+      };
+    }
+    const pool = await getPool();
+    const res = await pool.request().query(`
+      SELECT
+        LTRIM(RTRIM(LocCode)) AS code,
+        ISNULL(NULLIF(LTRIM(RTRIM(LocDes)), ''), LTRIM(RTRIM(LocCode))) AS name
+      FROM Tbl_LocationMaster WITH (NOLOCK)
+      ORDER BY LTRIM(RTRIM(LocCode));
+    `);
+    return { success: true, data: res.recordset as { code: string; name: string }[] };
+  } catch (error) {
+    console.error("Locations Action Error:", error);
     return { success: false, error: "Database Data Fetching Failed." };
   }
 }
