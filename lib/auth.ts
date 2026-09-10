@@ -14,6 +14,12 @@ import crypto from "crypto";
 
 export const SESSION_COOKIE = "mcf_session";
 export const OTP_COOKIE = "mcf_otp";
+
+/** Auth fail වුණාම හැම guarded action/route එකකින්ම එකම error එක —
+ *  client side එකෙන් මේක බලලා /login එකට යනවා (UI redirect).
+ *  ⚠️ මේ string එක වෙනස් කළොත් app/(main)/reports/[reportId]/page.tsx
+ *  එකේ 401 check එකත් එකට වෙනස් කරන්න. */
+export const UNAUTHORIZED_ERROR = "UNAUTHORIZED";
 const SESSION_DAYS = 7;
 const OTP_MINUTES = 10;
 

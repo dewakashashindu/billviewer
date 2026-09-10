@@ -1,6 +1,8 @@
 // ============================================================
 // LOCATION: components/reports/SalesSummaryPdfDocument.tsx
-// ALUTH FILE — mekamama create karanna (PDF eka POS report eka wage)
+// FULL REPLACE — PDF eka POS report eka wage, ✅ LOCATION-WISE:
+//   location එකක් පාසා section එකක් (code + name + locTotal), ඇතුළේ
+//   date-wise tables + Daily Collection. අන්තිමේ Grand Total (all locations).
 // ============================================================
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
@@ -20,14 +22,20 @@ export interface SummaryGroup {
   dayTotal: number;
 }
 
+export interface SummaryLocation {
+  locCode: string;
+  locName: string;
+  dateGroups: SummaryGroup[];
+  locTotal: number;
+}
+
 interface Props {
   title: string;
   printDate: string;
   printTime: string;
   from: string;
   to: string;
-  location: string;
-  dateGroups: SummaryGroup[];
+  locationGroups: SummaryLocation[];
   grandTotal: number;
 }
 
@@ -57,13 +65,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
   },
+  // POS eke "01   MILLA MIRISSA" header eka wage
   location: {
     fontFamily: "Courier-Bold",
     fontSize: 11,
-    marginBottom: 10,
+    marginTop: 12,
+    marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#1a1a1a",
+  },
+  locationTotal: {
+    fontFamily: "Courier-Bold",
+    fontSize: 9,
+    marginBottom: 2,
   },
   groupDate: {
     fontFamily: "Courier-Bold",
@@ -110,14 +125,104 @@ const W = {
   casher: 60,
 };
 
+/* එක location section එකක් (date tables + daily collection) */
+function LocationBlock({ loc }: { loc: SummaryLocation }) {
+  return (
+    <View>
+      <Text style={styles.location}>
+        {loc.locCode}   {loc.locName}
+      </Text>
+
+      {loc.dateGroups.map((g) => (
+        <View key={g.date}>
+          <Text style={styles.groupDate}>{g.date}</Text>
+
+          {/* Header */}
+          <View style={styles.row}>
+            <Text style={[styles.th, { width: W.billNo }]}>BillNo</Text>
+            <Text style={[styles.th, { width: W.netTotal }]}>NetTotal</Text>
+            <Text style={[styles.th, { width: W.steward }]}>Steward</Text>
+            <Text style={[styles.th, { width: W.billType }]}>BillType</Text>
+            <Text style={[styles.th, { width: W.orderMode }]}>OrderMode</Text>
+            <Text style={[styles.th, { width: W.txnTime }]}>TxnTime</Text>
+            <Text style={[styles.th, { width: W.casher }]}>Casher</Text>
+          </View>
+
+          {/* Bill rows */}
+          {g.rows.map((r, i) => (
+            <View style={styles.row} key={`${r.billNo}-${i}`}>
+              <Text style={[styles.td, { width: W.billNo }]}>{r.billNo}</Text>
+              <Text style={[styles.td, { width: W.netTotal }, styles.right]}>
+                {fmt(r.netTotal)}
+              </Text>
+              <Text style={[styles.td, { width: W.steward }]}>{r.steward}</Text>
+              <Text style={[styles.td, { width: W.billType }]}>{r.billType}</Text>
+              <Text style={[styles.td, { width: W.orderMode }]}>{r.orderMode}</Text>
+              <Text style={[styles.td, { width: W.txnTime }]}>{r.txnTime}</Text>
+              <Text style={[styles.td, { width: W.casher }]}>{r.casher}</Text>
+            </View>
+          ))}
+
+          {/* Daily collection */}
+          <View style={styles.totalRow}>
+            <Text style={[styles.td, { width: W.billNo }]} />
+            <Text
+              style={[
+                styles.td,
+                { width: W.netTotal },
+                styles.right,
+                styles.bold,
+              ]}
+            >
+              {fmt(g.dayTotal)}
+            </Text>
+            <Text
+              style={[
+                styles.td,
+                {
+                  width:
+                    W.steward + W.billType + W.orderMode + W.txnTime + W.casher,
+                },
+                styles.bold,
+              ]}
+            >
+              Daily Collection
+            </Text>
+          </View>
+        </View>
+      ))}
+
+      {/* Location total */}
+      <View style={styles.totalRow}>
+        <Text style={[styles.td, { width: W.billNo }]} />
+        <Text
+          style={[styles.td, { width: W.netTotal }, styles.right, styles.bold]}
+        >
+          {fmt(loc.locTotal)}
+        </Text>
+        <Text
+          style={[
+            styles.td,
+            {
+              width: W.steward + W.billType + W.orderMode + W.txnTime + W.casher,
+            },
+            styles.bold,
+          ]}
+        >
+          Total — {loc.locName}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function SalesSummaryPdfDocument({
   title,
   printDate,
   printTime,
   from,
   to,
-  location,
-  dateGroups,
+  locationGroups,
   grandTotal,
 }: Props) {
   return (
@@ -139,84 +244,16 @@ export default function SalesSummaryPdfDocument({
           From {from} To {to}
         </Text>
 
-        {location ? <Text style={styles.location}>{location}</Text> : null}
-
-        {dateGroups.map((g) => (
-          <View key={g.date}>
-            <Text style={styles.groupDate}>{g.date}</Text>
-
-            {/* Header */}
-            <View style={styles.row}>
-              <Text style={[styles.th, { width: W.billNo }]}>BillNo</Text>
-              <Text style={[styles.th, { width: W.netTotal }]}>NetTotal</Text>
-              <Text style={[styles.th, { width: W.steward }]}>Steward</Text>
-              <Text style={[styles.th, { width: W.billType }]}>BillType</Text>
-              <Text style={[styles.th, { width: W.orderMode }]}>OrderMode</Text>
-              <Text style={[styles.th, { width: W.txnTime }]}>TxnTime</Text>
-              <Text style={[styles.th, { width: W.casher }]}>Casher</Text>
-            </View>
-
-            {/* Bill rows */}
-            {g.rows.map((r, i) => (
-              <View style={styles.row} key={`${r.billNo}-${i}`}>
-                <Text style={[styles.td, { width: W.billNo }]}>{r.billNo}</Text>
-                <Text
-                  style={[styles.td, { width: W.netTotal }, styles.right]}
-                >
-                  {fmt(r.netTotal)}
-                </Text>
-                <Text style={[styles.td, { width: W.steward }]}>
-                  {r.steward}
-                </Text>
-                <Text style={[styles.td, { width: W.billType }]}>
-                  {r.billType}
-                </Text>
-                <Text style={[styles.td, { width: W.orderMode }]}>
-                  {r.orderMode}
-                </Text>
-                <Text style={[styles.td, { width: W.txnTime }]}>
-                  {r.txnTime}
-                </Text>
-                <Text style={[styles.td, { width: W.casher }]}>{r.casher}</Text>
-              </View>
-            ))}
-
-            {/* Daily collection */}
-            <View style={styles.totalRow}>
-              <Text style={[styles.td, { width: W.billNo }]} />
-              <Text
-                style={[
-                  styles.td,
-                  { width: W.netTotal },
-                  styles.right,
-                  styles.bold,
-                ]}
-              >
-                {fmt(g.dayTotal)}
-              </Text>
-              <Text
-                style={[
-                  styles.td,
-                  { width: W.steward + W.billType + W.orderMode + W.txnTime + W.casher },
-                  styles.bold,
-                ]}
-              >
-                Daily Collection
-              </Text>
-            </View>
-          </View>
+        {/* Location-wise sections */}
+        {locationGroups.map((loc) => (
+          <LocationBlock key={loc.locCode} loc={loc} />
         ))}
 
-        {/* Grand total */}
+        {/* Grand total (all locations) */}
         <View style={styles.grandRow}>
           <Text style={[styles.td, { width: W.billNo }]} />
           <Text
-            style={[
-              styles.td,
-              { width: W.netTotal },
-              styles.right,
-              styles.bold,
-            ]}
+            style={[styles.td, { width: W.netTotal }, styles.right, styles.bold]}
           >
             {fmt(grandTotal)}
           </Text>

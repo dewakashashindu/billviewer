@@ -90,12 +90,12 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
     fontWeight: 700,
     letterSpacing: 0.6,
     textTransform: "uppercase" as const,
-    color: "#e0eafc",
+    color: "#1e3a8a",
     whiteSpace: "nowrap" as const,
     cursor: "pointer",
     userSelect: "none" as const,
     textAlign: isNum(col.type) ? ("right" as const) : ("left" as const),
-    borderRight: "1px solid rgba(255,255,255,0.08)",
+    borderRight: "1px solid #bfdbfe",
   });
 
   const td = (col: ColumnConfig) => ({
@@ -130,12 +130,8 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
             }}
           >
             <thead>
-              <tr
-                style={{
-                  background:
-                    "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)",
-                }}
-              >
+              {/* ✅ Light-blue header (POS report eke wage) */}
+              <tr style={{ background: "#dbeafe" }}>
                 {columns.map((col: ColumnConfig, i: number) => (
                   <th
                     key={col.accessorKey}

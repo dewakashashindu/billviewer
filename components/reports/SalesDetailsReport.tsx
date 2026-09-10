@@ -83,19 +83,20 @@ export function filterSalesDetails(
 ): SalesDetailsData {
   const q = query.trim().toLowerCase();
   if (!q) return report;
-  const locationGroups = report.locationGroups
+  // ✅ defensive — undefined arrays වලින් crash නොවෙන්න
+  const locationGroups = (report.locationGroups ?? [])
     .map((loc) => {
-      const dateGroups = loc.dateGroups
+      const dateGroups = (loc.dateGroups ?? [])
         .map((g) => {
-          const bills = g.bills.filter((b) => {
-            const itemHay = b.items.map((i) => i.name).join(" ");
-            const hay = `${b.billNo} ${b.billType} ${b.userName} ${b.steward} ${b.tableNo} ${b.orderMode} ${b.noPax} ${itemHay} ${b.totals.netTotal}`;
+          const bills = (g.bills ?? []).filter((b) => {
+            const itemHay = (b.items ?? []).map((i) => i.name).join(" ");
+            const hay = `${b.billNo} ${b.billType} ${b.userName} ${b.steward} ${b.tableNo} ${b.orderMode} ${b.noPax} ${itemHay} ${b.totals?.netTotal ?? 0}`;
             return hay.toLowerCase().includes(q);
           });
           return {
             ...g,
             bills,
-            dayNetTotal: bills.reduce((s, b) => s + b.totals.netTotal, 0),
+            dayNetTotal: bills.reduce((s, b) => s + (b.totals?.netTotal ?? 0), 0),
           };
         })
         .filter((g) => g.bills.length > 0);
@@ -114,15 +115,16 @@ export function filterSalesDetails(
 
 const grad = "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)";
 
+// ✅ Light-blue header (POS report eke wage) — dark gradient eka ain karala
 const th: CSSProperties = {
-  background: grad,
-  color: "#e0eafc",
+  background: "#dbeafe",
+  color: "#1e3a8a",
   padding: "9px 12px",
   fontSize: 10,
   fontWeight: 700,
   letterSpacing: 0.6,
   textTransform: "uppercase",
-  borderRight: "1px solid rgba(255,255,255,0.08)",
+  borderRight: "1px solid #bfdbfe",
   whiteSpace: "nowrap",
   textAlign: "left",
 };

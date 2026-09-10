@@ -10,7 +10,8 @@
 //   • sales summary gets pdfDocument too (share/PDF identical)
 // ============================================================
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { UNAUTHORIZED_ERROR } from "@/lib/auth";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ReportToolbar from "@/components/ReportToolbar";
@@ -88,6 +89,7 @@ function ErrorBlock({ message }: { message: string }) {
 
 export default function DynamicReportPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const reportId = params?.reportId as string;
   const config = REPORTS_CONFIG[reportId];
@@ -114,6 +116,8 @@ export default function DynamicReportPage() {
   );
   const [endDate, setEndDate] = useState(searchParams.get("to") || today);
   const [loc, setLoc] = useState(searchParams.get("loc") || "");
+  const [orderMode, setOrderMode] = useState(searchParams.get("om") || "");
+  const [billType, setBillType] = useState(searchParams.get("bt") || "");
 
   // URL change (sidebar modal eken aluth range) -> state update
   useEffect(() => {
@@ -122,12 +126,19 @@ export default function DynamicReportPage() {
     if (f) setStartDate(f);
     if (t) setEndDate(t);
     setLoc(searchParams.get("loc") || "");
+    setOrderMode(searchParams.get("om") || "");
+    setBillType(searchParams.get("bt") || "");
   }, [searchParams]);
 
   // ── single fetch effect — ALL reports (sales summary includes) ──
   useEffect(() => {
     if (!config) return;
     let alive = true;
+    // session එක නැති/ඉකුත් වෙලා නම් → login එකට (server action එකෙන්
+    // UNAUTHORIZED එනවා — lib/actionAuth.ts)
+    const goLogin = () => {
+      if (alive) router.replace("/login");
+    };
     (async () => {
       setLoading(true);
       setError(null);
@@ -136,8 +147,15 @@ export default function DynamicReportPage() {
           startDate,
           endDate,
           outletId: loc || undefined,
+          orderMode: orderMode || undefined,
+          billType: billType || undefined,
         });
         if (!alive) return;
+        // session එක ඉකුත් වෙලා / නැති වෙලා නම් → login එකට
+        if (res?.error === UNAUTHORIZED_ERROR) {
+          goLogin();
+          return;
+        }
         if (res?.success && res.data != null) {
           setData(res.data);
         } else {
@@ -146,6 +164,10 @@ export default function DynamicReportPage() {
         }
       } catch (e: any) {
         if (!alive) return;
+        if (e?.message === UNAUTHORIZED_ERROR) {
+          goLogin();
+          return;
+        }
         setData(null);
         setError(e?.message || "Failed to load report data");
       } finally {
@@ -155,7 +177,7 @@ export default function DynamicReportPage() {
     return () => {
       alive = false;
     };
-  }, [reportId, config, startDate, endDate, loc]);
+  }, [reportId, config, startDate, endDate, loc, orderMode, billType, router]);
 
   // reset view state on report change
   useEffect(() => {
@@ -196,9 +218,12 @@ export default function DynamicReportPage() {
     [filteredRows, config]
   );
 
-  // sales-summary data (object shape) + search filter
-  const summary =
-    data && !Array.isArray(data) ? (data as any) : null;
+  // object-shape data (locationGroups) — sales-summary / sales-details render වලට
+  const objectData = data && !Array.isArray(data) ? (data as any) : null;
+  // sales-summary search filter — sales-summary render එකට විතරයි!
+  // (sales-details / transaction-summary dateGroups වල rows නෑ →
+  //  filterSalesSummary දැම්මම search කරද්දි crash වුණා)
+  const summary = config?.render === "sales-summary" ? objectData : null;
   const filteredSummary = useMemo(
     () => (summary ? filterSalesSummary(summary, search) : null),
     [summary, search]
@@ -238,11 +263,11 @@ export default function DynamicReportPage() {
 
   // ── Sales Summary (custom render — SAME toolbar/loading/error/chart) ──
   if (config.render === "sales-summary") {
-    // chart series — per-date dayTotal (generic reports ekema)
+    // chart series — location-wise totals (location-grouped render ekata)
     const sChartData = filteredSummary
-      ? filteredSummary.dateGroups.map((g) => ({
-          label: g.date,
-          value: g.dayTotal,
+      ? filteredSummary.locationGroups.map((l) => ({
+          label: l.locName,
+          value: l.locTotal,
         }))
       : [];
 
@@ -253,8 +278,7 @@ export default function DynamicReportPage() {
         printTime={printTime}
         from={fmtDMonY(startDate)}
         to={fmtDMonY(endDate)}
-        location={filteredSummary.location || ""}
-        dateGroups={filteredSummary.dateGroups}
+        locationGroups={filteredSummary.locationGroups}
         grandTotal={filteredSummary.grandTotal}
       />
     ) : undefined;
@@ -297,8 +321,8 @@ export default function DynamicReportPage() {
 
   // ── Sales Details (custom render — bill-wise items + totals box) ──
   if (config.render === "sales-details") {
-    const details = summary
-      ? (summary as unknown as SalesDetailsData)
+    const details = objectData
+      ? (objectData as unknown as SalesDetailsData)
       : null;
     const filteredDetails = details
       ? filterSalesDetails(details, search)

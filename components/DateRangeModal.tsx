@@ -6,12 +6,26 @@
 import { useEffect, useState } from "react";
 import { getLocationsAction } from "@/app/actions/reports";
 
+/** POS 1.1.1 / 1.1.2 — අමතර filter dropdown spec එක (client-safe, type-only) */
+export interface DateRangeFilterSpec {
+  param: string; // URL param (om / bt)
+  label: string;
+  options: { value: string; label: string }[];
+}
+
 export interface DateRangeModalProps {
   open: boolean;
   title: string;
   linked: boolean; // false nam "coming soon" message eka witharak
   onClose: () => void;
-  onApply: (from: string, to: string, loc: string) => void;
+  /** අමතර filter එකක් (Order Mode / Bill Type) — නැත්නම් undefined */
+  filter?: DateRangeFilterSpec;
+  onApply: (
+    from: string,
+    to: string,
+    loc: string,
+    extra?: { param: string; value: string }
+  ) => void;
 }
 
 // local date (toISOString UTC nisa 31/Dec day-shift wenna)
@@ -24,6 +38,7 @@ export default function DateRangeModal({
   title,
   linked,
   onClose,
+  filter,
   onApply,
 }: DateRangeModalProps) {
   const now = new Date();
@@ -31,6 +46,16 @@ export default function DateRangeModal({
   const [to, setTo] = useState(iso(now));
   const [err, setErr] = useState<string | null>(null);
   const [loc, setLoc] = useState(""); // "" = All Locations
+  // Order Mode / Bill Type selection — param එක track කරනවා, ඒ නිසා
+  // වෙනත් report එකකට යනකොට පරණ value එක reset වෙනවා (effect එකක් නැතුව)
+  const [extraSel, setExtraSel] = useState<{ param: string; value: string }>({
+    param: "",
+    value: "",
+  });
+  const extra =
+    filter && extraSel.param === filter.param
+      ? extraSel.value
+      : (filter?.options[0]?.value ?? "");
   const [locations, setLocations] = useState<
     { code: string; name: string }[]
   >([]);
@@ -97,7 +122,7 @@ export default function DateRangeModal({
       return;
     }
     setErr(null);
-    onApply(from, to, loc);
+    onApply(from, to, loc, filter ? { param: filter.param, value: extra } : undefined);
   };
 
   return (
@@ -283,6 +308,47 @@ export default function DateRangeModal({
                 ))}
               </select>
             </div>
+
+            {/* Extra filter (Order Mode / Bill Type) — POS 1.1.1 / 1.1.2 */}
+            {filter && (
+              <div style={{ marginBottom: 12 }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#64748b",
+                    marginBottom: 5,
+                  }}
+                >
+                  {filter.label}
+                </label>
+                <select
+                  value={extra}
+                  onChange={(e) =>
+                    filter && setExtraSel({ param: filter.param, value: e.target.value })
+                  }
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 8,
+                    padding: "9px 10px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#0f172a",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  {filter.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Date inputs */}
             <div style={{ display: "flex", gap: 10 }}>

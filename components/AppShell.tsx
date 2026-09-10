@@ -7,8 +7,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import DateRangeModal from "./DateRangeModal";
+import DateRangeModal, { type DateRangeFilterSpec } from "./DateRangeModal";
 import { IconFileText } from "./reports/ReportIcons";
+import { REPORTS_CONFIG } from "@/config/reports.config";
 
 /* ── Icons ── */
 function IGrid() {
@@ -82,15 +83,31 @@ const NAV: NavItem[] = [
         key: "cat-sales",
         label: "Sales Reports",
         children: [
-          { key: "r-ss-om", label: "Sales Summery – Order Mode Wise" },
-          { key: "r-ss-bt", label: "Sales Summery – Bill Type Wise" },
+          {
+            key: "r-ss-om",
+            label: "Sales Summery – Order Mode Wise",
+            reportId: "sales-summary-order-mode",
+          },
+          {
+            key: "r-ss-bt",
+            label: "Sales Summery – Bill Type Wise",
+            reportId: "sales-summary-bill-type",
+          },
           {
             key: "r-ss-all",
             label: "Sales Summery – ALL",
             reportId: "sales-summary",
           },
-          { key: "r-sd-bt", label: "Sales Detail – Bill Type Wise" },
-          { key: "r-sd-om", label: "Sales Detail – Order Mode Wise" },
+          {
+            key: "r-sd-bt",
+            label: "Sales Detail – Bill Type Wise",
+            reportId: "sales-details-bill-type",
+          },
+          {
+            key: "r-sd-om",
+            label: "Sales Detail – Order Mode Wise",
+            reportId: "sales-details-order-mode",
+          },
           {
             key: "r-sd-all",
             label: "Sales Detail – All",
@@ -415,6 +432,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [modal, setModal] = useState<{
     title: string;
     reportId?: string;
+    filter?: DateRangeFilterSpec;
   } | null>(null);
 
   function toggle(key: string) {
@@ -426,7 +444,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
       setModal({ title: label }); // coming-soon mode
       return;
     }
-    setModal({ title: label, reportId });
+    setModal({
+      title: label,
+      reportId,
+      filter: REPORTS_CONFIG[reportId]?.filter,
+    });
   }
 
   /* ─────────── DESKTOP SIDEBAR ─────────── */
@@ -438,10 +460,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
       style={{
         width: W,
         minWidth: W,
+        // ✅ sticky — page එක scroll වුණත් sidebar එක තැනම ඉන්නවා,
+        //    ඇදිලා යන්නේ නෑ / පහළට විහිදෙන්නේ නෑ (කලින් තිබුණු 100vh look එකම)
+        position: "sticky",
+        top: 0,
+        alignSelf: "flex-start",
         height: "100vh",
         background: "linear-gradient(180deg,#1c2f37 0%,#111e25 100%)",
         flexShrink: 0,
-        position: "relative",
         overflow: "visible",
         zIndex: 20,
         transition:
@@ -476,6 +502,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
         className="sh-nav-scroll"
         style={{
           flex: 1,
+          // sidebar එක sticky 100vh නිසා, items වැඩි වුණොත් විතරක්
+          // තුනී scrollbar එකක් එනවා — නැත්නම් scroll එකක් නෑ
           overflowY: "auto",
           overflowX: "hidden",
           padding: open ? "10px 8px" : "10px 0",
@@ -740,14 +768,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
         open={modal != null}
         title={modal?.title ?? ""}
         linked={modal?.reportId != null}
+        filter={modal?.filter}
         onClose={() => setModal(null)}
-        onApply={(from, to, loc) => {
+        onApply={(from, to, loc, extra) => {
           const id = modal?.reportId;
           setModal(null);
           if (id)
             router.push(
               `/reports/${id}?from=${from}&to=${to}${
                 loc ? `&loc=${encodeURIComponent(loc)}` : ""
+              }${
+                extra && extra.value
+                  ? `&${extra.param}=${encodeURIComponent(extra.value)}`
+                  : ""
               }`
             );
         }}

@@ -7,14 +7,115 @@
 // ============================================================
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
+import { requireSession, actionError } from "@/lib/actionAuth";
 
 export interface ReportFilter {
   startDate: string;
   endDate: string;
   outletId?: number | string;
+  /** Sales Summery – Order Mode Wise (DI/TA/DL/PU) */
+  orderMode?: string;
+  /** Sales Summery – Bill Type Wise (SD/CM/CO) */
+  billType?: string;
 }
 
 const SUMMARY_VIEW = process.env.SALES_SUMMARY_VIEW || "VW_SalesSummery";
+
+/**
+ * POS eke "Sales Detail – All" report eka exclude karana bill types.
+ * POS query eka:
+ *   ... Where Txndate Between <from> And <to> And LocCode = <loc>
+ *       AND BILLTYPE <> 'CM' And DoNotShowInSales <> '1'
+ *
+ * CM = Credit Memo — meka filter nokaloth Sales Details totals POS ekata
+ * wada wadinawa. (POS eka NULL BillType rows danna ba — `<> 'CM'` eken
+ * NULL → UNKNOWN wela row eka ath wenne. Methana ISNULL() ekata wrap karala
+ * NULL rows (CM nemeyi nam) retain karanne — sales data ath wenna epa nisa.
+ * POS ekata 100% samana semantics one nam ISNULL() eka ain karanna.)
+ */
+const EXCLUDED_BILL_TYPES = ["CM"];
+
+/**
+ * Column එකක් view එකේ තියෙනවද — CASE-INSENSITIVE.
+ * (POS eka `billtype` wage lowercase use karanawa, sys.columns eke
+ *  `BillType` wage thiyenna puluwan — nisa case eka ignore karanawa.)
+ */
+function hasColumn(cols: Set<string>, name: string): boolean {
+  const n = name.toLowerCase();
+  for (const c of cols) if (c.toLowerCase() === n) return true;
+  return false;
+}
+
+/**
+ * POS report query wala shared WHERE filters:
+ *   AND billtype <> 'CM'  AND DoNotShowInSales <> '1'
+ *
+ * • `billType` දුන්නොත් (Sales Summery – Bill Type Wise) CM exclusion එක
+ *   OFF වෙලා `BillType = @btSel` වෙනවා — මොකද ඒ report එකෙන් 'CM'
+ *   (Complimentary) වෙලාවකට select කරන්නත් ඕන නිසා.
+ * • `orderMode` දුන්නොත් (Sales Summery – Order Mode Wise)
+ *   `OrderMode = @om` filter එක එකතු වෙනවා.
+ *
+ * Column එකක් view එකේ නැත්නම් filter එක skip + warn.
+ *
+ * @returns { sql, bind } — bind(req) එකෙන් params register වෙනවා
+ */
+function buildPosFilters(opts: {
+  cols: Set<string>;
+  alias: string; // "" (no alias) | "v." | "h."
+  billType?: string; // explicit Bill Type selection (overrides CM exclusion)
+  orderMode?: string; // explicit Order Mode selection
+}): { sql: string; bind: (req: sql.Request) => void } {
+  const a = opts.alias;
+  const parts: string[] = [];
+  const binds: ((req: sql.Request) => void)[] = [];
+
+  // ── Bill type ──
+  if (hasColumn(opts.cols, "BillType")) {
+    if (opts.billType != null && opts.billType !== "") {
+      parts.push(`AND LTRIM(RTRIM(${a}BillType)) = @btSel`);
+      const v = String(opts.billType);
+      binds.push((r) => r.input("btSel", sql.VarChar(10), v));
+    } else {
+      parts.push(
+        `AND ISNULL(LTRIM(RTRIM(${a}BillType)), '') NOT IN (${EXCLUDED_BILL_TYPES.map((_, i) => `@bt${i}`).join(", ")})`
+      );
+      binds.push((r) =>
+        EXCLUDED_BILL_TYPES.forEach((t, i) =>
+          r.input(`bt${i}`, sql.VarChar(10), t)
+        )
+      );
+    }
+  } else {
+    console.warn(
+      `[reports] '${a || ""}BillType' column එක view එකේ නෑ — bill-type filter එක skip වෙනවා`
+    );
+  }
+
+  // ── Order mode ──
+  if (opts.orderMode != null && opts.orderMode !== "") {
+    if (hasColumn(opts.cols, "OrderMode")) {
+      parts.push(`AND LTRIM(RTRIM(${a}OrderMode)) = @om`);
+      const v = String(opts.orderMode);
+      binds.push((r) => r.input("om", sql.VarChar(10), v));
+    } else {
+      console.warn(
+        `[reports] '${a || ""}OrderMode' column එක view එකේ නෑ — order-mode filter එක skip වෙනවා`
+      );
+    }
+  }
+
+  // ── Cancelled bills ──
+  if (hasColumn(opts.cols, "DoNotShowInSales")) {
+    parts.push(`AND ISNULL(${a}DoNotShowInSales, 0) = 0`);
+  } else {
+    console.warn(
+      `[reports] '${a || ""}DoNotShowInSales' column එක view එකේ නෑ — cancelled-bill filter එක skip වෙනවා`
+    );
+  }
+
+  return { sql: parts.join("\n        "), bind: (r) => binds.forEach((b) => b(r)) };
+}
 
 /** View eke thiyena columns detect karanawa (LocalPax wage columns
  *  thiyenawada balanna — view versions wala adu wedi thiyenna puluwan) */
@@ -31,6 +132,9 @@ async function getViewColumns(
 
 export async function getTransactionSummaryAction(filters: ReportFilter) {
   try {
+    // 🔐 Auth guard — session නැත්නම් DB එකට යන්නේම නෑ
+    await requireSession();
+
     if (!isDbConfigured()) {
       return {
         success: false,
@@ -67,6 +171,10 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     ].filter(Boolean);
     const taxExpr = taxParts.length ? `SUM(${taxParts.join(" + ")})` : "0";
 
+    // POS "Sales Summery – ALL" query eke filters:
+    //   AND billtype <> 'CM'  AND DoNotShowInSales <> '1'
+    const pf = buildPosFilters({ cols, alias: "" });
+
     const query = `
       SELECT
         CONVERT(varchar(10), Txndate, 23)     AS txnDate,
@@ -84,6 +192,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
       FROM dbo.${SUMMARY_VIEW} WITH (NOLOCK)
       WHERE Txndate >= @startDate
         AND Txndate < DATEADD(day, 1, @endDate)
+        ${pf.sql}
         ${outletId ? "AND LTRIM(RTRIM(LocCode)) = @outletId" : ""}
       GROUP BY CONVERT(varchar(10), Txndate, 23)
       ORDER BY txnDate ASC
@@ -93,6 +202,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(endDate));
     if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    pf.bind(req);
 
     const result = await req.query(query);
 
@@ -132,7 +242,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     return { success: true, data: rows };
   } catch (error) {
     console.error("Report Action Error:", error);
-    return { success: false, error: "Database Data Fetching Failed." };
+    return actionError(error);
   }
 }
 
@@ -142,6 +252,9 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
 // ============================================================
 export async function getSalesSummaryAction(filters: ReportFilter) {
   try {
+    // 🔐 Auth guard — session නැත්නම් DB එකට යන්නේම නෑ
+    await requireSession();
+
     if (!isDbConfigured()) {
       return {
         success: false,
@@ -166,10 +279,22 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
       };
     }
 
+    // POS "Sales Summery – ALL / Order Mode Wise / Bill Type Wise" filters:
+    //   AND billtype <> 'CM' (හෝ billType select කරලා තියෙනවා නම් ඒක)
+    //   AND OrderMode = @om (order-mode wise වෙලාවට)
+    //   AND DoNotShowInSales <> '1'
+    const pf = buildPosFilters({
+      cols,
+      alias: "v.",
+      orderMode: filters.orderMode,
+      billType: filters.billType,
+    });
+
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
     if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    pf.bind(req);
 
     const txnTimeExpr = cols.has("TxnTime") ? "v.TxnTime" : "NULL";
     const billTypeExpr = cols.has("BillType") ? "LTRIM(RTRIM(v.BillType))" : "''";
@@ -194,8 +319,9 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
         ON LTRIM(RTRIM(cu.UserId)) = LTRIM(RTRIM(v.CasherID))
       WHERE v.Txndate >= @startDate
         AND v.Txndate < DATEADD(day, 1, @endDate)
+        ${pf.sql}
         ${outletId ? "AND LTRIM(RTRIM(v.LocCode)) = @outletId" : ""}
-      ORDER BY v.Txndate, v.BillNo
+      ORDER BY v.LocCode, v.Txndate, v.BillNo
     `);
 
     const BILL_TYPE_MAP: Record<string, string> = { SD: "Standered" };
@@ -220,22 +346,41 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
       d.getHours() + d.getMinutes() + d.getSeconds() === 0;
     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-    let location = "";
-    const groupMap = new Map<string, { rows: any[]; dayTotal: number }>();
+    // ── LOCATION-WISE grouping (POS PDF eka wage):
+    //    location එකක් පාසා section එකක්, ඇතුළේ date-wise groups ──
+    const locMap = new Map<
+      string,
+      {
+        locCode: string;
+        locName: string;
+        dateMap: Map<string, { rows: any[]; dayTotal: number }>;
+        locTotal: number;
+      }
+    >();
 
     for (const row of result.recordset as any[]) {
-      if (!location) {
-        // code eka pennanne neha — name eka witharai (fallback: code eka)
-        location =
-          String(row.LocDes ?? "").trim() ||
-          String(row.LocCode ?? "").trim();
+      const locCode = String(row.LocCode ?? "").trim() || "-";
+      const locName =
+        String(row.LocDes ?? "").trim() ||
+        String(row.LocCode ?? "").trim() ||
+        locCode;
+
+      if (!locMap.has(locCode)) {
+        locMap.set(locCode, {
+          locCode,
+          locName,
+          dateMap: new Map(),
+          locTotal: 0,
+        });
       }
+      const loc = locMap.get(locCode)!;
 
       const txnd: Date =
         row.Txndate instanceof Date ? row.Txndate : new Date(row.Txndate);
       const key = dayStr(txnd);
-      if (!groupMap.has(key)) groupMap.set(key, { rows: [], dayTotal: 0 });
-      const g = groupMap.get(key)!;
+      if (!loc.dateMap.has(key))
+        loc.dateMap.set(key, { rows: [], dayTotal: 0 });
+      const g = loc.dateMap.get(key)!;
 
       const t1 = row.TxnTimeVal instanceof Date ? row.TxnTimeVal : null;
       let timeStr = "";
@@ -255,18 +400,28 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
         casher: String(row.CasherName ?? "").trim(),
       });
       g.dayTotal = r2(g.dayTotal + (row.NetTotal ?? 0));
+      loc.locTotal = r2(loc.locTotal + (row.NetTotal ?? 0));
     }
 
-    const dateGroups = Array.from(groupMap.entries()).map(([date, g]) => ({
-      date,
-      ...g,
-    }));
-    const grandTotal = r2(dateGroups.reduce((s, g) => s + g.dayTotal, 0));
+    const locationGroups = Array.from(locMap.values())
+      .sort((a, b) => a.locCode.localeCompare(b.locCode))
+      .map((loc) => ({
+        locCode: loc.locCode,
+        locName: loc.locName,
+        locTotal: loc.locTotal,
+        dateGroups: Array.from(loc.dateMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, g]) => ({ date, ...g })),
+      }));
 
-    return { success: true, data: { location, dateGroups, grandTotal } };
+    const grandTotal = r2(
+      locationGroups.reduce((s, l) => s + l.locTotal, 0)
+    );
+
+    return { success: true, data: { locationGroups, grandTotal } };
   } catch (error) {
     console.error("Sales Summary Action Error:", error);
-    return { success: false, error: "Database Data Fetching Failed." };
+    return actionError(error);
   }
 }
 
@@ -281,6 +436,9 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
 // ============================================================
 export async function getSalesDetailsAction(filters: ReportFilter) {
   try {
+    // 🔐 Auth guard — session නැත්නම් DB එකට යන්නේම නෑ
+    await requireSession();
+
     if (!isDbConfigured()) {
       return {
         success: false,
@@ -290,11 +448,22 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
 
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
+
+    // Tbl_BillHeader eke me columns okkoma thiyenawa (meke view ekak nemei) —
+    // nisa fixed set ekak. POS "Sales Detail – All / Bill Type / Order Mode" filters.
+    const pf = buildPosFilters({
+      cols: new Set(["BillType", "DoNotShowInSales", "OrderMode"]),
+      alias: "h.",
+      billType: filters.billType, // Bill Type Wise වෙලාවට SD/CM/CO
+      orderMode: filters.orderMode, // Order Mode Wise වෙලාවට DI/TA/DL/PU
+    });
+
     const req = pool.request();
     req.input("startDate", sql.VarChar(10), startDate);
     req.input("endDate", sql.VarChar(10), endDate);
     if (outletId)
       req.input("outletId", sql.VarChar(20), String(outletId));
+    pf.bind(req);
 
     const result = await req.query(`
       SET NOCOUNT ON;
@@ -345,7 +514,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
         ON LTRIM(RTRIM(lm.LocCode)) = LTRIM(RTRIM(h.LocCode))
       WHERE h.Txndate >= @startDate
         AND h.Txndate < DATEADD(day, 1, @endDate)
-        AND ISNULL(h.DoNotShowInSales, 0) = 0
+        ${pf.sql}
         ${outletId ? "AND LTRIM(RTRIM(h.LocCode)) = @outletId" : ""}
       ORDER BY h.Txndate, h.BillNo, d.KOTBOTNO, d.SubItmId;
     `);
@@ -493,7 +662,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
     return { success: true, data: { locationGroups, grandNetTotal } };
   } catch (error) {
     console.error("Sales Details Action Error:", error);
-    return { success: false, error: "Database Data Fetching Failed." };
+    return actionError(error);
   }
 }
 
@@ -502,6 +671,9 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
 // ============================================================
 export async function getLocationsAction() {
   try {
+    // 🔐 Auth guard — session නැත්නම් DB එකට යන්නේම නෑ
+    await requireSession();
+
     if (!isDbConfigured()) {
       return {
         success: false,
@@ -519,6 +691,6 @@ export async function getLocationsAction() {
     return { success: true, data: res.recordset as { code: string; name: string }[] };
   } catch (error) {
     console.error("Locations Action Error:", error);
-    return { success: false, error: "Database Data Fetching Failed." };
+    return actionError(error);
   }
 }
