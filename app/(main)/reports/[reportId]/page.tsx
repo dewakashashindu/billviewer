@@ -15,7 +15,8 @@ import { UNAUTHORIZED_ERROR } from "@/lib/auth";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ReportToolbar from "@/components/ReportToolbar";
-import ReportChart from "@/components/ReportChart";
+import ReportDashboard from "@/components/ReportDashboard";
+import { computeAnalytics } from "@/components/reports/analytics";
 import ReportPdfDocument from "@/components/reports/ReportPdfDocument";
 import SalesSummaryReport, {
   filterSalesSummary,
@@ -197,26 +198,8 @@ export default function DynamicReportPage() {
     );
   }, [rows, search]);
 
-  // chart series — config eke chart block eka thiyenawa nam
-  // ekema labelKey/valueKey, nathnam default (date-wise totals)
-  const chartData = useMemo(
-    () =>
-      filteredRows.map((r) => {
-        if (config?.chart) {
-          return {
-            label: String(r[config.chart.labelKey] ?? ""),
-            value: Number(r[config.chart.valueKey] ?? 0),
-          };
-        }
-        return {
-          label: String(r.txnDate ?? r.date ?? ""),
-          value: Number(
-            r.salesVolume ?? r.totalSales ?? r.netTotal ?? r.total ?? 0
-          ),
-        };
-      }),
-    [filteredRows, config]
-  );
+  // ✅ Analytics — generic rows reports walata (browser athulema aggregate)
+  const analyticsRows = computeAnalytics({ rows: filteredRows });
 
   // object-shape data (locationGroups) — sales-summary / sales-details render වලට
   const objectData = data && !Array.isArray(data) ? (data as any) : null;
@@ -263,13 +246,8 @@ export default function DynamicReportPage() {
 
   // ── Sales Summary (custom render — SAME toolbar/loading/error/chart) ──
   if (config.render === "sales-summary") {
-    // chart series — location-wise totals (location-grouped render ekata)
-    const sChartData = filteredSummary
-      ? filteredSummary.locationGroups.map((l) => ({
-          label: l.locName,
-          value: l.locTotal,
-        }))
-      : [];
+    // ✅ alut analytics dashboard — fetch karapu data ekemn hadanawa
+    const analyticsSum = computeAnalytics({ summary: filteredSummary });
 
     const pdfDoc = filteredSummary ? (
       <SalesSummaryPdfDocument
@@ -296,7 +274,7 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, steward, mode..."
           pdfDocument={pdfDoc}
           pdfFileName={`sales-summary-${startDate}_to_${endDate}.pdf`}
-          chartSupported={sChartData.length > 0 || chartMode}
+          chartSupported={!!analyticsSum || chartMode}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
@@ -305,12 +283,8 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode ? (
-            <ReportChart
-              data={sChartData}
-              title={config.title}
-              valuePrefix="Rs. "
-            />
+          ) : chartMode && analyticsSum ? (
+            <ReportDashboard analytics={analyticsSum} title={config.title} />
           ) : filteredSummary ? (
             <SalesSummaryReport report={filteredSummary} />
           ) : null}
@@ -328,31 +302,8 @@ export default function DynamicReportPage() {
       ? filterSalesDetails(details, search)
       : null;
 
-    // chart — report ekata GALAPENA view: item-wise ranking
-    // (range eke okkoma bills wala items aggregate karala Top 12 hbars)
-    const itemTotals = new Map<string, number>();
-    if (filteredDetails) {
-      for (const loc of filteredDetails.locationGroups) {
-        for (const g of loc.dateGroups) {
-          for (const b of g.bills) {
-            for (const it of b.items) {
-              const key = it.name || "Unknown Item";
-              itemTotals.set(
-                key,
-                (itemTotals.get(key) ?? 0) + it.totItemPrice
-              );
-            }
-          }
-        }
-      }
-    }
-    const chartDataDetails = Array.from(itemTotals.entries())
-      .map(([label, value]) => ({
-        label,
-        value: Math.round(value * 100) / 100,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 12);
+    // ✅ alut analytics dashboard — bills+items data ekemn aggregate
+    const analyticsDet = computeAnalytics({ details: filteredDetails });
 
     const pdfDocDetails = filteredDetails ? (
       <SalesDetailsPdfDocument
@@ -378,7 +329,7 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, item, steward..."
           pdfDocument={pdfDocDetails}
           pdfFileName={`sales-details-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartDataDetails.length > 0 || chartMode}
+          chartSupported={!!analyticsDet || chartMode}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
@@ -387,13 +338,8 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode ? (
-            <ReportChart
-              data={chartDataDetails}
-              title={`${config.title} — Top Items`}
-              valuePrefix="Rs. "
-              type="hbars"
-            />
+          ) : chartMode && analyticsDet ? (
+            <ReportDashboard analytics={analyticsDet} title={config.title} />
           ) : filteredDetails ? (
             <SalesDetailsReport report={filteredDetails} />
           ) : null}
@@ -426,7 +372,7 @@ export default function DynamicReportPage() {
         searchPlaceholder="Search..."
         pdfDocument={pdfDoc}
         pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-        chartSupported={chartData.length > 0 || chartMode}
+        chartSupported={!!analyticsRows || chartMode}
         chartMode={chartMode}
         onChartToggle={() => setChartMode((c) => !c)}
       />
@@ -435,13 +381,8 @@ export default function DynamicReportPage() {
           <LoadingBlock />
         ) : error ? (
           <ErrorBlock message={error} />
-        ) : chartMode ? (
-          <ReportChart
-            data={chartData}
-            title={config.title}
-            valuePrefix="Rs. "
-            type={config.chart?.type ?? "bars"}
-          />
+        ) : chartMode && analyticsRows ? (
+          <ReportDashboard analytics={analyticsRows} title={config.title} />
         ) : (
           <DynamicReportTable
             columns={config.columns}
