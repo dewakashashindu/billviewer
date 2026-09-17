@@ -113,9 +113,9 @@ const NAV: NavItem[] = [
             label: "Sales Detail – All",
             reportId: "sales-details",
           },
-          { key: "r-sbc-s", label: "Sales By Category – Summery" },
-          { key: "r-sbc-d", label: "Sales By Category – Detail" },
-          { key: "r-hourly", label: "Hourly Sales" },
+          { key: "r-sbc-s", label: "Sales By Category – Summery", reportId: "sales-category-summary" },
+          { key: "r-sbc-d", label: "Sales By Category – Detail", reportId: "sales-category-detail" },
+          { key: "r-hourly", label: "Hourly Sales", reportId: "hourly-sales" },
         ],
       },
       {
@@ -123,10 +123,10 @@ const NAV: NavItem[] = [
         key: "cat-payment",
         label: "Payment Mode",
         children: [
-          { key: "r-pay-summary", label: "Payment Summery" },
-          { key: "r-pay-mode", label: "Pay Mode Wise" },
-          { key: "r-pay-grid", label: "Bill Pay Mode Wise Grid" },
-          { key: "r-pay-billtype", label: "Bill Type Wise" },
+          { key: "r-pay-summary", label: "Payment Summery", reportId: "payment-summary" },
+          { key: "r-pay-mode", label: "Pay Mode Wise", reportId: "payment-summary-wise" },
+          { key: "r-pay-grid", label: "Bill Pay Mode Wise Grid", reportId: "payment-bill-paymode-grid" },
+          { key: "r-pay-billtype", label: "Bill Type Wise", reportId: "payment-billtype" },
         ],
       },
       {
@@ -134,9 +134,9 @@ const NAV: NavItem[] = [
         key: "cat-cashier",
         label: "Cashier Collection",
         children: [
-          { key: "r-cc-cashier", label: "Cashier Wise Sales" },
-          { key: "r-cc-pbd", label: "Payment Break Down" },
-          { key: "r-cc-pbd-grid", label: "Payment Break Down – Grid" },
+          { key: "r-cc-cashier", label: "Cashier Wise Sales", reportId: "cashier-collection" },
+          { key: "r-cc-pbd", label: "Payment Break Down", reportId: "cashier-payment-breakdown" },
+          { key: "r-cc-pbd-grid", label: "Payment Break Down – Grid", reportId: "cashier-breakdown-grid" },
         ],
       },
       {
@@ -144,21 +144,21 @@ const NAV: NavItem[] = [
         key: "cat-menu-issue",
         label: "Menu Item Issue",
         children: [
-          { key: "r-mii-item", label: "Item Issue" },
-          { key: "r-mii-date", label: "Menu Item Issue By Date" },
+          { key: "r-mii-item", label: "Item Issue", reportId: "menu-item-issue" },
+          { key: "r-mii-date", label: "Menu Item Issue By Date", reportId: "menu-item-issue-date" },
         ],
       },
       {
         // 5.1 Item Movement
         key: "cat-item-move",
         label: "Item Movement",
-        children: [{ key: "r-im", label: "Item Movement" }],
+        children: [{ key: "r-im", label: "Item Movement", reportId: "item-movement" }],
       },
       {
         // 6.1 Table Management
         key: "cat-table",
         label: "Table Management",
-        children: [{ key: "r-tm-steward", label: "Steward Wise" }],
+        children: [{ key: "r-tm-steward", label: "Steward Wise", reportId: "steward-wise" }],
       },
       {
         // 7.1 Transaction reports
@@ -177,64 +177,65 @@ const NAV: NavItem[] = [
         key: "cat-tax",
         label: "Taxes & Service Charge",
         children: [
-          { key: "r-tsc-sc", label: "Service Charge" },
-          { key: "r-tsc-vat", label: "Tax & VAT Report" },
+          { key: "r-tsc-sc", label: "Service Charge", reportId: "service-charge" },
+          { key: "r-tsc-vat", label: "Tax & VAT Report", reportId: "tax-vat" },
         ],
       },
       {
         // 9 Complimentary Cost
         key: "cat-comp",
         label: "Complimentary Cost",
-        children: [{ key: "r-comp", label: "Complimentary Cost" }],
+        children: [{ key: "r-comp", label: "Complimentary Cost", reportId: "complimentary-cost" }],
       },
       {
         // 10 Void
         key: "cat-void",
         label: "Void Reports",
-        children: [{ key: "r-void", label: "Void Summery and Detail" }],
+        children: [{ key: "r-void", label: "Void Summery and Detail", reportId: "void-report" }],
       },
       {
         // 11 Pax Count
         key: "cat-pax",
         label: "Pax Count",
-        children: [{ key: "r-pax", label: "Pax Count" }],
+        children: [{ key: "r-pax", label: "Pax Count", reportId: "pax-count" }],
       },
       {
         // 12 Cash In/Out
         key: "cat-cash-io",
         label: "Cash In/Out",
-        children: [{ key: "r-cio", label: "Cash In/Out Report" }],
+        children: [{ key: "r-cio", label: "Cash In/Out Report", reportId: "cash-inout" }],
       },
       {
         // 14 Open tables
         key: "cat-open",
         label: "Open Tables",
-        children: [{ key: "r-open", label: "Open (On-Going) Tables" }],
+        children: [{ key: "r-open", label: "Open (On-Going) Tables", reportId: "open-tables" }],
       },
       {
         // 15.x Tracing
         key: "cat-trace",
         label: "Tracing",
         children: [
-          { key: "r-trace-slip", label: "Slip Trace" },
-          { key: "r-trace-inv", label: "Invoice Trace" },
+          { key: "r-trace-slip", label: "Slip Trace", reportId: "slip-trace" },
+          { key: "r-trace-inv", label: "Invoice Trace", reportId: "invoice-trace" },
         ],
       },
       {
         // 16 KOT/BOT
         key: "cat-kotbot",
         label: "KOT/BOT Tracing",
-        children: [{ key: "r-kotbot", label: "KOT/BOT Tracing" }],
+        children: [{ key: "r-kotbot", label: "KOT/BOT Tracing", reportId: "kot-bot" }],
       },
       {
         // 21.x Credit Settlement
         key: "cat-credit",
         label: "Credit Settlement",
         children: [
-          { key: "r-cred-ccs", label: "Current Credit Summery" },
-          { key: "r-cred-history", label: "Credit History" },
-          { key: "r-cred-payhistory", label: "Payment History" },
-          { key: "r-cred-account", label: "Account Detail" },
+          { key: "r-cred-ccs", label: "Current Credit Summery", reportId: "credit-summary" },
+          { key: "r-cred-history", label: "Credit History", reportId: "credit-history" },
+          { key: "r-cred-pay", label: "Payment History", reportId: "credit-pay-history" },
+          { key: "r-cred-payhistory", label: "Payment History", reportId: "credit-pay-history" },
+          { key: "r-cred-account", label: "Account Detail", reportId: "credit-account-detail" },
         ],
       },
     ],
@@ -460,8 +461,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
       style={{
         width: W,
         minWidth: W,
-        // ✅ sticky — page එක scroll වුණත් sidebar එක තැනම ඉන්නවා,
-        //    ඇදිලා යන්නේ නෑ / පහළට විහිදෙන්නේ නෑ (කලින් තිබුණු 100vh look එකම)
         position: "sticky",
         top: 0,
         alignSelf: "flex-start",
@@ -502,8 +501,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
         className="sh-nav-scroll"
         style={{
           flex: 1,
-          // sidebar එක sticky 100vh නිසා, items වැඩි වුණොත් විතරක්
-          // තුනී scrollbar එකක් එනවා — නැත්නම් scroll එකක් නෑ
           overflowY: "auto",
           overflowX: "hidden",
           padding: open ? "10px 8px" : "10px 0",

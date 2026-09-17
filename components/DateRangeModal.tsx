@@ -6,7 +6,6 @@
 import { useEffect, useState } from "react";
 import { getLocationsAction } from "@/app/actions/reports";
 
-/** POS 1.1.1 / 1.1.2 — අමතර filter dropdown spec එක (client-safe, type-only) */
 export interface DateRangeFilterSpec {
   param: string; // URL param (om / bt)
   label: string;
@@ -18,7 +17,6 @@ export interface DateRangeModalProps {
   title: string;
   linked: boolean; // false nam "coming soon" message eka witharak
   onClose: () => void;
-  /** අමතර filter එකක් (Order Mode / Bill Type) — නැත්නම් undefined */
   filter?: DateRangeFilterSpec;
   onApply: (
     from: string,
@@ -46,8 +44,6 @@ export default function DateRangeModal({
   const [to, setTo] = useState(iso(now));
   const [err, setErr] = useState<string | null>(null);
   const [loc, setLoc] = useState(""); // "" = All Locations
-  // Order Mode / Bill Type selection — param එක track කරනවා, ඒ නිසා
-  // වෙනත් report එකකට යනකොට පරණ value එක reset වෙනවා (effect එකක් නැතුව)
   const [extraSel, setExtraSel] = useState<{ param: string; value: string }>({
     param: "",
     value: "",

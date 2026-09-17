@@ -27,12 +27,13 @@ export interface Analytics {
   totalSales: number;
   billCount: number;
   avgBill: number;
-  top: { label: string; value: number; kind: "location" | "item" } | null;
+  top: { label: string; value: number; kind: "location" | "item" | "category" } | null;
   byDate: AnaPoint[];
   byLocation: AnaPoint[];
   byMode: AnaPoint[];
   byType: AnaPoint[];
   topItems: AnaPoint[];
+  donutTitle: string;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -77,9 +78,39 @@ export function computeAnalytics(input: {
   summary?: SalesSummaryData | null;
   details?: SalesDetailsData | null;
   rows?: Array<Record<string, unknown>> | null;
+  cats?: Array<{
+    level1: string;
+    item: string;
+    value: number;
+    date?: string;
+    mode?: string;
+    billNo?: string;
+  }> | null;
+  pays?: Array<{
+    date?: string;
+    billNo?: string;
+    desc: string;
+    value: number;
+    loc?: string;
+  }> | null;
+  taxes?: Array<{
+    date?: string;
+    billNo?: string;
+    loc?: string;
+    vat: number;
+    tdl: number;
+    otherVat: number;
+    packing: number;
+    vatTdl: number;
+  }> | null;
 }): Analytics | null {
   let total = 0;
   let bills = 0;
+  let catMode = false;
+  let payMode = false;
+  let taxMode = false;
+  const billSet = new Set<string>();
+  const dateBillSets = new Map<string, Set<string>>();
   const byDate = new Map<string, AnaPoint>();
   const byLocation = new Map<string, AnaPoint>();
   const byMode = new Map<string, AnaPoint>();
@@ -143,6 +174,87 @@ export function computeAnalytics(input: {
     }
   }
 
+  // ── 4) Category reports (1.3.1 / 1.3.2) — category-wise aggregates ──
+  if (input.cats) {
+    catMode = true;
+    for (const r of input.cats) {
+      const v = num(r.value);
+      total += v;
+      if (r.billNo) {
+        billSet.add(r.billNo);
+        if (r.date) {
+          const s = dateBillSets.get(r.date) ?? new Set<string>();
+          s.add(r.billNo);
+          dateBillSets.set(r.date, s);
+        }
+      }
+      add(items, str(r.level1) || "UNKNOWN", v); // ranking = top categories
+      if (r.date) add(byDate, r.date, v, 0);
+      if (r.mode) add(byMode, r.mode, v);
+    }
+    bills = billSet.size;
+    // byDate bills = unique bill count per date
+    for (const [d, s] of dateBillSets) {
+      const p = byDate.get(d);
+      if (p) p.bills = s.size;
+    }
+  }
+
+  // ── 5) Payment reports (2.1 / 2.2) — payment-mode aggregates ──
+  if (input.pays) {
+    payMode = true;
+    const dateBills = new Map<string, Set<string>>();
+    for (const r of input.pays) {
+      const v = num(r.value);
+      total += v;
+      if (r.billNo) {
+        billSet.add(r.billNo);
+        if (r.date) {
+          const st = dateBills.get(r.date) ?? new Set<string>();
+          st.add(r.billNo);
+          dateBills.set(r.date, st);
+        }
+      }
+      add(byMode, str(r.desc) || "Other", v);
+      if (r.date) add(byDate, r.date, v, 0);
+      if (r.loc) add(byLocation, r.loc, v);
+    }
+    bills = billSet.size;
+    for (const [d, st] of dateBills) {
+      const pt = byDate.get(d);
+      if (pt) pt.bills = st.size;
+    }
+  }
+
+  // ── 6) Tax & VAT report (8.2) — tax component aggregates ──
+  if (input.taxes) {
+    taxMode = true;
+    const dateBillsT = new Map<string, Set<string>>();
+    for (const r of input.taxes) {
+      const v = num(r.vatTdl);
+      total += v;
+      if (r.billNo) {
+        billSet.add(r.billNo);
+        if (r.date) {
+          const st = dateBillsT.get(r.date) ?? new Set<string>();
+          st.add(r.billNo);
+          dateBillsT.set(r.date, st);
+        }
+      }
+      if (num(r.vat) > 0) add(byMode, "VAT", num(r.vat));
+      if (num(r.tdl) > 0) add(byMode, "TDL", num(r.tdl));
+      if (num(r.otherVat) > 0) add(byMode, "Other VAT", num(r.otherVat));
+      if (num(r.packing) > 0) add(byMode, "Packing", num(r.packing));
+      if (r.date) add(byDate, r.date, v, 0);
+      if (r.loc) add(byLocation, r.loc, v);
+    }
+    bills = billSet.size;
+    for (const [d, st] of dateBillsT) {
+      const pt = byDate.get(d);
+      if (pt) pt.bills = st.size;
+    }
+  }
+
   if (bills === 0 && total === 0 && byDate.size === 0) return null;
 
   const topItems = Array.from(items.values()).sort(desc).slice(0, 8);
@@ -154,7 +266,7 @@ export function computeAnalytics(input: {
         ? {
             label: topItems[0].label,
             value: r2(topItems[0].value),
-            kind: "item",
+            kind: catMode ? "category" : "item",
           }
         : null;
 
@@ -177,5 +289,10 @@ export function computeAnalytics(input: {
       value: r2(p.value),
     })),
     topItems: topItems.map((p) => ({ ...p, value: r2(p.value) })),
+    donutTitle: payMode
+      ? "Payment Mode Split"
+      : taxMode
+        ? "Tax Component Split"
+        : "Order Mode Split",
   };
 }

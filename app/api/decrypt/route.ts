@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-// Fixed IV - Production එකේදී random IV use කරන්න
 const IV = Buffer.from([
   0x00, 0x01, 0x02, 0x03,
   0x04, 0x05, 0x06, 0x07,

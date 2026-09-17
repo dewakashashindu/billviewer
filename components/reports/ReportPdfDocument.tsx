@@ -8,24 +8,26 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { ColumnConfig } from "@/config/reports.config";
 
 const styles = StyleSheet.create({
-  page: { padding: 24, orientation: "landscape", fontSize: 8, color: "#0f172a" },
-  title: { fontSize: 14, fontWeight: "bold", textAlign: "center", marginBottom: 4 },
-  range: { fontSize: 9, fontWeight: "bold", textAlign: "center", marginBottom: 10 },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  title: { fontSize: 14, fontFamily: "Helvetica-Bold", textAlign: "center", marginBottom: 4 },
+  range: { fontSize: 9, fontFamily: "Helvetica-Bold", textAlign: "center", marginBottom: 10 },
   table: {
     width: "100%",
     borderStyle: "solid",
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#999999",
   },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#0f172a",
-    color: "#ffffff",
+    backgroundColor: "#efefef",
+    color: "#1a1a1a",
     padding: 5,
-    fontWeight: "bold",
+    fontFamily: "Helvetica-Bold",
     fontSize: 7.5,
     borderRightWidth: 1,
-    borderRightColor: "#334155",
+    borderRightColor: "#cccccc",
+    borderBottomWidth: 1,
+    borderBottomColor: "#999999",
   },
   td: {
     padding: 4,
@@ -36,7 +38,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#e2e8f0",
   },
   zebra: { backgroundColor: "#f8fafc" },
-  bold: { fontWeight: "bold", backgroundColor: "#f1f5f9" },
+  bold: { fontFamily: "Helvetica-Bold", backgroundColor: "#efefef" },
   right: { textAlign: "right" },
 });
 

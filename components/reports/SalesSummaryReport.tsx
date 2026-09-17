@@ -4,7 +4,6 @@
 // LOCATION: components/reports/SalesSummaryReport.tsx
 // FULL REPLACE — presentational Sales Summary (data page eken enawa):
 //   ✅ LOCATION-WISE grouping — POS PDF eka wage:
-//      location එකක් පාසා section එකක් (locName + locTotal), ඇතුළේ
 //      date-wise cards (DynamicReportTable style ekama) + Daily Collection.
 //   + grand total banner (okkoma locations wala total eka)
 // Exports:
@@ -30,7 +29,6 @@ export interface SalesSummaryGroup {
   dayTotal: number;
 }
 
-/** Location එකක් පාසා section එකක් (POS PDF eke "01  MILLA MIRISSA" wage) */
 export interface SalesSummaryLocation {
   locCode: string;
   locName: string;
@@ -61,7 +59,6 @@ export function filterSalesSummary(
     `${r.billNo} ${r.steward} ${r.casher} ${r.billType} ${r.orderMode} ${r.txnTime} ${r.netTotal}`
       .toLowerCase()
       .includes(q);
-  // ✅ defensive — වැරදිලාවත් rows නැති group එකක් ආවොත් crash නොවී skip
   const locationGroups = (report.locationGroups ?? [])
     .map((loc) => {
       const dateGroups = (loc.dateGroups ?? [])
@@ -132,7 +129,6 @@ const tdBase: CSSProperties = {
   textOverflow: "ellipsis",
 };
 
-/* ── එක date group card එකක් (කලින් තිබුණු style එකම) ── */
 function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
   return (
     <div

@@ -16,7 +16,6 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import type { Analytics, AnaPoint } from "./reports/analytics";
 import {
-  IconTrendingUp,
   IconReceipt,
   IconCoins,
   IconTrophy,
@@ -24,7 +23,6 @@ import {
 
 // ── flat blue theme ──
 const NAVY = "#0d2b57";
-const INK = "#0f172a";
 const MUTED = "#64748b";
 const FAINT = "#94a3b8";
 const LINE = "#1d4ed8";
@@ -150,29 +148,35 @@ function Hero({ a }: { a: Analytics }) {
           {fmtRs(a.totalSales)}
         </p>
         <p style={{ margin: "6px 0 0", fontSize: 11, color: "rgba(255,255,255,.55)", fontFamily: "Inter, sans-serif" }}>
-          net of discounts & taxes — auto-generated from report data
+          net of discounts & taxes
         </p>
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <div style={chip}>
-          <span style={{ color: "#93c5fd" }}><IconReceipt size={18} /></span>
-          <div>
-            <p style={chipLbl}>Bills</p>
-            <p style={chipVal}>{a.billCount.toLocaleString("en-US")}</p>
+        {a.billCount > 0 && (
+          <div style={chip}>
+            <span style={{ color: "#93c5fd" }}><IconReceipt size={18} /></span>
+            <div>
+              <p style={chipLbl}>Bills</p>
+              <p style={chipVal}>{a.billCount.toLocaleString("en-US")}</p>
+            </div>
           </div>
-        </div>
-        <div style={chip}>
-          <span style={{ color: "#93c5fd" }}><IconCoins size={18} /></span>
-          <div>
-            <p style={chipLbl}>Avg Bill</p>
-            <p style={chipVal}>{fmtRs(a.avgBill)}</p>
+        )}
+        {a.billCount > 0 && (
+          <div style={chip}>
+            <span style={{ color: "#93c5fd" }}><IconCoins size={18} /></span>
+            <div>
+              <p style={chipLbl}>Avg Bill</p>
+              <p style={chipVal}>{fmtRs(a.avgBill)}</p>
+            </div>
           </div>
-        </div>
+        )}
         <div style={chip}>
           <span style={{ color: "#93c5fd" }}><IconTrophy size={18} /></span>
           <div>
-            <p style={chipLbl}>{a.top?.kind === "item" ? "Top Item" : "Top Location"}</p>
+            <p style={chipLbl}>
+              {a.top?.kind === "item" ? "Top Item" : a.top?.kind === "category" ? "Top Category" : "Top Location"}
+            </p>
             <p style={{ ...chipVal, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>{a.top?.label ?? "—"}</p>
           </div>
         </div>
@@ -435,10 +439,15 @@ function Ranking({ data }: { data: AnaPoint[] }) {
 }
 
 // ═══════════════ MAIN ═══════════════
-export default function ReportDashboard({ analytics, title }: { analytics: Analytics; title: string }) {
+export default function ReportDashboard({ analytics }: { analytics: Analytics; title?: string }) {
   const a = analytics;
   const ranking = a.byLocation.length >= 2 ? a.byLocation.slice(0, 7) : a.topItems;
-  const rankingTitle = a.byLocation.length >= 2 ? "Location Performance" : "Top Selling Items";
+  const rankingTitle =
+    a.byLocation.length >= 2
+      ? "Location Performance"
+      : a.top?.kind === "category"
+        ? "Top Categories"
+        : "Top Selling Items";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -455,7 +464,7 @@ export default function ReportDashboard({ analytics, title }: { analytics: Analy
         )}
         {a.byMode.length > 0 && (
           <div style={{ ...card, flex: "2 1 300px", minWidth: 0 }}>
-            <p style={cardHead}>Order Mode Split</p>
+            <p style={cardHead}>{a.donutTitle}</p>
             <div style={{ marginTop: 14 }}>
               <Donut data={a.byMode} />
             </div>
@@ -482,9 +491,6 @@ export default function ReportDashboard({ analytics, title }: { analytics: Analy
         )}
       </div>
 
-      <p style={{ margin: 0, fontSize: 10.5, color: FAINT, fontFamily: "Inter, sans-serif" }}>
-        Analytics — {title} · auto-generated from this report&apos;s data, no extra database calls
-      </p>
     </div>
   );
 }

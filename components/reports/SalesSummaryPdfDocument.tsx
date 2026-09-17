@@ -1,8 +1,6 @@
 // ============================================================
 // LOCATION: components/reports/SalesSummaryPdfDocument.tsx
 // FULL REPLACE — PDF eka POS report eka wage, ✅ LOCATION-WISE:
-//   location එකක් පාසා section එකක් (code + name + locTotal), ඇතුළේ
-//   date-wise tables + Daily Collection. අන්තිමේ Grand Total (all locations).
 // ============================================================
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
@@ -46,11 +44,11 @@ const fmt = (n: number) =>
   });
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Courier", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
   title: {
     textAlign: "center",
     fontSize: 14,
-    fontFamily: "Courier-Bold",
+    fontFamily: "Helvetica-Bold",
     marginBottom: 10,
   },
   infoRow: {
@@ -60,14 +58,14 @@ const styles = StyleSheet.create({
   },
   infoLabel: { width: 80 },
   range: {
-    fontFamily: "Courier-Bold",
+    fontFamily: "Helvetica-Bold",
     fontSize: 10,
     marginTop: 8,
     marginBottom: 4,
   },
   // POS eke "01   MILLA MIRISSA" header eka wage
   location: {
-    fontFamily: "Courier-Bold",
+    fontFamily: "Helvetica-Bold",
     fontSize: 11,
     marginTop: 12,
     marginBottom: 4,
@@ -76,12 +74,12 @@ const styles = StyleSheet.create({
     borderBottomColor: "#1a1a1a",
   },
   locationTotal: {
-    fontFamily: "Courier-Bold",
+    fontFamily: "Helvetica-Bold",
     fontSize: 9,
     marginBottom: 2,
   },
   groupDate: {
-    fontFamily: "Courier-Bold",
+    fontFamily: "Helvetica-Bold",
     fontSize: 10,
     marginTop: 10,
     marginBottom: 4,
@@ -89,7 +87,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row" },
   th: {
     backgroundColor: "#efefef",
-    fontFamily: "Courier-Bold",
+    fontFamily: "Helvetica-Bold",
     padding: 4,
     fontSize: 8,
     borderRightWidth: 1,
@@ -98,7 +96,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#999999",
   },
   td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
-  bold: { fontFamily: "Courier-Bold" },
+  bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
   totalRow: {
     flexDirection: "row",
@@ -125,7 +123,6 @@ const W = {
   casher: 60,
 };
 
-/* එක location section එකක් (date tables + daily collection) */
 function LocationBlock({ loc }: { loc: SummaryLocation }) {
   return (
     <View>

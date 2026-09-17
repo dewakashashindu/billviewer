@@ -680,27 +680,93 @@ function PromoCards() {
   );
 }
 
+// Vendored UMD libs (public/vendor) — loaded on demand, no npm install needed
+interface WindowWithVendors extends Window {
+  html2canvas?: (
+    el: HTMLElement,
+    opts?: Record<string, unknown>
+  ) => Promise<HTMLCanvasElement>;
+  jspdf?: {
+    jsPDF: new (opts: {
+      orientation: string;
+      unit: string;
+      format: number[];
+    }) => {
+      addImage: (...args: unknown[]) => void;
+      save: (name: string) => void;
+    };
+  };
+}
+
+function loadVendorScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
 function PDFDownloadButton({ bill }: { bill: Bill }) {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const handlePDFDownload = async () => {
     setPdfLoading(true);
     try {
-      const ReactPDF = await import("@react-pdf/renderer");
-      const { BillPDFDocument } = await import("@/lib/BillPDF");
-
-      const blob = await ReactPDF.pdf(<BillPDFDocument bill={bill} />).toBlob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `eReceipt-${bill.billNumber}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Pixel-perfect copy of the on-screen receipt: snapshot the
+      // receipt card exactly as rendered and place it 1:1 on a PDF
+      // page of the same size (px -> pt = *0.75). No restyling.
+      const card = document.getElementById("receipt-card");
+      if (!card) throw new Error("receipt card not found");
+      try {
+        await document.fonts.ready;
+      } catch {
+        // fonts API unavailable — continue with loaded fonts
+      }
+      // Vendored UMD builds served from /public/vendor — works
+      // without any npm install on the deployment server.
+      const w = window as WindowWithVendors;
+      if (!w.html2canvas) await loadVendorScript("/vendor/html2canvas.min.js");
+      if (!w.jspdf) await loadVendorScript("/vendor/jspdf.umd.min.js");
+      if (!w.html2canvas || !w.jspdf)
+        throw new Error("vendor pdf libraries unavailable");
+      const canvas = await w.html2canvas(card as HTMLElement, {
+        scale: 3,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
+        ignoreElements: (el: Element) =>
+          el.classList?.contains("no-print") === true,
+      });
+      const wPt = canvas.width * 0.75;
+      const hPt = canvas.height * 0.75;
+      const pdf = new w.jspdf.jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: [wPt, hPt],
+      });
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, wPt, hPt);
+      pdf.save(`eReceipt-${bill.billNumber}.pdf`);
     } catch (err) {
-      console.error("PDF generation failed:", err);
-      alert("PDF eka hadanna beri una. Aye try karanna.");
+      // Fallback: structured react-pdf receipt if the snapshot fails
+      console.error("Snapshot PDF failed, using react-pdf fallback:", err);
+      try {
+        const ReactPDF = await import("@react-pdf/renderer");
+        const { BillPDFDocument } = await import("@/lib/BillPDF");
+        const blob = await ReactPDF.pdf(<BillPDFDocument bill={bill} />).toBlob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `eReceipt-${bill.billNumber}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (err2) {
+        console.error("PDF generation failed:", err2);
+        alert("Failed to generate the PDF. Please try again.");
+      }
     } finally {
       setPdfLoading(false);
     }
@@ -918,6 +984,7 @@ function BillContent() {
       >
         {/* RECEIPT CARD */}
         <div
+          id="receipt-card"
           style={{
             maxWidth: 400,
             margin: "0 auto",

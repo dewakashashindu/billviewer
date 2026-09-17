@@ -83,7 +83,6 @@ export function filterSalesDetails(
 ): SalesDetailsData {
   const q = query.trim().toLowerCase();
   if (!q) return report;
-  // ✅ defensive — undefined arrays වලින් crash නොවෙන්න
   const locationGroups = (report.locationGroups ?? [])
     .map((loc) => {
       const dateGroups = (loc.dateGroups ?? [])
