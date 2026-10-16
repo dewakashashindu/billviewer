@@ -56,12 +56,12 @@ export function filterOpen(d: OpenTablesData, q0: string): OpenTablesData {
   return { ...d, sections };
 }
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -69,7 +69,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function OpenTablesReport({ report }: { report: OpenTablesData }) {
   if ((report.sections ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No open tables right now.
       </p>
     );
@@ -79,8 +79,8 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
         <div key={s.code}>
           <div
             style={{
-              background: "#dbeafe",
-              color: "#1e3a8a",
+              background: "#E4D6BF",
+              color: "#684830",
               borderRadius: 6,
               padding: "6px 10px",
               display: "flex",
@@ -96,7 +96,7 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
             <thead>
-              <tr style={{ background: "#eff6ff" }}>
+              <tr style={{ background: "#F0E8D8" }}>
                 <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Description</th>
                 <th style={{ ...cell, textAlign: "right", width: 70, fontWeight: 700 }}>Qty</th>
                 <th style={{ ...cell, textAlign: "right", width: 100, fontWeight: 700 }}>Sales Price</th>
@@ -108,7 +108,7 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
             </thead>
             <tbody>
               {s.rows.map((r, ri) => (
-                <tr key={`${s.code}-${ri}`} style={{ background: ri % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                <tr key={`${s.code}-${ri}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                   <td style={cell}>{r.desc}</td>
                   <td style={num}>{fmtQty(r.qty)}</td>
                   <td style={num}>{fmtAmt(r.price)}</td>
@@ -118,8 +118,8 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
                   <td style={cell}>{r.cashier}</td>
                 </tr>
               ))}
-              <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                <td colSpan={3} style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Table Amount</td>
+              <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                <td colSpan={3} style={{ ...cell, fontWeight: 800, color: "#684830" }}>Table Amount</td>
                 <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(s.amount)}</td>
                 <td colSpan={3} style={cell} />
               </tr>
@@ -129,7 +129,7 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -150,7 +150,7 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 10 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
@@ -162,24 +162,24 @@ const pStyles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     padding: 4,
     fontSize: 8,
     borderRightWidth: 1,
-    borderRightColor: "#cccccc",
+    borderRightColor: "#C8B8A8",
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#1a1a1a", marginTop: 2 },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 const OW = { desc: 170, qty: 40, price: 65, value: 70, mode: 60, cancel: 45, cashier: 60 };
 

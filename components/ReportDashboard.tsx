@@ -22,17 +22,17 @@ import {
 } from "./reports/ReportIcons";
 
 // ── flat blue theme ──
-const NAVY = "#0d2b57";
-const MUTED = "#64748b";
-const FAINT = "#94a3b8";
-const LINE = "#1d4ed8";
-const BAR = "#93c5fd";
-const BAR_HOVER = "#60a5fa";
-const SOFT = "#eff6ff";
-const BORDER = "#e5eaf3";
+const NAVY = "#684830";
+const MUTED = "#6B543E";
+const FAINT = "#907860";
+const LINE = "#684830";
+const BAR = "#C8B8A8";
+const BAR_HOVER = "#C8B8A8";
+const SOFT = "#F0E8D8";
+const BORDER = "#E4D6BF";
 
-const BLUES = ["#1d4ed8", "#0ea5e9", "#3b82f6", "#60a5fa", "#1e40af", "#93c5fd", "#38bdf8", "#bfdbfe"];
-const TYPE_COLORS: Record<string, string> = { SD: "#1d4ed8", CM: "#0ea5e9", CO: "#93c5fd" };
+const BLUES = ["#684830", "#907860", "#907860", "#C8B8A8", "#684830", "#C8B8A8", "#C8B8A8", "#C8B8A8"];
+const TYPE_COLORS: Record<string, string> = { SD: "#684830", CM: "#907860", CO: "#C8B8A8" };
 
 // ── formatting ─
 const fmtRs = (n: number) =>
@@ -104,8 +104,8 @@ function Hero({ a }: { a: Analytics }) {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    background: "rgba(255,255,255,.07)",
-    border: "1px solid rgba(255,255,255,.16)",
+    background: "rgba(255,255,255,.55)",
+    border: "1px solid #E4D6BF",
     borderRadius: 10,
     padding: "10px 14px",
   };
@@ -115,14 +115,14 @@ function Hero({ a }: { a: Analytics }) {
     fontWeight: 700,
     letterSpacing: ".08em",
     textTransform: "uppercase",
-    color: "rgba(255,255,255,.6)",
+    color: "#907860",
     fontFamily: "Inter, sans-serif",
   };
   const chipVal: CSSProperties = {
     margin: "2px 0 0",
     fontSize: 15,
     fontWeight: 800,
-    color: "#fff",
+    color: "#45301D",
     fontFamily: "Inter, sans-serif",
     whiteSpace: "nowrap",
     ...tabular,
@@ -132,7 +132,8 @@ function Hero({ a }: { a: Analytics }) {
       style={{
         borderRadius: 14,
         padding: "22px 26px",
-        background: NAVY,
+        background: "#F0E8D8",
+        border: "1px solid #E4D6BF",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -141,13 +142,13 @@ function Hero({ a }: { a: Analytics }) {
       }}
     >
       <div>
-        <p style={{ margin: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.62)", fontFamily: "Inter, sans-serif" }}>
+        <p style={{ margin: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#907860", fontFamily: "Inter, sans-serif" }}>
           Total Sales
         </p>
-        <p style={{ margin: "6px 0 0", fontSize: 30, fontWeight: 800, color: "#fff", fontFamily: "Inter, sans-serif", ...tabular }}>
+        <p style={{ margin: "6px 0 0", fontSize: 30, fontWeight: 800, color: "#45301D", fontFamily: "Inter, sans-serif", ...tabular }}>
           {fmtRs(a.totalSales)}
         </p>
-        <p style={{ margin: "6px 0 0", fontSize: 11, color: "rgba(255,255,255,.55)", fontFamily: "Inter, sans-serif" }}>
+        <p style={{ margin: "6px 0 0", fontSize: 11, color: "#6B543E", fontFamily: "Inter, sans-serif" }}>
           net of discounts & taxes
         </p>
       </div>
@@ -155,7 +156,7 @@ function Hero({ a }: { a: Analytics }) {
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {a.billCount > 0 && (
           <div style={chip}>
-            <span style={{ color: "#93c5fd" }}><IconReceipt size={18} /></span>
+            <span style={{ color: "#907860" }}><IconReceipt size={18} /></span>
             <div>
               <p style={chipLbl}>Bills</p>
               <p style={chipVal}>{a.billCount.toLocaleString("en-US")}</p>
@@ -164,7 +165,7 @@ function Hero({ a }: { a: Analytics }) {
         )}
         {a.billCount > 0 && (
           <div style={chip}>
-            <span style={{ color: "#93c5fd" }}><IconCoins size={18} /></span>
+            <span style={{ color: "#907860" }}><IconCoins size={18} /></span>
             <div>
               <p style={chipLbl}>Avg Bill</p>
               <p style={chipVal}>{fmtRs(a.avgBill)}</p>
@@ -172,7 +173,7 @@ function Hero({ a }: { a: Analytics }) {
           </div>
         )}
         <div style={chip}>
-          <span style={{ color: "#93c5fd" }}><IconTrophy size={18} /></span>
+          <span style={{ color: "#907860" }}><IconTrophy size={18} /></span>
           <div>
             <p style={chipLbl}>
               {a.top?.kind === "item" ? "Top Item" : a.top?.kind === "category" ? "Top Category" : "Top Location"}
@@ -214,7 +215,7 @@ function TrendChart({ data }: { data: AnaPoint[] }) {
           const gy = y(v);
           return (
             <g key={t}>
-              <line x1={PL} x2={W - PR} y1={gy} y2={gy} stroke={t === 0 ? "#cbd5e1" : "#eef2f7"} strokeWidth={1} />
+              <line x1={PL} x2={W - PR} y1={gy} y2={gy} stroke={t === 0 ? "#C8B8A8" : "#FCF7F3"} strokeWidth={1} />
               <text x={PL - 8} y={gy + 3.5} fontSize={10} fill={FAINT} textAnchor="end" fontFamily="Inter, sans-serif" style={tabular}>
                 {fmtC(v)}
               </text>
@@ -309,7 +310,7 @@ function TrendChart({ data }: { data: AnaPoint[] }) {
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 2 }}>{fmtD(data[hover].label)}</div>
-          <div style={{ color: "#93c5fd", fontWeight: 700, ...tabular }}>{fmtRs(data[hover].value)}</div>
+          <div style={{ color: "#C8B8A8", fontWeight: 700, ...tabular }}>{fmtRs(data[hover].value)}</div>
           <div style={{ color: FAINT, ...tabular }}>{data[hover].bills} bills</div>
         </div>
       )}
@@ -358,7 +359,7 @@ function Donut({ data }: { data: AnaPoint[] }) {
           return (
             <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12, fontFamily: "Inter, sans-serif" }}>
               <span style={{ width: 9, height: 9, borderRadius: 3, background: BLUES[i % BLUES.length], flexShrink: 0 }} />
-              <span style={{ color: "#334155", fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
+              <span style={{ color: "#684830", fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
               <span style={{ background: SOFT, color: LINE, fontWeight: 700, fontSize: 10.5, borderRadius: 999, padding: "2px 8px", ...tabular }}>{pct.toFixed(1)}%</span>
               <span style={{ color: NAVY, fontWeight: 800, width: 54, textAlign: "right", ...tabular }}>{fmtC(d.value)}</span>
             </div>
@@ -378,7 +379,7 @@ function TypeTiles({ data }: { data: AnaPoint[] }) {
         const pct = total > 0 ? (d.value / total) * 100 : 0;
         const c = TYPE_COLORS[d.label] ?? BLUES[3];
         return (
-          <div key={d.label} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: "12px 14px", background: "#fbfdff", position: "relative", overflow: "hidden" }}>
+          <div key={d.label} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: "12px 14px", background: "#FCF7F3", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c }} />
             <p style={{ margin: "4px 0 0", fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: MUTED, fontFamily: "Inter, sans-serif" }}>{d.label}</p>
             <p style={{ margin: "6px 0 0", fontSize: 19, fontWeight: 800, color: NAVY, fontFamily: "Inter, sans-serif", ...tabular }}>{pct.toFixed(1)}%</p>
@@ -417,7 +418,7 @@ function Ranking({ data }: { data: AnaPoint[] }) {
             >
               {i + 1}
             </span>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", fontFamily: "Inter, sans-serif", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.label}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#684830", fontFamily: "Inter, sans-serif", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.label}>
               {d.label}
             </span>
             <span style={{ fontSize: 12.5, fontWeight: 800, color: NAVY, fontFamily: "Inter, sans-serif", ...tabular }}>Rs. {fmtC(d.value)}</span>

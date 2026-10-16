@@ -128,7 +128,7 @@ export default function DateRangeModal({
         position: "fixed",
         inset: 0,
         zIndex: 1000,
-        background: "rgba(15,23,42,0.55)",
+        background: "rgba(114,86,60,0.55)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -154,7 +154,7 @@ export default function DateRangeModal({
         <div
           style={{
             padding: "16px 20px",
-            borderBottom: "1px solid #e2e8f0",
+            borderBottom: "1px solid #E4D6BF",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -168,13 +168,13 @@ export default function DateRangeModal({
                 fontSize: 10,
                 fontWeight: 700,
                 letterSpacing: 1,
-                color: "#64748b",
+                color: "#6B543E",
                 textTransform: "uppercase",
               }}
             >
               Select Date Range
             </p>
-            <h3 style={{ margin: "2px 0 0", fontSize: 15, color: "#0f172a" }}>
+            <h3 style={{ margin: "2px 0 0", fontSize: 15, color: "#45301D" }}>
               {title}
             </h3>
           </div>
@@ -182,8 +182,8 @@ export default function DateRangeModal({
             onClick={onClose}
             style={{
               border: "none",
-              background: "#f1f5f9",
-              color: "#475569",
+              background: "#FCF7F3",
+              color: "#6B543E",
               width: 30,
               height: 30,
               borderRadius: 999,
@@ -205,12 +205,12 @@ export default function DateRangeModal({
                 margin: 0,
                 fontSize: 14,
                 fontWeight: 600,
-                color: "#0f172a",
+                color: "#45301D",
               }}
             >
               This report is not available yet
             </p>
-            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#64748b" }}>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#6B543E" }}>
               This report has not been linked yet. Click "OK" to
               continue.
             </p>
@@ -219,7 +219,7 @@ export default function DateRangeModal({
               style={{
                 marginTop: 16,
                 border: "none",
-                background: "#0f172a",
+                background: "#45301D",
                 color: "#fff",
                 padding: "9px 22px",
                 borderRadius: 8,
@@ -252,9 +252,9 @@ export default function DateRangeModal({
                     setErr(null);
                   }}
                   style={{
-                    border: "1px solid #e2e8f0",
-                    background: "#f8fafc",
-                    color: "#334155",
+                    border: "1px solid #E4D6BF",
+                    background: "#FCF7F3",
+                    color: "#684830",
                     fontSize: 11.5,
                     fontWeight: 600,
                     padding: "6px 11px",
@@ -274,7 +274,7 @@ export default function DateRangeModal({
                   display: "block",
                   fontSize: 11,
                   fontWeight: 600,
-                  color: "#64748b",
+                  color: "#6B543E",
                   marginBottom: 5,
                 }}
               >
@@ -286,12 +286,12 @@ export default function DateRangeModal({
                 style={{
                   width: "100%",
                   boxSizing: "border-box",
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid #C8B8A8",
                   borderRadius: 8,
                   padding: "9px 10px",
                   fontSize: 13,
                   fontWeight: 500,
-                  color: "#0f172a",
+                  color: "#45301D",
                   background: "#fff",
                   cursor: "pointer",
                 }}
@@ -313,7 +313,7 @@ export default function DateRangeModal({
                     display: "block",
                     fontSize: 11,
                     fontWeight: 600,
-                    color: "#64748b",
+                    color: "#6B543E",
                     marginBottom: 5,
                   }}
                 >
@@ -327,12 +327,12 @@ export default function DateRangeModal({
                   style={{
                     width: "100%",
                     boxSizing: "border-box",
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid #C8B8A8",
                     borderRadius: 8,
                     padding: "9px 10px",
                     fontSize: 13,
                     fontWeight: 500,
-                    color: "#0f172a",
+                    color: "#45301D",
                     background: "#fff",
                     cursor: "pointer",
                   }}
@@ -354,7 +354,7 @@ export default function DateRangeModal({
                     display: "block",
                     fontSize: 11,
                     fontWeight: 600,
-                    color: "#64748b",
+                    color: "#6B543E",
                     marginBottom: 5,
                   }}
                 >
@@ -370,11 +370,11 @@ export default function DateRangeModal({
                   style={{
                     width: "100%",
                     boxSizing: "border-box",
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid #C8B8A8",
                     borderRadius: 8,
                     padding: "9px 10px",
                     fontSize: 13,
-                    color: "#0f172a",
+                    color: "#45301D",
                     background: "#fff",
                   }}
                 />
@@ -385,7 +385,7 @@ export default function DateRangeModal({
                     display: "block",
                     fontSize: 11,
                     fontWeight: 600,
-                    color: "#64748b",
+                    color: "#6B543E",
                     marginBottom: 5,
                   }}
                 >
@@ -401,11 +401,11 @@ export default function DateRangeModal({
                   style={{
                     width: "100%",
                     boxSizing: "border-box",
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid #C8B8A8",
                     borderRadius: 8,
                     padding: "9px 10px",
                     fontSize: 13,
-                    color: "#0f172a",
+                    color: "#45301D",
                     background: "#fff",
                   }}
                 />
@@ -437,9 +437,9 @@ export default function DateRangeModal({
               <button
                 onClick={onClose}
                 style={{
-                  border: "1px solid #e2e8f0",
+                  border: "1px solid #E4D6BF",
                   background: "#fff",
-                  color: "#334155",
+                  color: "#684830",
                   padding: "9px 18px",
                   borderRadius: 8,
                   fontSize: 13,
@@ -453,7 +453,7 @@ export default function DateRangeModal({
                 onClick={apply}
                 style={{
                   border: "none",
-                  background: "linear-gradient(135deg,#0f172a,#1e3a5f)",
+                  background: "linear-gradient(135deg,#45301D,#684830)",
                   color: "#fff",
                   padding: "9px 22px",
                   borderRadius: 8,

@@ -36,12 +36,12 @@ export default function ForgotForm() {
     width: "100%",
     boxSizing: "border-box",
     height: 44,
-    border: "1px solid #dbe3ec",
+    border: "1px solid #E4D6BF",
     borderRadius: 9,
     padding: "0 12px",
     fontSize: 13.5,
-    color: "#0f172a",
-    background: "#f8fafc",
+    color: "#45301D",
+    background: "#FCF7F3",
     outline: "none",
     fontFamily: "inherit",
   };
@@ -50,7 +50,7 @@ export default function ForgotForm() {
     height: 46,
     border: "none",
     borderRadius: 10,
-    background: "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)",
+    background: "linear-gradient(135deg,#45301D 0%,#684830 100%)",
     color: "#fff",
     fontSize: 14,
     fontWeight: 700,
@@ -136,7 +136,7 @@ export default function ForgotForm() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "linear-gradient(160deg,#1c2f37 0%,#111e25 100%)",
+        background: "linear-gradient(160deg,#FCF7F3 0%,#F0E8D8 100%)",
         padding: 20,
       }}
     >
@@ -144,10 +144,10 @@ export default function ForgotForm() {
         <div style={{ textAlign: "center", marginBottom: 22 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/CAPTURE 1.png"
-            alt="MicroEChef"
+            src="/millamirissa.png"
+            alt="Mila Mirissa"
             style={{
-              height: 46,
+              height: 84,
               objectFit: "contain",
               margin: "0 auto 10px",
               display: "block",
@@ -158,12 +158,12 @@ export default function ForgotForm() {
               margin: 0,
               fontSize: 19,
               fontWeight: 800,
-              color: "#0f172a",
+              color: "#45301D",
             }}
           >
             Reset password
           </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748b" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B543E" }}>
             {step === 1 && "We'll text a verification code to your phone"}
             {step === 2 && `Code sent via SMS${maskedPhone ? ` to ${maskedPhone}` : ""}`}
             {step === 3 && "Choose a new password"}
@@ -179,7 +179,7 @@ export default function ForgotForm() {
                 display: "block",
                 fontSize: 11.5,
                 fontWeight: 700,
-                color: "#475569",
+                color: "#6B543E",
                 marginBottom: 5,
               }}
             >
@@ -225,7 +225,7 @@ export default function ForgotForm() {
                 display: "block",
                 fontSize: 11.5,
                 fontWeight: 700,
-                color: "#475569",
+                color: "#6B543E",
                 marginBottom: 5,
               }}
             >
@@ -266,8 +266,8 @@ export default function ForgotForm() {
               style={{
                 ...btn,
                 marginTop: 10,
-                background: "#f1f5f9",
-                color: "#475569",
+                background: "#FCF7F3",
+                color: "#6B543E",
               }}
             >
               Back
@@ -282,7 +282,7 @@ export default function ForgotForm() {
                 display: "block",
                 fontSize: 11.5,
                 fontWeight: 700,
-                color: "#475569",
+                color: "#6B543E",
                 marginBottom: 5,
               }}
             >
@@ -300,7 +300,7 @@ export default function ForgotForm() {
                 display: "block",
                 fontSize: 11.5,
                 fontWeight: 700,
-                color: "#475569",
+                color: "#6B543E",
                 marginBottom: 5,
               }}
             >
@@ -331,7 +331,7 @@ export default function ForgotForm() {
             style={{
               fontSize: 12,
               fontWeight: 600,
-              color: "#1d4ed8",
+              color: "#684830",
               textDecoration: "none",
             }}
           >

@@ -113,18 +113,19 @@ export function filterCbd(d: CbdData, q0: string): CbdData {
 }
 
 // ── shared flat styles ──
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 const locBar: CSSProperties = {
-  background: NAVY,
-  color: "#fff",
+  background: "#F0E8D8",
+  color: "#45301D",
+  border: "1px solid #E4D6BF",
   borderRadius: 8,
   padding: "8px 12px",
   display: "flex",
@@ -136,8 +137,8 @@ const locBar: CSSProperties = {
   marginTop: 16,
 };
 const band: CSSProperties = {
-  background: "#dbeafe",
-  color: "#1e3a8a",
+  background: "#E4D6BF",
+  color: "#684830",
   borderRadius: 6,
   padding: "6px 10px",
   display: "flex",
@@ -148,7 +149,7 @@ const band: CSSProperties = {
   marginTop: 8,
 };
 const grand: CSSProperties = {
-  background: "#1d4ed8",
+  background: "#684830",
   color: "#fff",
   borderRadius: 8,
   padding: "8px 12px",
@@ -162,7 +163,7 @@ const grand: CSSProperties = {
 
 function Empty({ text }: { text: string }) {
   return (
-    <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+    <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
       {text}
     </p>
   );
@@ -184,7 +185,7 @@ export function BillTypeReport({ report }: { report: BillTypeData }) {
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
             <thead>
-              <tr style={{ background: "#eff6ff" }}>
+              <tr style={{ background: "#F0E8D8" }}>
                 <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Bill Type</th>
                 <th style={{ ...cell, textAlign: "right", width: 110, fontWeight: 700 }}>No of Bills</th>
                 <th style={{ ...cell, textAlign: "right", width: 140, fontWeight: 700 }}>Total Value</th>
@@ -192,14 +193,14 @@ export function BillTypeReport({ report }: { report: BillTypeData }) {
             </thead>
             <tbody>
               {l.rows.map((r, i) => (
-                <tr key={r.type} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                <tr key={r.type} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                   <td style={{ ...cell, fontWeight: 700 }}>{r.type}</td>
                   <td style={num}>{r.bills.toLocaleString("en-US")}</td>
                   <td style={num}>{fmtAmt(r.total)}</td>
                 </tr>
               ))}
-              <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                <td style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Location Total</td>
+              <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                <td style={{ ...cell, fontWeight: 800, color: "#684830" }}>Location Total</td>
                 <td style={{ ...num, fontWeight: 800 }}>{l.locBills.toLocaleString("en-US")}</td>
                 <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(l.locTotal)}</td>
               </tr>
@@ -239,7 +240,7 @@ export function CashierCollectionReport({ report }: { report: CcData }) {
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 130, fontWeight: 700 }}>BillNo</th>
                     <th style={{ ...cell, textAlign: "right", width: 140, fontWeight: 700 }}>Total Value</th>
                     <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Txn Date-Time</th>
@@ -247,14 +248,14 @@ export function CashierCollectionReport({ report }: { report: CcData }) {
                 </thead>
                 <tbody>
                   {c.bills.map((b, i) => (
-                    <tr key={`${c.code}-${b.billNo}-${i}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                    <tr key={`${c.code}-${b.billNo}-${i}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                       <td style={{ ...cell, fontWeight: 700 }}>{b.billNo}</td>
                       <td style={num}>{fmtAmt(b.value)}</td>
                       <td style={cell}>{b.dateTime}</td>
                     </tr>
                   ))}
-                  <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                    <td style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Cashier Collection</td>
+                  <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                    <td style={{ ...cell, fontWeight: 800, color: "#684830" }}>Cashier Collection</td>
                     <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(c.total)}</td>
                     <td style={cell} />
                   </tr>
@@ -294,7 +295,7 @@ export function CashierBreakdownReport({ report }: { report: CbdData }) {
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 170, fontWeight: 700 }}>Date-Time</th>
                     <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Payment Mode</th>
                     <th style={{ ...cell, textAlign: "right", width: 140, fontWeight: 700 }}>Amount</th>
@@ -304,20 +305,20 @@ export function CashierBreakdownReport({ report }: { report: CbdData }) {
                   {c.modes.map((m) => (
                     <Fragment key={`${c.code}-${m.mode}`}>
                       {m.rows.map((r, i) => (
-                        <tr key={`${m.mode}-${i}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                        <tr key={`${m.mode}-${i}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                           <td style={cell}>{r.dateTime}</td>
                           <td style={{ ...cell, fontWeight: 700 }}>{m.mode}</td>
                           <td style={num}>{fmtAmt(r.amount)}</td>
                         </tr>
                       ))}
-                      <tr style={{ background: "#eff6ff" }}>
-                        <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>{m.mode} sub total</td>
-                        <td style={{ ...num, fontWeight: 800, color: "#1e3a8a" }}>{fmtAmt(m.total)}</td>
+                      <tr style={{ background: "#F0E8D8" }}>
+                        <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#684830" }}>{m.mode} sub total</td>
+                        <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{fmtAmt(m.total)}</td>
                       </tr>
                     </Fragment>
                   ))}
-                  <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                    <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Cashier Total</td>
+                  <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                    <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#684830" }}>Cashier Total</td>
                     <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(c.total)}</td>
                   </tr>
                 </tbody>
@@ -336,20 +337,20 @@ export function CashierBreakdownReport({ report }: { report: CbdData }) {
 
 // ── PDFs — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 10 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
   range: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 8, marginBottom: 4 },
-  location: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 12, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#1a1a1a" },
+  location: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 12, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#45301D" },
   band: { fontFamily: "Helvetica-Bold", fontSize: 9.5, marginTop: 8, marginBottom: 4 },
   row: { flexDirection: "row" },
-  th: { backgroundColor: "#efefef", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 8, borderRightWidth: 1, borderRightColor: "#cccccc", borderBottomWidth: 1, borderBottomColor: "#999999" },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  th: { backgroundColor: "#E4D6BF", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 8, borderRightWidth: 1, borderRightColor: "#C8B8A8", borderBottomWidth: 1, borderBottomColor: "#907860" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#1a1a1a", marginTop: 2 },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 
 function PdfHead({ title, printDate, printTime, from, to }: { title: string; printDate: string; printTime: string; from: string; to: string }) {

@@ -55,13 +55,13 @@ export interface Bill {
 //    Me values oyage restaurant ekata wenas karanna.
 // ============================================================
 export const RESTAURANT_INFO = {
-  name: "MicroEChef",
+  name: "Mila Mirissa",
   city: "", // ← ain kala (oke watina nam city name eka daganna)
   addressLines: [] as string[], // ← ain kala (address one nam "No.528, Galle Road" wage daganna)
-  logoPath: "/CAPTURE 1.png", // public/ folder eke thiyena image eka
+  logoPath: "/millamirissa.png", // public/ folder eke thiyena image eka
   // 📱 Review QR — receipt eke "Scan to rate us" QR ekata link eka.
   //    oyage Google review link eka dananna (g.page link eka wage)
-  reviewUrl: "https://www.google.com/search?q=MicroEChef+reviews",
+  reviewUrl: "https://www.google.com/search?q=Mila+Mirissa+reviews",
 };
 
 // Tbl_OrderModes table eka empty nam me fallback names use wenawa

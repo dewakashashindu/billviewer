@@ -54,12 +54,12 @@ export function filterImv(d: ImvData, q0: string): ImvData {
   return { ...d, locationGroups };
 }
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -67,7 +67,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function ItemMovementReport({ report }: { report: ImvData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No {MODE_TITLE[report.mode].toLowerCase()} found for this range.
       </p>
     );
@@ -75,9 +75,9 @@ export default function ItemMovementReport({ report }: { report: ImvData }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <div
         style={{
-          background: "#dbeafe",
-          border: "1px solid #93c5fd",
-          color: "#1e3a8a",
+          background: "#E4D6BF",
+          border: "1px solid #C8B8A8",
+          color: "#684830",
           borderRadius: 8,
           padding: "8px 12px",
           display: "flex",
@@ -95,8 +95,9 @@ export default function ItemMovementReport({ report }: { report: ImvData }) {
         <div key={l.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -116,7 +117,7 @@ export default function ItemMovementReport({ report }: { report: ImvData }) {
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
             <thead>
-              <tr style={{ background: "#eff6ff" }}>
+              <tr style={{ background: "#F0E8D8" }}>
                 <th style={{ ...cell, textAlign: "left", width: 130, fontWeight: 700 }}>Item Code</th>
                 <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Menu Item Description</th>
                 {report.mode !== "non" ? (
@@ -126,7 +127,7 @@ export default function ItemMovementReport({ report }: { report: ImvData }) {
             </thead>
             <tbody>
               {l.rows.map((r, i) => (
-                <tr key={`${r.code}-${i}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                <tr key={`${r.code}-${i}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                   <td style={{ ...cell, fontWeight: 700 }}>{r.code}</td>
                   <td style={cell}>{r.desc}</td>
                   {report.mode !== "non" ? <td style={num}>{r.qty.toLocaleString("en-US")}</td> : null}
@@ -142,7 +143,7 @@ export default function ItemMovementReport({ report }: { report: ImvData }) {
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 10 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
@@ -155,20 +156,20 @@ const pStyles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     padding: 4,
     fontSize: 8,
     borderRightWidth: 1,
-    borderRightColor: "#cccccc",
+    borderRightColor: "#C8B8A8",
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   right: { textAlign: "right" },
 });
 const IW = { code: 90, desc: 280, qty: 70 };

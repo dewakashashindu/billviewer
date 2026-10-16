@@ -162,17 +162,18 @@ export function filterCategoryDetail(d: CatDetailData, q0: string): CatDetailDat
 }
 
 // ── flat styles ──
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const thRow: CSSProperties = {
-  background: "#dbeafe",
-  color: "#1e3a8a",
+  background: "#E4D6BF",
+  color: "#684830",
   fontWeight: 700,
   fontSize: 11,
   fontFamily: "Inter, sans-serif",
 };
 const locBar: CSSProperties = {
-  background: NAVY,
-  color: "#fff",
+  background: "#F0E8D8",
+  color: "#45301D",
+  border: "1px solid #E4D6BF",
   borderRadius: 8,
   padding: "8px 12px",
   display: "flex",
@@ -183,8 +184,8 @@ const locBar: CSSProperties = {
   fontFamily: "Inter, sans-serif",
 };
 const catBar: CSSProperties = {
-  background: "#eff6ff",
-  borderLeft: `3px solid #1d4ed8`,
+  background: "#F0E8D8",
+  borderLeft: `3px solid #684830`,
   borderRadius: 6,
   padding: "6px 10px",
   display: "flex",
@@ -200,20 +201,20 @@ const subBar: CSSProperties = {
   justifyContent: "space-between",
   fontSize: 11,
   fontWeight: 700,
-  color: "#475569",
+  color: "#6B543E",
   fontFamily: "Inter, sans-serif",
 };
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 
 function GrandBanner({ total }: { total: number }) {
   return (
-    <div style={{ ...locBar, background: "#1d4ed8", marginTop: 14, fontSize: 13 }}>
+    <div style={{ ...locBar, background: "#684830", color: "#fff", marginTop: 14, fontSize: 13 }}>
       <span>Grand Total (all locations)</span>
       <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(total)}</span>
     </div>
@@ -236,21 +237,21 @@ function LocHead({ loc }: { loc: { locCode: string; locName: string; locTotal: n
 export default function CategorySummaryReport({ report }: { report: CatSummaryData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No category sales found for this range.
       </p>
     );
   return (
-    <div style={{ background: "#fff", border: `1px solid ${"#e5eaf3"}`, borderRadius: 10, overflow: "hidden" }}>
+    <div style={{ background: "#fff", border: `1px solid ${"#E4D6BF"}`, borderRadius: 10, overflow: "hidden" }}>
       {/* column header — POS print eke light-blue header eka wage */}
-      <div style={{ display: "flex", justifyContent: "space-between", background: "#dbeafe", color: "#1e3a8a", fontWeight: 700, fontSize: 12, padding: "8px 14px", borderBottom: "2px solid #1d4ed8", fontFamily: "Inter, sans-serif" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", background: "#E4D6BF", color: "#684830", fontWeight: 700, fontSize: 12, padding: "8px 14px", borderBottom: "2px solid #684830", fontFamily: "Inter, sans-serif" }}>
         <span>Item Categories</span>
         <span>SalesTotal</span>
       </div>
 
       {report.locationGroups.map((loc) => (
         <div key={loc.locCode}>
-          <div style={{ background: "#0d2b57", color: "#fff", padding: "7px 14px", display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, fontFamily: "Inter, sans-serif" }}>
+          <div style={{ background: "#F0E8D8", color: "#45301D", borderBottom: "1px solid #E4D6BF", padding: "7px 14px", display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700, fontFamily: "Inter, sans-serif" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <IconPin size={13} />
               {loc.locCode} — {loc.locName}
@@ -261,7 +262,7 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
           {loc.cats.map((c) => (
             <div key={c.level1}>
               {/* category band */}
-              <div style={{ background: "#eaf2fb", padding: "6px 14px", fontWeight: 800, fontSize: 12, color: "#0d2b57", fontFamily: "Inter, sans-serif", textTransform: "uppercase" }}>
+              <div style={{ background: "#F0E8D8", padding: "6px 14px", fontWeight: 800, fontSize: 12, color: "#684830", fontFamily: "Inter, sans-serif", textTransform: "uppercase" }}>
                 {c.level1}
               </div>
 
@@ -275,14 +276,14 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
                       gridTemplateColumns: "200px 1fr 150px",
                       gap: 10,
                       padding: "4px 14px",
-                      borderBottom: "1px solid #f1f5f9",
+                      borderBottom: "1px solid #FCF7F3",
                       fontSize: 11.5,
                       fontFamily: "Inter, sans-serif",
-                      color: "#1e293b",
+                      color: "#45301D",
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ color: "#94a3b8", fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ color: "#907860", fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {[sub.level2, sub.level3].filter(Boolean).join(" / ")}
                     </span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.name}>
@@ -294,7 +295,7 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
               )}
 
               {/* category total — print eke wage bold + top border */}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 14px", borderTop: "1px solid #94a3b8", fontWeight: 800, fontSize: 12, color: "#0d2b57", fontFamily: "Inter, sans-serif" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 14px", borderTop: "1px solid #907860", fontWeight: 800, fontSize: 12, color: "#684830", fontFamily: "Inter, sans-serif" }}>
                 <span>Category Total</span>
                 <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(c.total)}</span>
               </div>
@@ -304,7 +305,7 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
       ))}
 
       {/* grand total — double underline wage */}
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px", fontWeight: 800, fontSize: 13, color: "#0d2b57", fontFamily: "Inter, sans-serif", borderBottom: "4px double #0d2b57" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 14px", fontWeight: 800, fontSize: 13, color: "#684830", fontFamily: "Inter, sans-serif", borderBottom: "4px double #684830" }}>
         <span>Grand Total</span>
         <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(report.grandTotal)}</span>
       </div>
@@ -316,7 +317,7 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
 export function CategoryDetailReport({ report }: { report: CatDetailData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No category sales found for this range.
       </p>
     );
@@ -354,7 +355,7 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
                         </td>
                       </tr>
                       {s.rows.map((r, ri) => (
-                        <tr key={`${r.billNo}-${ri}`} style={{ background: ri % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                        <tr key={`${r.billNo}-${ri}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                           <td style={cell}>{r.billNo}</td>
                           <td style={cell}>{r.item}</td>
                           <td style={num}>{fmtAmt(r.saleTotal)}</td>
@@ -366,10 +367,10 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
                     </Fragment>
                   ))}
                   <tr key={`${c.level1}-t`}>
-                    <td colSpan={2} style={{ ...cell, fontWeight: 800, color: NAVY, background: "#eff6ff" }}>
+                    <td colSpan={2} style={{ ...cell, fontWeight: 800, color: NAVY, background: "#F0E8D8" }}>
                       Main Category Total
                     </td>
-                    <td colSpan={4} style={{ ...num, fontWeight: 800, color: NAVY, background: "#eff6ff" }}>
+                    <td colSpan={4} style={{ ...num, fontWeight: 800, color: NAVY, background: "#F0E8D8" }}>
                       {fmtAmt(c.total)}
                     </td>
                   </tr>

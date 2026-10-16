@@ -91,12 +91,12 @@ export function flattenPaxForPdf(d: PaxData): Array<Record<string, unknown>> {
 }
 
 // -- flat styles --
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -114,8 +114,8 @@ function SectionTable({
     <div style={{ marginTop: 8 }}>
       <div
         style={{
-          background: "#dbeafe",
-          color: "#1e3a8a",
+          background: "#E4D6BF",
+          color: "#684830",
           borderRadius: 6,
           padding: "6px 10px",
           fontSize: 12,
@@ -127,7 +127,7 @@ function SectionTable({
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
         <thead>
-          <tr style={{ background: "#eff6ff" }}>
+          <tr style={{ background: "#F0E8D8" }}>
             {cols.map((c, i) => (
               <th key={c} style={{ ...cell, textAlign: i === 0 ? "left" : "right", fontWeight: 700 }}>
                 {c}
@@ -137,7 +137,7 @@ function SectionTable({
         </thead>
         <tbody>
           {rows.map((r, ri) => (
-            <tr key={ri} style={{ background: ri % 2 === 1 ? "#f8fafc" : "#fff" }}>
+            <tr key={ri} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
               {r.map((v, ci) => (
                 <td key={ci} style={ci === 0 ? { ...cell, fontWeight: 700 } : num}>
                   {typeof v === "number" ? fmtAmt(v) : v}
@@ -154,7 +154,7 @@ function SectionTable({
 export default function PaxCountReport({ report }: { report: PaxData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No pax records found for this range.
       </p>
     );
@@ -164,8 +164,9 @@ export default function PaxCountReport({ report }: { report: PaxData }) {
         <div key={l.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -204,7 +205,7 @@ export default function PaxCountReport({ report }: { report: PaxData }) {
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -227,7 +228,7 @@ export default function PaxCountReport({ report }: { report: PaxData }) {
 // PDF — shared print style (Helvetica, grey heads, ruled totals)
 // ============================================================
 const pStyles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 10 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
@@ -239,25 +240,25 @@ const pStyles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   section: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 8, marginBottom: 4 },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     padding: 4,
     fontSize: 8,
     borderRightWidth: 1,
-    borderRightColor: "#cccccc",
+    borderRightColor: "#C8B8A8",
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#1a1a1a", marginTop: 2 },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 
 const XW = { a: 90, b: 90, c: 80, d: 100, e: 110 };

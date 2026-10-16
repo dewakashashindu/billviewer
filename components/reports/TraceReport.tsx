@@ -80,12 +80,12 @@ export function filterTrace(d: TraceData, q0: string): TraceData {
   return { ...d, locationGroups };
 }
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -93,7 +93,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function TraceReport({ report, invoiceHint }: { report: TraceData; invoiceHint?: boolean }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         {invoiceHint
           ? "Type an invoice number in the search box to trace it."
           : "No trace records found for this range."}
@@ -105,8 +105,9 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
         <div key={l.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -129,8 +130,8 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
             <div key={`${l.locCode}-${b.billNo}-${b.birth}`} style={{ marginTop: 8 }}>
               <div
                 style={{
-                  background: "#dbeafe",
-                  color: "#1e3a8a",
+                  background: "#E4D6BF",
+                  color: "#684830",
                   borderRadius: 6,
                   padding: "6px 10px",
                   display: "flex",
@@ -148,7 +149,7 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 80, fontWeight: 700 }}>Ref</th>
                     <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Action</th>
                     <th style={{ ...cell, textAlign: "left", width: 110, fontWeight: 700 }}>Date</th>
@@ -160,7 +161,7 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
                 </thead>
                 <tbody>
                   {b.rows.map((r, ri) => (
-                    <tr key={`${b.billNo}-${ri}`} style={{ background: ri % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                    <tr key={`${b.billNo}-${ri}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                       <td style={{ ...cell, fontWeight: 700 }}>{r.ref}</td>
                       <td style={cell}>{r.action}</td>
                       <td style={cell}>{r.date}</td>
@@ -170,8 +171,8 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
                       <td style={cell}>{r.status}</td>
                     </tr>
                   ))}
-                  <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                    <td colSpan={5} style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Net Total</td>
+                  <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                    <td colSpan={5} style={{ ...cell, fontWeight: 800, color: "#684830" }}>Net Total</td>
                     <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(b.net)}</td>
                     <td style={cell} />
                   </tr>
@@ -183,7 +184,7 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -204,7 +205,7 @@ export default function TraceReport({ report, invoiceHint }: { report: TraceData
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 10 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
@@ -216,25 +217,25 @@ const pStyles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   bill: { fontFamily: "Helvetica-Bold", fontSize: 9.5, marginTop: 8, marginBottom: 4 },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     padding: 4,
     fontSize: 8,
     borderRightWidth: 1,
-    borderRightColor: "#cccccc",
+    borderRightColor: "#C8B8A8",
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#1a1a1a", marginTop: 2 },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 const TW = { ref: 50, action: 130, date: 70, qty: 40, price: 65, amount: 70, status: 70 };
 

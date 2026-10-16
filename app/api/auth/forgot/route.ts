@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const code = generateOtp();
     const sent = await sendSms(
       String(user.ContNo),
-      `MicroEChef password reset code: ${code} (valid 10 minutes)`
+      `Mila Mirissa password reset code: ${code} (valid 10 minutes)`
     );
 
     const out = NextResponse.json({

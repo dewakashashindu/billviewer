@@ -17,13 +17,13 @@
 // ============================================================
 import { useEffect, useRef } from "react";
 
-const RING = "#F7F7E7";
+const RING = "#F0E8D8";
 const CREAM = "#EAE6D8";
 const SHADE = "#D6D6BE";
-const INK = "#4A4342";
+const INK = "#45301D";
 const GROUND = "#C6C39A";
-const FOOT = "#272D21";
-const DROP_BLUE = "#8FCFFE";
+const FOOT = "#45301D";
+const DROP_BLUE = "#C8B8A8";
 
 export default function CupMascot({ width = 340 }: { width?: number }) {
   const cupRef = useRef<SVGGElement>(null);

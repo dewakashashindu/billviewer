@@ -32,6 +32,16 @@ function IChart() {
     </svg>
   );
 }
+function IQr() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <path d="M14 14h3v3h-3zM21 14v.01M14 21v.01M21 21v.01M18 18h.01" />
+    </svg>
+  );
+}
 function IChevRight() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -240,6 +250,13 @@ const NAV: NavItem[] = [
       },
     ],
   },
+  {
+    // Last sidebar item — Table QR generator page
+    key: "table-qr",
+    label: "Table QR Codes",
+    icon: <IQr />,
+    path: "/table-qr",
+  },
 ];
 
 const SHELL_CSS = `
@@ -247,20 +264,20 @@ const SHELL_CSS = `
 
   .sh-nav-scroll::-webkit-scrollbar { width:4px; }
   .sh-nav-scroll::-webkit-scrollbar-track { background:transparent; }
-  .sh-nav-scroll::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:4px; }
+  .sh-nav-scroll::-webkit-scrollbar-thumb { background:rgba(104,72,48,0.28); border-radius:4px; }
 
   .sh-grip {
     position:absolute; right:-13px; top:50%; transform:translateY(-50%);
     width:13px; height:48px;
-    background:linear-gradient(180deg,#243c44 0%,#1a2e36 100%);
-    border:1px solid rgba(255,255,255,0.1); border-left:none;
+    background:linear-gradient(180deg,#684830 0%,#45301D 100%);
+    border:1px solid rgba(69,48,29,0.25); border-left:none;
     border-radius:0 8px 8px 0;
     display:flex; flex-direction:column;
     align-items:center; justify-content:center; gap:3px;
     cursor:pointer; z-index:50;
     transition:background 0.18s,width 0.15s;
   }
-  .sh-grip:hover { background:linear-gradient(180deg,#2e4a52 0%,#223840 100%); width:15px; }
+  .sh-grip:hover { background:linear-gradient(180deg,#907860 0%,#45301D 100%); width:15px; }
   .sh-grip-line { width:5px; height:1.5px; border-radius:99px; background:rgba(255,255,255,0.5); }
 
   .sh-group-btn {
@@ -270,25 +287,25 @@ const SHELL_CSS = `
     border-radius:9px;
     transition:background 0.15s,color 0.15s;
   }
-  .sh-group-btn:hover { background:rgba(255,255,255,0.07); }
-  .sh-group-btn.active { background:rgba(255,255,255,0.13); }
-  .sh-group-btn.icon-mode { width:44px; height:44px; justify-content:center; padding:0; color:rgba(255,255,255,0.45); }
-  .sh-group-btn.icon-mode:hover { color:rgba(255,255,255,0.85); }
-  .sh-group-btn.icon-mode.active { color:#fff; }
-  .sh-group-btn.row-mode { height:40px; padding:0 10px; gap:10px; color:rgba(255,255,255,0.5); }
-  .sh-group-btn.row-mode:hover { color:rgba(255,255,255,0.9); }
-  .sh-group-btn.row-mode.active { color:#fff; }
+  .sh-group-btn:hover { background:rgba(104,72,48,0.07); }
+  .sh-group-btn.active { background:rgba(104,72,48,0.12); }
+  .sh-group-btn.icon-mode { width:44px; height:44px; justify-content:center; padding:0; color:rgba(69,48,29,0.55); }
+  .sh-group-btn.icon-mode:hover { color:#45301D; }
+  .sh-group-btn.icon-mode.active { color:#684830; }
+  .sh-group-btn.row-mode { height:40px; padding:0 10px; gap:10px; color:rgba(69,48,29,0.62); }
+  .sh-group-btn.row-mode:hover { color:#45301D; }
+  .sh-group-btn.row-mode.active { color:#684830; }
 
   .sh-cat-btn {
     width:100%; border:none; background:transparent; cursor:pointer;
     font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600;
     display:flex; align-items:center; justify-content:space-between;
     height:34px; border-radius:7px; padding:0 10px 0 26px;
-    color:rgba(255,255,255,0.55);
+    color:rgba(69,48,29,0.66);
     transition:background 0.13s,color 0.13s;
     text-align:left;
   }
-  .sh-cat-btn:hover { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.9); }
+  .sh-cat-btn:hover { background:rgba(104,72,48,0.07); color:#45301D; }
 
   .sh-leaf-btn {
     width:100%; border:none; background:transparent; cursor:pointer;
@@ -296,12 +313,12 @@ const SHELL_CSS = `
     display:flex; align-items:center; gap:9px;
     height:34px; border-radius:8px;
     padding:0 10px 0 12px;
-    color:rgba(255,255,255,0.42);
+    color:#6B543E;
     transition:background 0.13s,color 0.13s;
     text-align:left;
   }
-  .sh-leaf-btn:hover { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.85); }
-  .sh-leaf-btn.active { background:rgba(255,255,255,0.05); color:#eb9b46; }
+  .sh-leaf-btn:hover { background:rgba(104,72,48,0.07); color:#45301D; }
+  .sh-leaf-btn.active { background:rgba(104,72,48,0.09); color:#684830; }
 
   .sh-children { overflow:hidden; transition:max-height 0.28s cubic-bezier(.4,0,.2,1), opacity 0.22s ease; }
 
@@ -310,22 +327,22 @@ const SHELL_CSS = `
   .sh-mob-nav {
     display:none;
     position:fixed; bottom:0; left:0; right:0; z-index:100;
-    background:linear-gradient(180deg,#1a2e35 0%,#111e24 100%);
+    background:#FCF7F3;
     height:64px;
     align-items:center; justify-content:center;
     gap:8px;
-    border-top:1px solid rgba(255,255,255,0.07);
-    box-shadow:0 -4px 20px rgba(0,0,0,0.25);
+    border-top:1px solid #E4D6BF;
+    box-shadow:0 -4px 20px rgba(104,72,48,0.15);
   }
   .sh-mob-btn {
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
     gap:3px; padding:6px 22px;
     border:none; background:transparent;
-    color:rgba(255,255,255,0.4); cursor:pointer;
+    color:rgba(69,48,29,0.55); cursor:pointer;
     border-radius:8px; transition:all 0.18s;
   }
-  .sh-mob-btn.active { color:#fff; background:rgba(255,255,255,0.1); }
+  .sh-mob-btn.active { color:#fff; background:#684830; }
   .sh-mob-lbl { font-size:9px; font-weight:600; letter-spacing:0.02em; font-family:'Inter',sans-serif; white-space:nowrap; }
 
   @media(max-width:767px) {
@@ -380,7 +397,7 @@ function UserBar() {
               width: 26,
               height: 26,
               borderRadius: "50%",
-              background: "linear-gradient(135deg,#1c2f37 0%,#111e25 100%)",
+              background: "linear-gradient(135deg,#684830 0%,#45301D 100%)",
               color: "#fff",
               fontSize: 11,
               fontWeight: 800,
@@ -392,7 +409,7 @@ function UserBar() {
           >
             {name.trim().charAt(0) || "U"}
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#334155" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#684830" }}>
             {name}
           </span>
         </span>
@@ -406,10 +423,10 @@ function UserBar() {
           justifyContent: "center",
           width: 30,
           height: 30,
-          border: "1px solid #e2e8f0",
+          border: "1px solid #E4D6BF",
           borderRadius: 8,
           background: "#fff",
-          color: "#64748b",
+          color: "#6B543E",
           cursor: "pointer",
         }}
       >
@@ -465,7 +482,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
         top: 0,
         alignSelf: "flex-start",
         height: "100vh",
-        background: "linear-gradient(180deg,#1c2f37 0%,#111e25 100%)",
+        background: "#FCF7F3",
+        borderRight: "1px solid #E4D6BF",
         flexShrink: 0,
         overflow: "visible",
         zIndex: 20,
@@ -477,20 +495,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div
         style={{
           display: "flex",
-          justifyContent: open ? "flex-start" : "center",
+          justifyContent: "center",
           padding: open ? "14px 14px 4px" : "14px 0 4px",
           flexShrink: 0,
         }}
       >
         <Image
-          src="/CAPTURE 1.png"
-          alt="MICROECHEF"
-          width={130}
-          height={44}
+          src="/millamirissa.png"
+          alt="Mila Mirissa"
+          width={160}
+          height={160}
           priority
           style={{
             objectFit: "contain",
-            width: open ? 130 : 34,
+            width: open ? 108 : 38,
             height: "auto",
           }}
         />
@@ -608,7 +626,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                                   width: 4,
                                   height: 4,
                                   borderRadius: "50%",
-                                  background: "rgba(255,255,255,0.25)",
+                                  background: "rgba(104,72,48,0.30)",
                                   flexShrink: 0,
                                 }}
                               />
@@ -665,15 +683,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
                                       flexShrink: 0,
                                       border: `1px solid ${
                                         active
-                                          ? "rgba(235,155,70,0.35)"
-                                          : "rgba(255,255,255,0.10)"
+                                          ? "rgba(104,72,48,0.35)"
+                                          : "rgba(104,72,48,0.18)"
                                       }`,
                                       background: active
-                                        ? "rgba(235,155,70,0.10)"
-                                        : "rgba(255,255,255,0.04)",
+                                        ? "rgba(104,72,48,0.10)"
+                                        : "rgba(104,72,48,0.05)",
                                       color: active
-                                        ? "#eb9b46"
-                                        : "rgba(255,255,255,0.55)",
+                                        ? "#684830"
+                                        : "#6B543E",
                                     }}
                                   >
                                     <IconFileText size={11} strokeWidth={2} />
@@ -715,10 +733,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const mobileNav = (
     <nav className="sh-mob-nav">
       {NAV.map((item) => {
-        const active =
-          item.path === "/dashboard"
-            ? pathname.startsWith("/dashboard")
-            : pathname.startsWith("/reports");
+        const active = item.path
+          ? pathname.startsWith(item.path)
+          : pathname.startsWith("/reports");
         return (
           <button
             key={item.key}
@@ -738,7 +755,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#fff" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#FCF7F3" }}>
       <style>{SHELL_CSS}</style>
 
       {sidebar}
@@ -750,8 +767,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
         style={{
           flex: 1,
           minWidth: 0,
-          background: "#ffffff",
-          color: "#0f172a",
+          background: "#FCF7F3",
+          color: "#45301D",
           display: "flex",
           flexDirection: "column",
         }}

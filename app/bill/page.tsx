@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-import MicroChefLoader from "@/components/MicroChefLoader";
+import MilaMirissaLoader from "@/components/MilaMirissaLoader";
 import CupMascot from "@/components/CupMascot";
 import { QRCodeSVG } from "qrcode.react";
 import { getBillTotalRows, STATUS_META, RESTAURANT_INFO, statusReceiptWord, type Bill } from "@/lib/billFormat";
@@ -19,9 +19,9 @@ const promotions = [
     code: "CHEF15",
     codeLabel: "Code:",
     cta: "Claim Offer",
-    color: "#FF8C00",
-    bg: "rgba(255,140,0,0.08)",
-    border: "rgba(255,140,0,0.25)",
+    color: "#684830",
+    bg: "rgba(114,86,60,0.08)",
+    border: "rgba(114,86,60,0.25)",
     link: undefined as string | undefined,
   },
   {
@@ -33,9 +33,9 @@ const promotions = [
     code: "REVIEW5",
     codeLabel: "Code:",
     cta: "Leave a Google Review →",
-    color: "#003D9B",
-    bg: "rgba(0,61,155,0.06)",
-    border: "rgba(0,61,155,0.2)",
+    color: "#907860",
+    bg: "rgba(163,140,119,0.10)",
+    border: "rgba(163,140,119,0.30)",
     link: "https://google.com",
   },
   {
@@ -47,9 +47,9 @@ const promotions = [
     code: "FAMILY500",
     codeLabel: "Code:",
     cta: "Claim Offer",
-    color: "#16a34a",
-    bg: "rgba(22,163,74,0.06)",
-    border: "rgba(22,163,74,0.2)",
+    color: "#907860",
+    bg: "rgba(150,121,90,0.10)",
+    border: "rgba(150,121,90,0.30)",
     link: undefined as string | undefined,
   },
 ];
@@ -152,7 +152,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
           <div
             style={{
               height: 5,
-              background: `linear-gradient(90deg, #003D9B 0%, ${promo.color} 100%)`,
+              background: `linear-gradient(90deg, #684830 0%, ${promo.color} 100%)`,
               transition: "background 0.5s ease",
             }}
           />
@@ -187,7 +187,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path
                 d="M1 1L11 11M11 1L1 11"
-                stroke="#434654"
+                stroke="#6B543E"
                 strokeWidth="2"
                 strokeLinecap="round"
               />
@@ -238,7 +238,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               </p>
               <p
                 style={{
-                  color: "#191C1E",
+                  color: "#45301D",
                   fontSize: 17,
                   fontFamily: "Montserrat, sans-serif",
                   fontWeight: 600,
@@ -253,7 +253,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             {/* Description */}
             <p
               style={{
-                color: "#434654",
+                color: "#6B543E",
                 fontSize: 14,
                 fontFamily: "Inter, sans-serif",
                 fontWeight: 400,
@@ -270,8 +270,8 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                background: "rgba(0,61,155,0.05)",
-                border: "1px dashed rgba(0,61,155,0.18)",
+                background: "rgba(114,86,60,0.05)",
+                border: "1px dashed rgba(114,86,60,0.18)",
                 borderRadius: 10,
                 padding: "10px 14px",
                 marginBottom: 22,
@@ -279,7 +279,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
             >
               <span
                 style={{
-                  color: "#434654",
+                  color: "#6B543E",
                   fontSize: 12,
                   fontFamily: "Inter, sans-serif",
                   fontWeight: 500,
@@ -289,7 +289,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               </span>
               <span
                 style={{
-                  color: "#003D9B",
+                  color: "#684830",
                   fontSize: 16,
                   fontFamily: "'Courier New', monospace",
                   fontWeight: 800,
@@ -302,7 +302,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => handleCopy(promo.code)}
                 style={{
-                  background: copying ? "#16a34a" : "#003D9B",
+                  background: copying ? "#16a34a" : "#684830",
                   border: "none",
                   borderRadius: 7,
                   padding: "5px 12px",
@@ -400,7 +400,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
                   width: idx === current ? 24 : 8,
                   height: 8,
                   borderRadius: 9999,
-                  background: idx === current ? promo.color : "#C3C6D6",
+                  background: idx === current ? promo.color : "#C8B8A8",
                   border: "none",
                   cursor: "pointer",
                   padding: 0,
@@ -415,7 +415,7 @@ function PromoPopup({ onClose }: { onClose: () => void }) {
           <div
             style={{
               height: 3,
-              background: "#F0F0F0",
+              background: "#E4D6BF",
               position: "relative",
               overflow: "hidden",
             }}
@@ -461,10 +461,10 @@ function PromoCards() {
     >
       {/* Section Title */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ flex: 1, height: 1, background: "#C3C6D6" }} />
+        <div style={{ flex: 1, height: 1, background: "#C8B8A8" }} />
         <p
           style={{
-            color: "#434654",
+            color: "#6B543E",
             fontSize: 12,
             fontFamily: "Inter, sans-serif",
             fontWeight: 600,
@@ -475,7 +475,7 @@ function PromoCards() {
         >
           🎉 Exclusive Offers For You
         </p>
-        <div style={{ flex: 1, height: 1, background: "#C3C6D6" }} />
+        <div style={{ flex: 1, height: 1, background: "#C8B8A8" }} />
       </div>
 
       {promotions.map((promo) => (
@@ -485,7 +485,7 @@ function PromoCards() {
             width: "100%",
             background: "rgba(255,255,255,0.92)",
             borderRadius: 12,
-            outline: "1px #EEEEEE solid",
+            outline: "1px #E4D6BF solid",
             outlineOffset: -1,
             boxShadow: "0 4px 16px rgba(0,82,204,0.05)",
             overflow: "hidden",
@@ -531,7 +531,7 @@ function PromoCards() {
                   </div>
                   <p
                     style={{
-                      color: "#191C1E",
+                      color: "#45301D",
                       fontSize: 16,
                       fontFamily: "Montserrat, sans-serif",
                       fontWeight: 700,
@@ -544,7 +544,7 @@ function PromoCards() {
                   </p>
                   <p
                     style={{
-                      color: "#434654",
+                      color: "#6B543E",
                       fontSize: 12,
                       fontFamily: "Inter, sans-serif",
                       fontWeight: 400,
@@ -559,15 +559,15 @@ function PromoCards() {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 8,
-                      background: "rgba(0,61,155,0.05)",
-                      border: "1px dashed rgba(0,61,155,0.15)",
+                      background: "rgba(114,86,60,0.05)",
+                      border: "1px dashed rgba(114,86,60,0.15)",
                       borderRadius: 7,
                       padding: "4px 10px",
                     }}
                   >
                     <span
                       style={{
-                        color: "#434654",
+                        color: "#6B543E",
                         fontSize: 11,
                         fontFamily: "Inter, sans-serif",
                         fontWeight: 500,
@@ -577,7 +577,7 @@ function PromoCards() {
                     </span>
                     <span
                       style={{
-                        color: "#003D9B",
+                        color: "#684830",
                         fontSize: 13,
                         fontFamily: "'Courier New', monospace",
                         fontWeight: 800,
@@ -590,7 +590,7 @@ function PromoCards() {
                       onClick={() => handleCopy(promo.code)}
                       style={{
                         background:
-                          copied === promo.code ? "#16a34a" : "#003D9B",
+                          copied === promo.code ? "#16a34a" : "#684830",
                         border: "none",
                         borderRadius: 5,
                         padding: "2px 8px",
@@ -781,7 +781,7 @@ function PDFDownloadButton({ bill }: { bill: Bill }) {
         alignItems: "center",
         gap: 8,
         padding: "13px 24px",
-        background: "#1a1a1a",
+        background: "#45301D",
         color: "#ffffff",
         border: "none",
         borderRadius: 8,
@@ -800,9 +800,9 @@ function PDFDownloadButton({ bill }: { bill: Bill }) {
 
 const SANS = 'Inter, "Helvetica Neue", Arial, sans-serif';
 
-const INK = "#1a1a1a";
-const INK_SOFT = "#555555";
-const DASH_C = "#2b2b2b";
+const INK = "#45301D";
+const INK_SOFT = "#6B543E";
+const DASH_C = "#684830";
 
 const fmtAmt = (n: number) =>
   n.toLocaleString("en-LK", {
@@ -835,12 +835,12 @@ function ReceiptLoader({ text }: { text: string }) {
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
-        background: "#e9e9ee",
+        background: "#FCF7F3",
         fontFamily: SANS,
         overflow: "hidden",
       }}
     >
-      <MicroChefLoader />
+      <MilaMirissaLoader />
       <p style={{ marginTop: 24, color: "#333", fontSize: 14, fontWeight: 600 }}>
         {text}
       </p>
@@ -896,7 +896,7 @@ function BillContent() {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          background: "#e9e9ee",
+          background: "#FCF7F3",
           padding: 20,
           fontFamily: SANS,
         }}
@@ -977,7 +977,7 @@ function BillContent() {
         style={{
           width: "100%",
           minHeight: "100vh",
-          background: "#e9e9ee",
+          background: "#FCF7F3",
           padding: "30px 12px 60px",
           fontFamily: SANS,
         }}
@@ -999,8 +999,8 @@ function BillContent() {
             <Image
               src={RESTAURANT_INFO.logoPath}
               alt={RESTAURANT_INFO.name}
-              width={150}
-              height={75}
+              width={110}
+              height={110}
               style={{
                 objectFit: "contain",
                 margin: "0 auto 6px",
@@ -1122,7 +1122,7 @@ function BillContent() {
                   {bill.customerPhone && (
                     <a
                       href={`tel:${bill.customerPhone}`}
-                      style={{ color: "#1a0dab" }}
+                      style={{ color: "#684830" }}
                     >
                       ({bill.customerPhone})
                     </a>
@@ -1172,9 +1172,9 @@ function BillContent() {
               letterSpacing: 0.5,
               color: INK,
               padding: "7px 10px",
-              background: "#f7f6f0",
-              borderTop: "1px solid #e5e3da",
-              borderBottom: "1px solid #e5e3da",
+              background: "#F0E8D8",
+              borderTop: "1px solid #E4D6BF",
+              borderBottom: "1px solid #E4D6BF",
               borderRadius: 4,
               marginBottom: 12,
             }}
@@ -1416,7 +1416,7 @@ export default function BillPage() {
             justifyContent: "center",
             alignItems: "center",
             background:
-              "linear-gradient(135deg, #F0F4FF 0%, #F8F9FB 50%, #FFF8F0 100%)",
+              "linear-gradient(135deg, #F0E8D8 0%, #FCF7F3 50%, #FCF7F3 100%)",
           }}
         >
           <div
@@ -1427,7 +1427,7 @@ export default function BillPage() {
               alignItems: "center",
             }}
           >
-            <MicroChefLoader />
+            <MilaMirissaLoader />
             <p
               style={{
                 marginTop: 24,

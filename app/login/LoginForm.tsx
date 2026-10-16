@@ -3,7 +3,7 @@
 // ============================================================
 // LOCATION: app/login/LoginForm.tsx
 // ALUTH FILE — mekamama create karanna
-// Login form — MicroEChef branding, dark gradient bg
+// Login form — Mila Mirissa branding, dark gradient bg
 // ============================================================
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -47,12 +47,12 @@ export default function LoginForm() {
     width: "100%",
     boxSizing: "border-box",
     height: 44,
-    border: "1px solid #dbe3ec",
+    border: "1px solid #E4D6BF",
     borderRadius: 9,
     padding: "0 12px",
     fontSize: 13.5,
-    color: "#0f172a",
-    background: "#f8fafc",
+    color: "#45301D",
+    background: "#FCF7F3",
     outline: "none",
     fontFamily: "Inter, sans-serif",
   };
@@ -64,7 +64,7 @@ export default function LoginForm() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "linear-gradient(160deg,#1c2f37 0%,#111e25 100%)",
+        background: "linear-gradient(160deg,#FCF7F3 0%,#F0E8D8 100%)",
         padding: 20,
         fontFamily: "Inter, sans-serif",
       }}
@@ -83,10 +83,10 @@ export default function LoginForm() {
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/CAPTURE 1.png"
-            alt="MicroEChef"
+            src="/millamirissa.png"
+            alt="Mila Mirissa"
             style={{
-              height: 46,
+              height: 84,
               objectFit: "contain",
               margin: "0 auto 10px",
               display: "block",
@@ -97,13 +97,13 @@ export default function LoginForm() {
               margin: 0,
               fontSize: 19,
               fontWeight: 800,
-              color: "#0f172a",
+              color: "#45301D",
               letterSpacing: -0.2,
             }}
           >
             Sign in
           </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748b" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B543E" }}>
             Reports &amp; dashboard access
           </p>
         </div>
@@ -131,7 +131,7 @@ export default function LoginForm() {
               display: "block",
               fontSize: 11.5,
               fontWeight: 700,
-              color: "#475569",
+              color: "#6B543E",
               marginBottom: 5,
             }}
           >
@@ -150,7 +150,7 @@ export default function LoginForm() {
               display: "block",
               fontSize: 11.5,
               fontWeight: 700,
-              color: "#475569",
+              color: "#6B543E",
               marginBottom: 5,
             }}
           >
@@ -175,7 +175,7 @@ export default function LoginForm() {
                 border: "none",
                 background: "transparent",
                 cursor: "pointer",
-                color: "#64748b",
+                color: "#6B543E",
                 padding: 4,
                 display: "flex",
               }}
@@ -203,7 +203,7 @@ export default function LoginForm() {
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                color: "#1d4ed8",
+                color: "#684830",
                 textDecoration: "none",
               }}
             >
@@ -216,10 +216,10 @@ export default function LoginForm() {
             disabled={busy || !loginName || !password}
             style={{
               width: "100%",
-              height: 46,
+              height: 84,
               border: "none",
               borderRadius: 10,
-              background: "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)",
+              background: "linear-gradient(135deg,#45301D 0%,#684830 100%)",
               color: "#fff",
               fontSize: 14,
               fontWeight: 700,
@@ -237,7 +237,7 @@ export default function LoginForm() {
             margin: "18px 0 0",
             textAlign: "center",
             fontSize: 11,
-            color: "#94a3b8",
+            color: "#907860",
           }}
         >
           Bill links open directly — no sign-in needed.

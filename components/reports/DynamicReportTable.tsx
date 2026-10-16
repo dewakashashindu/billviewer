@@ -90,21 +90,21 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
     fontWeight: 700,
     letterSpacing: 0.6,
     textTransform: "uppercase" as const,
-    color: "#1e3a8a",
+    color: "#684830",
     whiteSpace: "nowrap" as const,
     cursor: "pointer",
     userSelect: "none" as const,
     textAlign: isNum(col.type) ? ("right" as const) : ("left" as const),
-    borderRight: "1px solid #bfdbfe",
+    borderRight: "1px solid #C8B8A8",
   });
 
   const td = (col: ColumnConfig) => ({
     padding: "10px 14px",
     fontSize: 12.5,
-    color: "#1e293b",
+    color: "#45301D",
     whiteSpace: "nowrap" as const,
     textAlign: isNum(col.type) ? ("right" as const) : ("left" as const),
-    borderRight: "1px solid #f1f5f9",
+    borderRight: "1px solid #FCF7F3",
     fontVariantNumeric: isNum(col.type) ? ("tabular-nums" as const) : undefined,
   });
 
@@ -113,11 +113,11 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
       {/* Table card */}
       <div
         style={{
-          border: "1px solid #e2e8f0",
+          border: "1px solid #E4D6BF",
           borderRadius: 14,
           overflow: "hidden",
           boxShadow:
-            "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+            "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
           background: "#fff",
         }}
       >
@@ -131,7 +131,7 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
           >
             <thead>
               {/* ✅ Light-blue header (POS report eke wage) */}
-              <tr style={{ background: "#dbeafe" }}>
+              <tr style={{ background: "#E4D6BF" }}>
                 {columns.map((col: ColumnConfig, i: number) => (
                   <th
                     key={col.accessorKey}
@@ -182,7 +182,7 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
                         display: "flex",
                         justifyContent: "center",
                         marginBottom: 10,
-                        color: "#cbd5e1",
+                        color: "#C8B8A8",
                       }}
                     >
                       <IconInbox size={30} strokeWidth={1.6} />
@@ -192,7 +192,7 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
                         margin: 0,
                         fontSize: 13.5,
                         fontWeight: 600,
-                        color: "#334155",
+                        color: "#684830",
                       }}
                     >
                       No report data available.
@@ -201,7 +201,7 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
                       style={{
                         margin: "4px 0 0",
                         fontSize: 12,
-                        color: "#94a3b8",
+                        color: "#907860",
                       }}
                     >
                       Try changing the date range or clearing the search.
@@ -214,16 +214,16 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
                     key={idx}
                     style={{
                       background:
-                        idx % 2 === 1 ? "#f8fafc" : "#fff",
-                      borderBottom: "1px solid #f1f5f9",
+                        idx % 2 === 1 ? "#FCF7F3" : "#fff",
+                      borderBottom: "1px solid #FCF7F3",
                       transition: "background 0.12s",
                     }}
                     onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = "#eef4ff")
+                      (e.currentTarget.style.background = "#F0E8D8")
                     }
                     onMouseLeave={(e) =>
                       (e.currentTarget.style.background =
-                        idx % 2 === 1 ? "#f8fafc" : "#fff")
+                        idx % 2 === 1 ? "#FCF7F3" : "#fff")
                     }
                   >
                     {columns.map((col: ColumnConfig) => (
@@ -239,8 +239,8 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
               <tfoot>
                 <tr
                   style={{
-                    background: "#f1f5f9",
-                    borderTop: "2px solid #cbd5e1",
+                    background: "#FCF7F3",
+                    borderTop: "2px solid #C8B8A8",
                   }}
                 >
                   {columns.map((col: ColumnConfig, i: number) => (
@@ -249,8 +249,8 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
                       style={{
                         ...td(col),
                         fontWeight: 700,
-                        color: "#0f172a",
-                        background: "#f1f5f9",
+                        color: "#45301D",
+                        background: "#FCF7F3",
                       }}
                     >
                       {i === 0
@@ -273,10 +273,10 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
             justifyContent: "space-between",
             alignItems: "center",
             padding: "9px 14px",
-            background: "#f8fafc",
-            borderTop: "1px solid #e2e8f0",
+            background: "#FCF7F3",
+            borderTop: "1px solid #E4D6BF",
             fontSize: 11,
-            color: "#64748b",
+            color: "#6B543E",
           }}
         >
           <span>

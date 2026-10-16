@@ -11,7 +11,7 @@ const fmt = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const styles = StyleSheet.create({
-  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#45301D" },
   title: { textAlign: "center", fontSize: 12, fontFamily: "Helvetica-Bold", marginBottom: 6 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   range: { marginBottom: 4 },
@@ -24,25 +24,25 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   head: {
     flexDirection: "row",
     padding: "3 6",
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     fontSize: 8,
     marginTop: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
-  row: { flexDirection: "row", padding: "1.5 6", borderBottom: 0.4, borderColor: "#e3e3e3" },
+  row: { flexDirection: "row", padding: "1.5 6", borderBottom: 0.4, borderColor: "#E4D6BF" },
   totRow: {
     flexDirection: "row",
     padding: "3 6",
     fontFamily: "Helvetica-Bold",
     borderTopWidth: 1,
-    borderTopColor: "#1a1a1a",
+    borderTopColor: "#45301D",
     marginTop: 2,
   },
   grand: {
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     fontSize: 10,
     borderTopWidth: 2,
-    borderTopColor: "#1a1a1a",
+    borderTopColor: "#45301D",
     marginTop: 6,
     paddingTop: 4,
   },

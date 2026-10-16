@@ -9,7 +9,7 @@
 // ============================================================
 import type { ChartModel } from "./reportCharts";
 
-const COLORS = ["#1d4ed8", "#60a5fa", "#0d2b57", "#93c5fd", "#3b82f6", "#bfdbfe", "#2563eb", "#64748b"];
+const COLORS = ["#684830", "#907860", "#45301D", "#C8B8A8", "#B49B7E", "#A98F70", "#7C6148", "#D9C7AC"];
 
 const fmtVal = (v: number, unit: ChartModel["unit"]) =>
   unit === "currency"
@@ -24,7 +24,7 @@ function Legend({ chart }: { chart: ChartModel }) {
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
       {chart.series.map((s, i) => (
-        <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "#475569", fontFamily: "Inter, sans-serif", fontWeight: 600 }}>
+        <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "#6B543E", fontFamily: "Inter, sans-serif", fontWeight: 600 }}>
           <span style={{ width: 9, height: 9, borderRadius: 2, background: COLORS[i % COLORS.length], display: "inline-block" }} />
           {s}
         </span>
@@ -48,10 +48,10 @@ function BarsChart({ chart }: { chart: ChartModel }) {
               left: 0,
               right: 0,
               top: `${(i / 4) * 160}px`,
-              borderTop: i === 4 ? "1px solid #94a3b8" : "1px dashed #e2e8f0",
+              borderTop: i === 4 ? "1px solid #907860" : "1px dashed #E4D6BF",
             }}
           >
-            <span style={{ position: "absolute", left: 0, top: -7, fontSize: 9, color: "#94a3b8", fontFamily: "Inter, sans-serif", background: "#fff", paddingRight: 4 }}>
+            <span style={{ position: "absolute", left: 0, top: -7, fontSize: 9, color: "#907860", fontFamily: "Inter, sans-serif", background: "#fff", paddingRight: 4 }}>
               {shortTick(max * (1 - i / 4))}
             </span>
           </div>
@@ -76,7 +76,7 @@ function BarsChart({ chart }: { chart: ChartModel }) {
         </div>
         <div style={{ display: "flex", gap: 4, marginLeft: 40, paddingLeft: 4, marginTop: 4 }}>
           {chart.points.map((p, pi) => (
-            <div key={p.label} style={{ flex: 1, textAlign: "center", fontSize: 8.5, color: "#64748b", fontFamily: "Inter, sans-serif", overflow: "hidden", whiteSpace: "nowrap" }}>
+            <div key={p.label} style={{ flex: 1, textAlign: "center", fontSize: 8.5, color: "#6B543E", fontFamily: "Inter, sans-serif", overflow: "hidden", whiteSpace: "nowrap" }}>
               {pi % every === 0 ? p.label : ""}
             </div>
           ))}
@@ -115,7 +115,7 @@ function PieChart({ chart }: { chart: ChartModel }) {
           </path>
         ))}
         <circle cx={C} cy={C} r={30} fill="#fff" />
-        <text x={C} y={C + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0d2b57" fontFamily="Inter, sans-serif">
+        <text x={C} y={C + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#684830" fontFamily="Inter, sans-serif">
           {shortTick(total)}
         </text>
       </svg>
@@ -125,10 +125,10 @@ function PieChart({ chart }: { chart: ChartModel }) {
           .sort((a, b) => b.frac - a.frac)
           .slice(0, 8)
           .map((a) => (
-            <div key={a.p.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "#334155", fontFamily: "Inter, sans-serif" }}>
+            <div key={a.p.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "#684830", fontFamily: "Inter, sans-serif" }}>
               <span style={{ width: 9, height: 9, borderRadius: 2, background: a.color, flexShrink: 0 }} />
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{a.p.label}</span>
-              <span style={{ color: "#64748b", fontVariantNumeric: "tabular-nums" }}>{Math.round(a.frac * 100)}%</span>
+              <span style={{ color: "#6B543E", fontVariantNumeric: "tabular-nums" }}>{Math.round(a.frac * 100)}%</span>
             </div>
           ))}
       </div>
@@ -142,13 +142,13 @@ function HBarsChart({ chart }: { chart: ChartModel }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       {chart.points.map((p, i) => (
         <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span title={p.label} style={{ width: 130, fontSize: 10.5, color: "#334155", fontFamily: "Inter, sans-serif", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>
+          <span title={p.label} style={{ width: 130, fontSize: 10.5, color: "#684830", fontFamily: "Inter, sans-serif", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>
             {p.label}
           </span>
-          <div style={{ flex: 1, height: 14, background: "#eff6ff", borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ flex: 1, height: 14, background: "#F0E8D8", borderRadius: 4, overflow: "hidden" }}>
             <div style={{ width: `${(p.values[0] / max) * 100}%`, height: "100%", background: COLORS[i % 2 === 0 ? 0 : 2], borderRadius: 4 }} title={`${p.label}: ${fmtVal(p.values[0], chart.unit)}`} />
           </div>
-          <span style={{ width: 90, textAlign: "right", fontSize: 10.5, color: "#0d2b57", fontFamily: "Inter, sans-serif", fontWeight: 700, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+          <span style={{ width: 90, textAlign: "right", fontSize: 10.5, color: "#684830", fontFamily: "Inter, sans-serif", fontWeight: 700, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
             {fmtVal(p.values[0], chart.unit)}
           </span>
         </div>
@@ -160,13 +160,13 @@ function HBarsChart({ chart }: { chart: ChartModel }) {
 export default function ReportChartsView({ charts, title }: { charts: ChartModel[]; title: string }) {
   if (charts.length === 0)
     return (
-      <p style={{ padding: 40, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 40, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No chart data for this report yet.
       </p>
     );
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b", fontFamily: "Inter, sans-serif" }}>
+      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#6B543E", fontFamily: "Inter, sans-serif" }}>
         {title} — charts from this report's data
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
@@ -175,14 +175,14 @@ export default function ReportChartsView({ charts, title }: { charts: ChartModel
             key={c.id}
             style={{
               background: "#fff",
-              border: "1px solid #e2e8f0",
+              border: "1px solid #E4D6BF",
               borderRadius: 10,
               padding: "12px 14px",
               flex: c.kind === "bars" ? "2 1 420px" : "1 1 320px",
               minWidth: 0,
             }}
           >
-            <p style={{ margin: "0 0 10px", fontSize: 12.5, fontWeight: 700, color: "#0d2b57", fontFamily: "Inter, sans-serif" }}>
+            <p style={{ margin: "0 0 10px", fontSize: 12.5, fontWeight: 700, color: "#684830", fontFamily: "Inter, sans-serif" }}>
               {c.title}
             </p>
             {c.kind === "bars" ? <BarsChart chart={c} /> : c.kind === "pie" ? <PieChart chart={c} /> : <HBarsChart chart={c} />}

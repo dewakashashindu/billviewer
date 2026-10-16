@@ -96,12 +96,12 @@ export function filterKot(d: KotData, q0: string): KotData {
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r2sum = (rows: KotRow[]) => r2(rows.reduce((a, r) => a + (r.qty || 0), 0));
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -109,7 +109,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function KotBotReport({ report }: { report: KotData }) {
   if ((report.locations ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No KOT/BOT issues for this range.
       </p>
     );
@@ -117,9 +117,9 @@ export default function KotBotReport({ report }: { report: KotData }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <div
         style={{
-          background: "#dbeafe",
-          border: "1px solid #93c5fd",
-          color: "#1e3a8a",
+          background: "#E4D6BF",
+          border: "1px solid #C8B8A8",
+          color: "#684830",
           borderRadius: 8,
           padding: "8px 12px",
           display: "flex",
@@ -137,8 +137,9 @@ export default function KotBotReport({ report }: { report: KotData }) {
         <div key={l.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "7px 12px",
               display: "flex",
@@ -156,8 +157,8 @@ export default function KotBotReport({ report }: { report: KotData }) {
             <div key={s.server} style={{ marginTop: 6 }}>
               <div
                 style={{
-                  background: "#e2e8f0",
-                  color: "#0f172a",
+                  background: "#E4D6BF",
+                  color: "#45301D",
                   borderRadius: 6,
                   padding: "4px 10px",
                   fontSize: 11.5,
@@ -171,9 +172,9 @@ export default function KotBotReport({ report }: { report: KotData }) {
                 <div key={t.orderTyp} style={{ marginTop: 6 }}>
                   <div
                     style={{
-                      background: "#eff6ff",
-                      border: "1px solid #bfdbfe",
-                      color: "#1e40af",
+                      background: "#F0E8D8",
+                      border: "1px solid #C8B8A8",
+                      color: "#684830",
                       borderRadius: 6,
                       padding: "4px 10px",
                       fontSize: 11,
@@ -190,7 +191,7 @@ export default function KotBotReport({ report }: { report: KotData }) {
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
                     <thead>
-                      <tr style={{ background: "#eff6ff" }}>
+                      <tr style={{ background: "#F0E8D8" }}>
                         <th style={{ ...cell, textAlign: "left", width: 70, fontWeight: 700 }}>ORDNO</th>
                         <th style={{ ...cell, textAlign: "left", width: 85, fontWeight: 700 }}>KOT/BOT Date</th>
                         <th style={{ ...cell, textAlign: "left", width: 40, fontWeight: 700 }}>Type</th>
@@ -206,7 +207,7 @@ export default function KotBotReport({ report }: { report: KotData }) {
                     </thead>
                     <tbody>
                       {t.rows.map((r, i) => (
-                        <tr key={`${r.ordNo}-${i}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                        <tr key={`${r.ordNo}-${i}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                           <td style={{ ...cell, fontWeight: 700 }}>{r.ordNo}</td>
                           <td style={cell}>{r.kbDate}</td>
                           <td style={{ ...cell, fontWeight: 700 }}>{r.type}</td>
@@ -230,7 +231,7 @@ export default function KotBotReport({ report }: { report: KotData }) {
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -253,21 +254,21 @@ export default function KotBotReport({ report }: { report: KotData }) {
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 4 },
   filtered: { textAlign: "center", fontSize: 9, marginBottom: 6 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
   range: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 8, marginBottom: 4 },
-  location: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 12, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#1a1a1a" },
-  serverBand: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 6, marginBottom: 3, backgroundColor: "#e5e5e5", padding: 3 },
-  typeBand: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 4, marginBottom: 3, backgroundColor: "#f5f5f5", padding: 3 },
+  location: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 12, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#45301D" },
+  serverBand: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 6, marginBottom: 3, backgroundColor: "#E4D6BF", padding: 3 },
+  typeBand: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 4, marginBottom: 3, backgroundColor: "#FCF7F3", padding: 3 },
   row: { flexDirection: "row" },
-  th: { backgroundColor: "#efefef", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 7, borderRightWidth: 1, borderRightColor: "#cccccc", borderBottomWidth: 1, borderBottomColor: "#999999" },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  th: { backgroundColor: "#E4D6BF", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 7, borderRightWidth: 1, borderRightColor: "#C8B8A8", borderBottomWidth: 1, borderBottomColor: "#907860" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 const KW = { ord: 40, kbdate: 52, type: 22, billdate: 50, billord: 40, billtype: 46, time: 52, user: 52, qty: 28, remark: 62 };
 

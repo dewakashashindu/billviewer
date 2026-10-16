@@ -57,12 +57,12 @@ export function filterHourly(d: HourlySalesData, q0: string): HourlySalesData {
   return { ...d, locationGroups };
 }
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -70,7 +70,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function HourlySalesReport({ report }: { report: HourlySalesData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         {report.slotsDefined
           ? "No sales found in the defined time slots for this range."
           : "No time slots defined (Tbl_TimeRange empty) and no default slot data for this range."}
@@ -83,8 +83,9 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
           <div key={l.locCode}>
             <div
               style={{
-                background: NAVY,
-                color: "#fff",
+                background: "#F0E8D8",
+                color: "#45301D",
+                border: "1px solid #E4D6BF",
                 borderRadius: 8,
                 padding: "8px 12px",
                 display: "flex",
@@ -100,7 +101,7 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
                 <IconPin size={13} />
                 {l.locCode} — {l.locName}
                 {l.peakLabel ? (
-                  <span style={{ background: "#1d4ed8", borderRadius: 999, padding: "2px 9px", fontSize: 10.5, fontWeight: 800 }}>
+                  <span style={{ background: "#684830", color: "#fff", borderRadius: 999, padding: "2px 9px", fontSize: 10.5, fontWeight: 800 }}>
                     PEAK {l.peakLabel}
                   </span>
                 ) : null}
@@ -109,7 +110,7 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
               <thead>
-                <tr style={{ background: "#eff6ff" }}>
+                <tr style={{ background: "#F0E8D8" }}>
                   <th style={{ ...cell, textAlign: "left", width: 190, fontWeight: 700 }}>Time Range</th>
                   <th style={{ ...cell, textAlign: "right", width: 90, fontWeight: 700 }}>No. of Sales</th>
                   <th style={{ ...cell, textAlign: "right", width: 140, fontWeight: 700 }}>Sales Amount</th>
@@ -117,16 +118,16 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
               </thead>
               <tbody>
                 {l.rows.map((r, i) => (
-                  <tr key={`${r.order}-${r.from}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                  <tr key={`${r.order}-${r.from}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                     <td style={{ ...cell, fontWeight: 700 }}>{r.label}</td>
                     <td style={num}>{r.bills.toLocaleString("en-US")}</td>
-                    <td style={{ ...num, fontWeight: r.label === l.peakLabel ? 800 : 400, color: r.label === l.peakLabel ? "#1d4ed8" : "#1e293b" }}>
+                    <td style={{ ...num, fontWeight: r.label === l.peakLabel ? 800 : 400, color: r.label === l.peakLabel ? "#684830" : "#45301D" }}>
                       {fmtAmt(r.value)}
                     </td>
                   </tr>
                 ))}
-                <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                  <td style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Location Total</td>
+                <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                  <td style={{ ...cell, fontWeight: 800, color: "#684830" }}>Location Total</td>
                   <td style={{ ...num, fontWeight: 800 }}>{l.locBills.toLocaleString("en-US")}</td>
                   <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(l.locTotal)}</td>
                 </tr>
@@ -137,7 +138,7 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
       })}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -160,7 +161,7 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 10 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
@@ -172,24 +173,24 @@ const pStyles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     padding: 4,
     fontSize: 8,
     borderRightWidth: 1,
-    borderRightColor: "#cccccc",
+    borderRightColor: "#C8B8A8",
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#1a1a1a", marginTop: 2 },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 const HW = { range: 150, bills: 80, value: 110 };
 

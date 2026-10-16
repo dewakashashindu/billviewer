@@ -112,18 +112,18 @@ export function filterSalesDetails(
   };
 }
 
-const grad = "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)";
+const grad = "linear-gradient(135deg,#45301D 0%,#684830 100%)";
 
 // ✅ Light-blue header (POS report eke wage) — dark gradient eka ain karala
 const th: CSSProperties = {
-  background: "#dbeafe",
-  color: "#1e3a8a",
+  background: "#E4D6BF",
+  color: "#684830",
   padding: "9px 12px",
   fontSize: 10,
   fontWeight: 700,
   letterSpacing: 0.6,
   textTransform: "uppercase",
-  borderRight: "1px solid #bfdbfe",
+  borderRight: "1px solid #C8B8A8",
   whiteSpace: "nowrap",
   textAlign: "left",
 };
@@ -131,8 +131,8 @@ const th: CSSProperties = {
 const td: CSSProperties = {
   padding: "7px 12px",
   fontSize: 12,
-  color: "#1e293b",
-  borderBottom: "1px solid #f1f5f9",
+  color: "#45301D",
+  borderBottom: "1px solid #FCF7F3",
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 };
@@ -153,11 +153,11 @@ export default function SalesDetailsReport({
       <div style={{ padding: "22px 24px 28px", fontFamily: "Inter, sans-serif" }}>
         <div
           style={{
-            border: "1px solid #e2e8f0",
+            border: "1px solid #E4D6BF",
             borderRadius: 14,
             background: "#ffffff",
             boxShadow:
-              "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+              "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
             padding: "46px 20px",
             textAlign: "center",
           }}
@@ -167,7 +167,7 @@ export default function SalesDetailsReport({
               display: "flex",
               justifyContent: "center",
               marginBottom: 10,
-              color: "#cbd5e1",
+              color: "#C8B8A8",
             }}
           >
             <IconInbox size={30} strokeWidth={1.6} />
@@ -177,12 +177,12 @@ export default function SalesDetailsReport({
               margin: 0,
               fontSize: 13.5,
               fontWeight: 600,
-              color: "#334155",
+              color: "#684830",
             }}
           >
             No bill details found for the selected date range.
           </p>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#907860" }}>
             Try changing the date range or clearing the search.
           </p>
         </div>
@@ -197,17 +197,17 @@ export default function SalesDetailsReport({
           display: "inline-flex",
           alignItems: "center",
           gap: 5,
-          background: "#f1f5f9",
-          border: "1px solid #e2e8f0",
+          background: "#FCF7F3",
+          border: "1px solid #E4D6BF",
           borderRadius: 999,
           padding: "3px 10px",
           fontSize: 10.5,
           fontWeight: 600,
-          color: "#475569",
+          color: "#6B543E",
           whiteSpace: "nowrap",
         }}
       >
-        <span style={{ color: "#94a3b8", fontWeight: 700 }}>{label}</span>
+        <span style={{ color: "#907860", fontWeight: 700 }}>{label}</span>
         {value}
       </span>
     ) : null;
@@ -219,12 +219,12 @@ export default function SalesDetailsReport({
           key={loc.locCode}
           style={{
             marginTop: 18,
-            border: "1px solid #e2e8f0",
+            border: "1px solid #E4D6BF",
             borderRadius: 14,
             overflow: "hidden",
             background: "#ffffff",
             boxShadow:
-              "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+              "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
           }}
         >
           {/* location bar — orange accent */}
@@ -233,8 +233,9 @@ export default function SalesDetailsReport({
               padding: "11px 16px",
               fontSize: 13,
               fontWeight: 700,
-              color: "#ffffff",
-              background: "linear-gradient(135deg,#c2660e 0%,#eb9b46 100%)",
+              color: "#45301D",
+              background: "#F0E8D8",
+              borderBottom: "1px solid #E4D6BF",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -247,7 +248,7 @@ export default function SalesDetailsReport({
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span
                 style={{
-                  background: "rgba(255,255,255,0.2)",
+                  background: "rgba(104,72,48,0.10)",
                   borderRadius: 999,
                   padding: "3px 10px",
                   fontSize: 10.5,
@@ -260,7 +261,7 @@ export default function SalesDetailsReport({
               </span>
               <span
                 style={{
-                  background: "rgba(255,255,255,0.2)",
+                  background: "rgba(104,72,48,0.10)",
                   borderRadius: 999,
                   padding: "3px 10px",
                   fontSize: 10.5,
@@ -282,9 +283,9 @@ export default function SalesDetailsReport({
               padding: "8px 16px",
               fontSize: 12,
               fontWeight: 700,
-              color: "#334155",
-              background: "#f1f5f9",
-              borderBottom: "1px solid #e2e8f0",
+              color: "#684830",
+              background: "#FCF7F3",
+              borderBottom: "1px solid #E4D6BF",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -298,7 +299,7 @@ export default function SalesDetailsReport({
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#0f172a",
+                color: "#45301D",
                 fontVariantNumeric: "tabular-nums",
               }}
             >
@@ -312,7 +313,7 @@ export default function SalesDetailsReport({
               key={b.billNo}
               style={{
                 padding: "14px 16px 16px",
-                borderBottom: "1px solid #e2e8f0",
+                borderBottom: "1px solid #E4D6BF",
               }}
             >
               {/* bill header — BillNo + meta chips */}
@@ -329,7 +330,7 @@ export default function SalesDetailsReport({
                   style={{
                     fontSize: 13.5,
                     fontWeight: 700,
-                    color: "#0f172a",
+                    color: "#45301D",
                     letterSpacing: 0.2,
                   }}
                 >
@@ -339,7 +340,7 @@ export default function SalesDetailsReport({
                   style={{
                     width: 1,
                     height: 14,
-                    background: "#e2e8f0",
+                    background: "#E4D6BF",
                     display: "inline-block",
                   }}
                 />
@@ -358,7 +359,7 @@ export default function SalesDetailsReport({
                     flex: "1 1 380px",
                     minWidth: 340,
                     overflowX: "auto",
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid #E4D6BF",
                     borderRadius: 10,
                   }}
                 >
@@ -398,7 +399,7 @@ export default function SalesDetailsReport({
                         <tr
                           key={i}
                           style={{
-                            background: i % 2 === 1 ? "#f8fafc" : "#ffffff",
+                            background: i % 2 === 1 ? "#FCF7F3" : "#ffffff",
                           }}
                         >
                           <td
@@ -432,7 +433,7 @@ export default function SalesDetailsReport({
                           <td
                             style={{
                               ...td,
-                              color: "#94a3b8",
+                              color: "#907860",
                               textAlign: "center",
                             }}
                             colSpan={4}
@@ -451,7 +452,7 @@ export default function SalesDetailsReport({
                     flex: "0 1 270px",
                     minWidth: 240,
                     alignSelf: "flex-start",
-                    border: "1.5px solid #0f172a",
+                    border: "1.5px solid #45301D",
                     borderRadius: 10,
                     overflow: "hidden",
                     background: "#ffffff",
@@ -495,14 +496,14 @@ export default function SalesDetailsReport({
                           padding: r.strong ? "8px 12px" : "5.5px 12px",
                           fontSize: r.strong ? 12 : 11.5,
                           fontWeight: r.strong ? 700 : 400,
-                          color: r.strong ? "#0f172a" : "#334155",
-                          background: r.strong ? "#f1f5f9" : "#ffffff",
+                          color: r.strong ? "#45301D" : "#684830",
+                          background: r.strong ? "#FCF7F3" : "#ffffff",
                           borderTop:
                             i === 0
                               ? "none"
                               : r.strong
-                              ? "2px solid #0f172a"
-                              : "1px solid #f1f5f9",
+                              ? "2px solid #45301D"
+                              : "1px solid #FCF7F3",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
@@ -528,9 +529,9 @@ export default function SalesDetailsReport({
               justifyContent: "space-between",
               alignItems: "center",
               padding: "9px 14px",
-              background: "#f8fafc",
+              background: "#FCF7F3",
               fontSize: 11,
-              color: "#64748b",
+              color: "#6B543E",
             }}
           >
             <span>
@@ -565,12 +566,12 @@ export default function SalesDetailsReport({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          boxShadow: "0 4px 14px rgba(15,23,42,0.25)",
+          boxShadow: "0 4px 14px rgba(114,86,60,0.25)",
         }}
       >
         <span
           style={{
-            color: "#e0eafc",
+            color: "#E4D6BF",
             fontSize: 13,
             fontWeight: 700,
             letterSpacing: 0.8,

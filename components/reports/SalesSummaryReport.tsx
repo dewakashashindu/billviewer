@@ -84,8 +84,8 @@ export function filterSalesSummary(
   };
 }
 
-const grad = "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)";
-const locGrad = "linear-gradient(135deg,#7c3aed 0%,#4f46e5 100%)";
+const grad = "linear-gradient(135deg,#45301D 0%,#684830 100%)";
+const locGrad = "linear-gradient(135deg,#907860 0%,#684830 100%)";
 
 // ── column plan — DynamicReportTable ekema widths (fixed layout) ──
 const COLS: {
@@ -105,14 +105,14 @@ const COLS: {
 
 // ✅ Light-blue header (POS report eke wage) — dark gradient eka ain karala
 const thBase: CSSProperties = {
-  background: "#dbeafe",
-  color: "#1e3a8a",
+  background: "#E4D6BF",
+  color: "#684830",
   padding: "11px 14px",
   fontSize: 10.5,
   fontWeight: 700,
   letterSpacing: 0.6,
   textTransform: "uppercase",
-  borderRight: "1px solid #bfdbfe",
+  borderRight: "1px solid #C8B8A8",
   whiteSpace: "nowrap",
   textAlign: "left",
 };
@@ -120,9 +120,9 @@ const thBase: CSSProperties = {
 const tdBase: CSSProperties = {
   padding: "10px 14px",
   fontSize: 12.5,
-  color: "#1e293b",
-  borderRight: "1px solid #f1f5f9",
-  borderBottom: "1px solid #f1f5f9",
+  color: "#45301D",
+  borderRight: "1px solid #FCF7F3",
+  borderBottom: "1px solid #FCF7F3",
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -134,12 +134,12 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
     <div
       style={{
         marginTop: 14,
-        border: "1px solid #e2e8f0",
+        border: "1px solid #E4D6BF",
         borderRadius: 14,
         overflow: "hidden",
         background: "#ffffff",
         boxShadow:
-          "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+          "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
       }}
     >
       {/* gradient date bar */}
@@ -149,8 +149,8 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
           padding: "11px 16px",
           fontSize: 13,
           fontWeight: 700,
-          color: "#e0eafc",
-          background: grad,
+          color: "#45301D",
+          background: "#E9DCC6",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -162,7 +162,8 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
         </span>
         <span
           style={{
-            background: "rgba(255,255,255,0.14)",
+            background: "rgba(104,72,48,0.12)",
+            color: "#684830",
             borderRadius: 999,
             padding: "3px 10px",
             fontSize: 10.5,
@@ -205,15 +206,15 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
               <tr
                 key={`${r.billNo}-${i}`}
                 style={{
-                  background: i % 2 === 1 ? "#f8fafc" : "#ffffff",
+                  background: i % 2 === 1 ? "#FCF7F3" : "#ffffff",
                   transition: "background 0.12s",
                 }}
                 onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#eef4ff")
+                  (e.currentTarget.style.background = "#F0E8D8")
                 }
                 onMouseLeave={(e) =>
                   (e.currentTarget.style.background =
-                    i % 2 === 1 ? "#f8fafc" : "#ffffff")
+                    i % 2 === 1 ? "#FCF7F3" : "#ffffff")
                 }
               >
                 {COLS.map((c) => (
@@ -226,8 +227,8 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
                       fontWeight: c.num ? 600 : 400,
                       color:
                         !c.num && !String(r[c.key] ?? "").trim()
-                          ? "#cbd5e1"
-                          : "#1e293b",
+                          ? "#C8B8A8"
+                          : "#45301D",
                     }}
                   >
                     {c.key === "netTotal"
@@ -245,10 +246,10 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
                   ...tdBase,
                   fontWeight: 700,
                   fontSize: 12,
-                  color: "#0f172a",
-                  background: "#f1f5f9",
+                  color: "#45301D",
+                  background: "#FCF7F3",
                   borderRight: "none",
-                  borderTop: "2px solid #cbd5e1",
+                  borderTop: "2px solid #C8B8A8",
                   overflow: "visible",
                 }}
               >
@@ -258,9 +259,9 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
                 style={{
                   ...tdBase,
                   fontWeight: 700,
-                  color: "#0f172a",
-                  background: "#f1f5f9",
-                  borderTop: "2px solid #cbd5e1",
+                  color: "#45301D",
+                  background: "#FCF7F3",
+                  borderTop: "2px solid #C8B8A8",
                   textAlign: "right",
                 }}
               >
@@ -269,8 +270,8 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
               <td
                 style={{
                   ...tdBase,
-                  background: "#f1f5f9",
-                  borderTop: "2px solid #cbd5e1",
+                  background: "#FCF7F3",
+                  borderTop: "2px solid #C8B8A8",
                   borderRight: "none",
                 }}
                 colSpan={5}
@@ -287,10 +288,10 @@ function DateGroupCard({ g }: { g: SalesSummaryGroup }) {
           justifyContent: "space-between",
           alignItems: "center",
           padding: "9px 14px",
-          background: "#f8fafc",
-          borderTop: "1px solid #e2e8f0",
+          background: "#FCF7F3",
+          borderTop: "1px solid #E4D6BF",
           fontSize: 11,
-          color: "#64748b",
+          color: "#6B543E",
         }}
       >
         <span>
@@ -331,11 +332,11 @@ export default function SalesSummaryReport({
         <div
           style={{
             marginTop: 16,
-            border: "1px solid #e2e8f0",
+            border: "1px solid #E4D6BF",
             borderRadius: 14,
             background: "#ffffff",
             boxShadow:
-              "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+              "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
             padding: "46px 20px",
             textAlign: "center",
           }}
@@ -345,7 +346,7 @@ export default function SalesSummaryReport({
               display: "flex",
               justifyContent: "center",
               marginBottom: 10,
-              color: "#cbd5e1",
+              color: "#C8B8A8",
             }}
           >
             <IconInbox size={30} strokeWidth={1.6} />
@@ -355,12 +356,12 @@ export default function SalesSummaryReport({
               margin: 0,
               fontSize: 13.5,
               fontWeight: 600,
-              color: "#334155",
+              color: "#684830",
             }}
           >
             No bills found for the selected date range.
           </p>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#907860" }}>
             Try changing the date range or clearing the search.
           </p>
         </div>
@@ -374,17 +375,18 @@ export default function SalesSummaryReport({
             style={{
               borderRadius: 12,
               overflow: "hidden",
-              background: locGrad,
+              background: "#F0E8D8",
+              border: "1px solid #E4D6BF",
               padding: "12px 16px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              boxShadow: "0 3px 10px rgba(79,70,229,0.25)",
+              boxShadow: "0 2px 6px rgba(104,72,48,0.08)",
             }}
           >
             <span
               style={{
-                color: "#ffffff",
+                color: "#45301D",
                 fontSize: 13.5,
                 fontWeight: 800,
                 letterSpacing: 0.5,
@@ -399,7 +401,7 @@ export default function SalesSummaryReport({
             </span>
             <span
               style={{
-                color: "#ede9fe",
+                color: "#684830",
                 fontSize: 13,
                 fontWeight: 700,
                 fontVariantNumeric: "tabular-nums",
@@ -428,12 +430,12 @@ export default function SalesSummaryReport({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            boxShadow: "0 4px 14px rgba(15,23,42,0.25)",
+            boxShadow: "0 4px 14px rgba(114,86,60,0.25)",
           }}
         >
           <span
             style={{
-              color: "#e0eafc",
+              color: "#E4D6BF",
               fontSize: 13,
               fontWeight: 700,
               letterSpacing: 0.8,

@@ -102,12 +102,12 @@ export const STW_PDF_COLUMNS = [
 ];
 
 // -- flat styles --
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -115,7 +115,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function StewardSummaryReport({ report }: { report: StewardData }) {
   if ((report.stewards ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No records found for this range.
       </p>
     );
@@ -126,8 +126,9 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
         <div key={s.stewId}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -150,8 +151,8 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
             <div key={l.locCode} style={{ marginTop: 8 }}>
               <div
                 style={{
-                  background: "#dbeafe",
-                  color: "#1e3a8a",
+                  background: "#E4D6BF",
+                  color: "#684830",
                   borderRadius: 6,
                   padding: "6px 10px",
                   display: "flex",
@@ -166,7 +167,7 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Date</th>
                     <th style={{ ...cell, textAlign: "right", width: 80, fontWeight: 700 }}>Bills</th>
                     <th style={{ ...cell, textAlign: "right", width: 80, fontWeight: 700 }}>Pax</th>
@@ -176,7 +177,7 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
                 </thead>
                 <tbody>
                   {l.rows.map((r, ri) => (
-                    <tr key={`${l.locCode}-${r.date}`} style={{ background: ri % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                    <tr key={`${l.locCode}-${r.date}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                       <td style={cell}>{r.date}</td>
                       <td style={num}>{r.bills}</td>
                       <td style={num}>{r.pax}</td>
@@ -184,10 +185,10 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
                       {sc && <td style={num}>{fmtAmt(r.serChg)}</td>}
                     </tr>
                   ))}
-                  <tr style={{ background: "#fbfdff", borderTop: "1px solid #94a3b8" }}>
-                    <td style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Total Steward Collection</td>
-                    <td style={{ ...num, fontWeight: 800, color: "#1e3a8a" }}>{s.stewTotals.bills}</td>
-                    <td style={{ ...num, fontWeight: 800, color: "#1e3a8a" }}>{s.stewTotals.pax}</td>
+                  <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
+                    <td style={{ ...cell, fontWeight: 800, color: "#684830" }}>Total Steward Collection</td>
+                    <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{s.stewTotals.bills}</td>
+                    <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{s.stewTotals.pax}</td>
                     <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(s.stewTotals.grand)}</td>
                     {sc && <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(s.stewTotals.serChg)}</td>}
                   </tr>
@@ -199,7 +200,7 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",

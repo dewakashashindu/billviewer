@@ -29,7 +29,7 @@ const fmtQty = (n: number) =>
   });
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 8, color: "#45301D" },
   title: {
     textAlign: "center",
     fontSize: 14,
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   dateBand: {
     fontFamily: "Helvetica-Bold",
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   box: {
     width: 200,
     borderWidth: 1,
-    borderColor: "#1a1a1a",
+    borderColor: "#45301D",
     padding: 5,
   },
   boxRow: {
@@ -77,18 +77,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     fontWeight: "bold",
     borderTopWidth: 1,
-    borderTopColor: "#1a1a1a",
+    borderTopColor: "#45301D",
     paddingTop: 2,
     marginTop: 1,
   },
-  billSep: { borderBottomWidth: 0.7, borderBottomColor: "#cccccc", marginVertical: 5 },
+  billSep: { borderBottomWidth: 0.7, borderBottomColor: "#C8B8A8", marginVertical: 5 },
   grandRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     fontWeight: "bold",
     fontSize: 10,
     borderTopWidth: 1.5,
-    borderTopColor: "#1a1a1a",
+    borderTopColor: "#45301D",
     marginTop: 10,
     paddingTop: 4,
   },
@@ -162,7 +162,7 @@ export default function SalesDetailsPdfDocument({
 }: Props) {
   const grandTotal = locationGroups.reduce((s, l) => s + l.locNetTotal, 0);
   return (
-    <Document title={title} author="MICROECHEF">
+    <Document title={title} author="Mila Mirissa">
       <Page size="A4" style={styles.page}>
         <Text style={styles.title}>{title}</Text>
 

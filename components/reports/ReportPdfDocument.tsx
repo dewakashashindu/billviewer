@@ -8,37 +8,37 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { ColumnConfig } from "@/config/reports.config";
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 8, color: "#45301D" },
   title: { fontSize: 14, fontFamily: "Helvetica-Bold", textAlign: "center", marginBottom: 4 },
   range: { fontSize: 9, fontFamily: "Helvetica-Bold", textAlign: "center", marginBottom: 10 },
   table: {
     width: "100%",
     borderStyle: "solid",
     borderWidth: 1,
-    borderColor: "#999999",
+    borderColor: "#907860",
   },
   row: { flexDirection: "row" },
   th: {
-    backgroundColor: "#efefef",
-    color: "#1a1a1a",
+    backgroundColor: "#E4D6BF",
+    color: "#45301D",
     padding: 5,
     fontFamily: "Helvetica-Bold",
     fontSize: 7.5,
     borderRightWidth: 1,
-    borderRightColor: "#cccccc",
+    borderRightColor: "#C8B8A8",
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
   td: {
     padding: 4,
     fontSize: 7.5,
     borderRightWidth: 1,
-    borderRightColor: "#e2e8f0",
+    borderRightColor: "#E4D6BF",
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: "#E4D6BF",
   },
-  zebra: { backgroundColor: "#f8fafc" },
-  bold: { fontFamily: "Helvetica-Bold", backgroundColor: "#efefef" },
+  zebra: { backgroundColor: "#FCF7F3" },
+  bold: { fontFamily: "Helvetica-Bold", backgroundColor: "#E4D6BF" },
   right: { textAlign: "right" },
 });
 
@@ -82,7 +82,7 @@ export default function ReportPdfDocument({
   }
 
   return (
-    <Document title={title} author="MICROECHEF">
+    <Document title={title} author="Mila Mirissa">
       <Page size="A4" orientation="landscape" style={styles.page}>
         <Text style={styles.title}>{title}</Text>
         {from && to ? (

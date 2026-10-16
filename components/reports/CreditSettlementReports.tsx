@@ -149,25 +149,26 @@ export function filterCad(d: CadData, q0: string): CadData {
   return { ...d, locationGroups };
 }
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 const emptyMsg = (t: string) => (
-  <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>{t}</p>
+  <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>{t}</p>
 );
 
 function CustBand({ left, right }: { left: string; right?: string }) {
   return (
     <div
       style={{
-        background: NAVY,
-        color: "#fff",
+        background: "#F0E8D8",
+        color: "#45301D",
+        border: "1px solid #E4D6BF",
         borderRadius: 8,
         padding: "7px 12px",
         display: "flex",
@@ -187,9 +188,9 @@ function TopBanner({ title, tag }: { title: string; tag: string | null }) {
   return (
     <div
       style={{
-        background: "#dbeafe",
-        border: "1px solid #93c5fd",
-        color: "#1e3a8a",
+        background: "#E4D6BF",
+        border: "1px solid #C8B8A8",
+        color: "#684830",
         borderRadius: 8,
         padding: "8px 12px",
         display: "flex",
@@ -220,7 +221,7 @@ export default function PaymentHistoryReport({ report }: { report: CphData }) {
               <CustBand left={`${l.locCode} · ${cu.code} — ${l.locName} · ${cu.name}`} right={`Paid : ${fmtAmt(cu.totalPaid)}`} />
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 100, fontWeight: 700 }}>Bill NO</th>
                     <th style={{ ...cell, textAlign: "left", width: 95, fontWeight: 700 }}>Paid Date</th>
                     {c.invoiceNo ? <th style={{ ...cell, textAlign: "left", width: 95, fontWeight: 700 }}>Invoice No</th> : null}
@@ -234,7 +235,7 @@ export default function PaymentHistoryReport({ report }: { report: CphData }) {
                 </thead>
                 <tbody>
                   {cu.rows.map((r, i) => (
-                    <tr key={`${r.bill}-${i}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                    <tr key={`${r.bill}-${i}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                       <td style={{ ...cell, fontWeight: 700 }}>{r.bill}</td>
                       <td style={cell}>{r.paidDate}</td>
                       {c.invoiceNo ? <td style={cell}>{r.invoiceNo}</td> : null}
@@ -254,7 +255,7 @@ export default function PaymentHistoryReport({ report }: { report: CphData }) {
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -278,7 +279,7 @@ export function AccountDetailReport({ report }: { report: CadData }) {
   if ((report.locationGroups ?? []).length === 0) return emptyMsg("No credit settlement details for this range.");
   const c = report.cols;
   const tint = (t: string, i: number) =>
-    t === "INV" ? "#dcfce7" : t === "PAY" ? "#dbeafe" : t === "CHG" ? "#fef9c3" : i % 2 === 1 ? "#f8fafc" : "#fff";
+    t === "INV" ? "#dcfce7" : t === "PAY" ? "#E4D6BF" : t === "CHG" ? "#fef9c3" : i % 2 === 1 ? "#FCF7F3" : "#fff";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <TopBanner title="CREDIT SETTLEMENT DETAILS" tag={report.customerFilter} />
@@ -289,7 +290,7 @@ export function AccountDetailReport({ report }: { report: CadData }) {
               <CustBand left={`${l.locCode} · ${cu.code} — ${l.locName} · ${cu.name}`} right={`Balance : ${fmtAmt(cu.lastBal)}`} />
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 110, fontWeight: 700 }}>BILL NO</th>
                     <th style={{ ...cell, textAlign: "left", width: 80, fontWeight: 700 }}>TRN TYPE</th>
                     <th style={{ ...cell, textAlign: "left", width: 100, fontWeight: 700 }}>TRN DATE</th>
@@ -321,19 +322,19 @@ export function AccountDetailReport({ report }: { report: CadData }) {
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 4 },
   filtered: { textAlign: "center", fontSize: 9, marginBottom: 6 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
   range: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 8, marginBottom: 4 },
-  band: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 10, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#1a1a1a" },
+  band: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 10, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#45301D" },
   row: { flexDirection: "row" },
-  th: { backgroundColor: "#efefef", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 7, borderRightWidth: 1, borderRightColor: "#cccccc", borderBottomWidth: 1, borderBottomColor: "#999999" },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  th: { backgroundColor: "#E4D6BF", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 7, borderRightWidth: 1, borderRightColor: "#C8B8A8", borderBottomWidth: 1, borderBottomColor: "#907860" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 
 export function PaymentHistoryPdfDocument({

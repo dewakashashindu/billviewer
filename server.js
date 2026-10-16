@@ -1,3 +1,10 @@
+// ============================================================
+// server.js — SmarterASP.NET (IIS httpPlatformHandler) entry point
+// ------------------------------------------------------------
+// SmarterASP/IIS assigns a DYNAMIC port via process.env.PORT
+// (web.config maps PORT = %HTTP_PLATFORM_PORT%).
+// Do NOT hardcode 3000 in production — 3000 is only a local fallback.
+// ============================================================
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");

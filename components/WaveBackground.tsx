@@ -30,7 +30,7 @@ export default function WaveBackground() {
       ctx.lineTo(W, 0);
       ctx.lineTo(0, 0);
       ctx.closePath();
-      ctx.fillStyle = "#d4e6ff";   // Light Blue
+      ctx.fillStyle = "#C8B8A8";   // Light Blue
       ctx.fill();
 
       // Wave 2 - Bottom (Light Yellow)

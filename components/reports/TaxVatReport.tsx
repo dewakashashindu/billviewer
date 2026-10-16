@@ -105,12 +105,12 @@ export const TAXVAT_PDF_COLUMNS = [
 ];
 
 // -- flat styles --
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
   whiteSpace: "nowrap",
 };
@@ -119,7 +119,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function TaxVatReport({ report }: { report: TaxVatData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No tax records found for this range.
       </p>
     );
@@ -129,8 +129,9 @@ export default function TaxVatReport({ report }: { report: TaxVatData }) {
         <div key={l.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -152,11 +153,11 @@ export default function TaxVatReport({ report }: { report: TaxVatData }) {
           <div style={{ overflowX: "auto", marginTop: 6 }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#dbeafe", borderBottom: "2px solid #1d4ed8" }}>
-                  <th style={{ ...cell, textAlign: "left", fontWeight: 800, color: "#1e3a8a" }}>Bill No</th>
-                  <th style={{ ...cell, textAlign: "left", fontWeight: 700, color: "#1e3a8a" }}>Date</th>
+                <tr style={{ background: "#E4D6BF", borderBottom: "2px solid #684830" }}>
+                  <th style={{ ...cell, textAlign: "left", fontWeight: 800, color: "#684830" }}>Bill No</th>
+                  <th style={{ ...cell, textAlign: "left", fontWeight: 700, color: "#684830" }}>Date</th>
                   {TAXVAT_COLUMNS.map((c) => (
-                    <th key={c.k as string} style={{ ...cell, textAlign: "right", fontWeight: 700, color: "#1e3a8a" }}>
+                    <th key={c.k as string} style={{ ...cell, textAlign: "right", fontWeight: 700, color: "#684830" }}>
                       {c.h}
                     </th>
                   ))}
@@ -164,7 +165,7 @@ export default function TaxVatReport({ report }: { report: TaxVatData }) {
               </thead>
               <tbody>
                 {l.rows.map((r, ri) => (
-                  <tr key={`${l.locCode}-${r.billNo}`} style={{ background: ri % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                  <tr key={`${l.locCode}-${r.billNo}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                     <td style={{ ...cell, fontWeight: 700 }}>{r.billNo}</td>
                     <td style={cell}>{r.date}</td>
                     {TAXVAT_COLUMNS.map((c) => (
@@ -174,12 +175,12 @@ export default function TaxVatReport({ report }: { report: TaxVatData }) {
                     ))}
                   </tr>
                 ))}
-                <tr style={{ background: "#dbeafe", borderTop: "1px solid #94a3b8" }}>
-                  <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>
+                <tr style={{ background: "#E4D6BF", borderTop: "1px solid #907860" }}>
+                  <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#684830" }}>
                     Locationwise Total
                   </td>
                   {TAXVAT_COLUMNS.map((c) => (
-                    <td key={c.k as string} style={{ ...num, fontWeight: 800, color: "#1e3a8a" }}>
+                    <td key={c.k as string} style={{ ...num, fontWeight: 800, color: "#684830" }}>
                       {fmtAmt(l.totals[c.k as keyof TaxVatTotals])}
                     </td>
                   ))}
@@ -191,7 +192,7 @@ export default function TaxVatReport({ report }: { report: TaxVatData }) {
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",

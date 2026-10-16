@@ -78,12 +78,12 @@ export function filterCio(d: CioData, q0: string): CioData {
   return { ...d, locationGroups };
 }
 
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -91,7 +91,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function CashInOutReport({ report }: { report: CioData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No cash in/out transactions for this range.
       </p>
     );
@@ -99,9 +99,9 @@ export default function CashInOutReport({ report }: { report: CioData }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <div
         style={{
-          background: "#dbeafe",
-          border: "1px solid #93c5fd",
-          color: "#1e3a8a",
+          background: "#E4D6BF",
+          border: "1px solid #C8B8A8",
+          color: "#684830",
           borderRadius: 8,
           padding: "8px 12px",
           display: "flex",
@@ -119,8 +119,9 @@ export default function CashInOutReport({ report }: { report: CioData }) {
         <div key={l.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -145,8 +146,8 @@ export default function CashInOutReport({ report }: { report: CioData }) {
             <div key={dt.date} style={{ marginTop: 8 }}>
               <div
                 style={{
-                  background: "#94a3b8",
-                  color: "#fff",
+                  background: "#E9DCC6",
+                  color: "#45301D",
                   borderRadius: 6,
                   padding: "4px 10px",
                   fontSize: 11.5,
@@ -158,7 +159,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 90, fontWeight: 700 }}>Txn ID</th>
                     <th style={{ ...cell, textAlign: "left", width: 90, fontWeight: 700 }}>Txn Time</th>
                     <th style={{ ...cell, textAlign: "right", width: 100, fontWeight: 700 }}>Pay IN</th>
@@ -170,13 +171,13 @@ export default function CashInOutReport({ report }: { report: CioData }) {
                 </thead>
                 <tbody>
                   {dt.rows.map((r, i) => (
-                    <tr key={`${r.txnId}-${i}`} style={{ background: i % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                    <tr key={`${r.txnId}-${i}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                       <td style={{ ...cell, fontWeight: 700 }}>{r.txnId}</td>
                       <td style={cell}>{r.time}</td>
-                      <td style={{ ...num, background: r.payIn ? "#dcfce7" : undefined, fontWeight: r.payIn ? 700 : 400, color: r.payIn ? "#15803d" : "#1e293b" }}>
+                      <td style={{ ...num, background: r.payIn ? "#dcfce7" : undefined, fontWeight: r.payIn ? 700 : 400, color: r.payIn ? "#15803d" : "#45301D" }}>
                         {r.payIn ? fmtAmt(r.payIn) : ""}
                       </td>
-                      <td style={{ ...num, background: r.payOut ? "#fee2e2" : undefined, fontWeight: r.payOut ? 700 : 400, color: r.payOut ? "#b91c1c" : "#1e293b" }}>
+                      <td style={{ ...num, background: r.payOut ? "#fee2e2" : undefined, fontWeight: r.payOut ? 700 : 400, color: r.payOut ? "#b91c1c" : "#45301D" }}>
                         {r.payOut ? fmtAmt(r.payOut) : ""}
                       </td>
                       <td style={cell}>{r.category}</td>
@@ -184,7 +185,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
                       <td style={cell}>{r.user}</td>
                     </tr>
                   ))}
-                  <tr style={{ background: "#fef9c3", borderTop: "1px solid #94a3b8" }}>
+                  <tr style={{ background: "#fef9c3", borderTop: "1px solid #907860" }}>
                     <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#713f12" }}>Daily Total</td>
                     <td style={{ ...num, fontWeight: 800, color: "#15803d" }}>{fmtAmt(dt.inTotal)}</td>
                     <td style={{ ...num, fontWeight: 800, color: "#b91c1c" }}>{fmtAmt(dt.outTotal)}</td>
@@ -198,7 +199,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",
@@ -221,21 +222,21 @@ export default function CashInOutReport({ report }: { report: CioData }) {
 
 // ── PDF — shared print style ──
 const pStyles = StyleSheet.create({
-  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#1a1a1a" },
+  page: { padding: 24, fontFamily: "Helvetica", fontSize: 8, color: "#45301D" },
   title: { textAlign: "center", fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 4 },
   filtered: { textAlign: "center", fontSize: 9, marginBottom: 6 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   infoLabel: { width: 80 },
   range: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 8, marginBottom: 4 },
-  location: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 12, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#1a1a1a" },
-  dateBand: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 6, marginBottom: 3, backgroundColor: "#e5e5e5", padding: 3 },
+  location: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 12, marginBottom: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: "#45301D" },
+  dateBand: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 6, marginBottom: 3, backgroundColor: "#E4D6BF", padding: 3 },
   row: { flexDirection: "row" },
-  th: { backgroundColor: "#efefef", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 7, borderRightWidth: 1, borderRightColor: "#cccccc", borderBottomWidth: 1, borderBottomColor: "#999999" },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#e5e5e5" },
+  th: { backgroundColor: "#E4D6BF", fontFamily: "Helvetica-Bold", padding: 4, fontSize: 7, borderRightWidth: 1, borderRightColor: "#C8B8A8", borderBottomWidth: 1, borderBottomColor: "#907860" },
+  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
   bold: { fontFamily: "Helvetica-Bold" },
   right: { textAlign: "right" },
-  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#1a1a1a", marginTop: 2 },
-  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#1a1a1a", marginTop: 6, paddingTop: 4 },
+  totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
+  grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
 const KW = { id: 60, time: 55, in: 60, out: 60, cat: 80, rem: 130, user: 55 };
 

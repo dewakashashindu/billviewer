@@ -115,7 +115,7 @@ export interface ReportToolbarProps {
 
 // ── shared control styles ──
 const CONTROL_H = 36;
-const grad = "linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)";
+const grad = "linear-gradient(135deg,#45301D 0%,#684830 100%)";
 
 const ghostBtn: React.CSSProperties = {
   height: CONTROL_H,
@@ -123,9 +123,9 @@ const ghostBtn: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   gap: 7,
-  border: "1px solid #e2e8f0",
+  border: "1px solid #E4D6BF",
   background: "#ffffff",
-  color: "#334155",
+  color: "#684830",
   borderRadius: 9,
   cursor: "pointer",
   flexShrink: 0,
@@ -133,12 +133,12 @@ const ghostBtn: React.CSSProperties = {
 
 const dateInput: React.CSSProperties = {
   height: CONTROL_H,
-  border: "1px solid #e2e8f0",
+  border: "1px solid #E4D6BF",
   borderRadius: 9,
   padding: "0 10px",
   fontSize: 12.5,
   fontWeight: 600,
-  color: "#0f172a",
+  color: "#45301D",
   background: "#ffffff",
   outline: "none",
   fontFamily: "inherit",
@@ -297,22 +297,22 @@ export default function ReportToolbar({
       key: "email",
       label: "Share via Email",
       icon: <IconMail size={14} />,
-      iconBg: "#eef2ff",
-      iconColor: "#4f46e5",
+      iconBg: "#F0E8D8",
+      iconColor: "#684830",
     },
     {
       key: "native",
       label: "Share (device) with PDF",
       icon: <IconPhone size={14} />,
-      iconBg: "#f0f9ff",
-      iconColor: "#0284c7",
+      iconBg: "#F0E8D8",
+      iconColor: "#907860",
     },
     {
       key: "copy",
       label: "Copy link",
       icon: <IconLink size={14} />,
-      iconBg: "#f1f5f9",
-      iconColor: "#475569",
+      iconBg: "#FCF7F3",
+      iconColor: "#6B543E",
     },
   ];
 
@@ -320,7 +320,7 @@ export default function ReportToolbar({
     <div
       style={{
         padding: "14px 22px 12px",
-        borderBottom: "1px solid #e2e8f0",
+        borderBottom: "1px solid #E4D6BF",
         background: "#ffffff",
         display: "flex",
         flexDirection: "column",
@@ -348,7 +348,7 @@ export default function ReportToolbar({
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            boxShadow: "0 2px 6px rgba(15,23,42,0.25)",
+            boxShadow: "0 2px 6px rgba(114,86,60,0.25)",
           }}
         >
           <IconFileText size={18} strokeWidth={1.8} />
@@ -359,7 +359,7 @@ export default function ReportToolbar({
               margin: 0,
               fontSize: 15.5,
               fontWeight: 700,
-              color: "#0f172a",
+              color: "#45301D",
               letterSpacing: -0.2,
               lineHeight: 1.25,
             }}
@@ -371,7 +371,7 @@ export default function ReportToolbar({
               style={{
                 margin: 0,
                 fontSize: 11.5,
-                color: "#64748b",
+                color: "#6B543E",
                 lineHeight: 1.35,
               }}
             >
@@ -396,7 +396,7 @@ export default function ReportToolbar({
               padding: "0 15px",
               whiteSpace: "nowrap",
               textDecoration: "none",
-              boxShadow: "0 2px 6px rgba(15,23,42,0.25)",
+              boxShadow: "0 2px 6px rgba(114,86,60,0.25)",
             }}
           >
             {({ loading: pdfLoading }: any) =>
@@ -430,7 +430,7 @@ export default function ReportToolbar({
                 left: 10,
                 top: "50%",
                 transform: "translateY(-50%)",
-                color: "#94a3b8",
+                color: "#907860",
                 display: "flex",
               }}
             >
@@ -444,12 +444,12 @@ export default function ReportToolbar({
                 width: "100%",
                 boxSizing: "border-box",
                 height: CONTROL_H,
-                border: "1px solid #e2e8f0",
+                border: "1px solid #E4D6BF",
                 borderRadius: 9,
                 padding: "0 10px 0 32px",
                 fontSize: 12.5,
-                color: "#0f172a",
-                background: "#f8fafc",
+                color: "#45301D",
+                background: "#FCF7F3",
                 outline: "none",
                 fontFamily: "inherit",
               }}
@@ -463,7 +463,7 @@ export default function ReportToolbar({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            border: "1px solid #e2e8f0",
+            border: "1px solid #E4D6BF",
             borderRadius: 9,
             padding: "0 8px",
             height: CONTROL_H,
@@ -471,14 +471,14 @@ export default function ReportToolbar({
             flexShrink: 0,
           }}
         >
-          <IconCalendar size={14} style={{ color: "#64748b" }} />
+          <IconCalendar size={14} style={{ color: "#6B543E" }} />
           <input
             type="date"
             value={from}
             onChange={(e) => onRangeChange(e.target.value, to)}
             style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
           />
-          <span style={{ color: "#cbd5e1", fontSize: 11 }}>to</span>
+          <span style={{ color: "#C8B8A8", fontSize: 11 }}>to</span>
           <input
             type="date"
             value={to}
@@ -493,7 +493,7 @@ export default function ReportToolbar({
             display: "flex",
             alignItems: "center",
             height: CONTROL_H,
-            border: "1px solid #e2e8f0",
+            border: "1px solid #E4D6BF",
             borderRadius: 9,
             overflow: "hidden",
             flexShrink: 0,
@@ -512,7 +512,7 @@ export default function ReportToolbar({
               justifyContent: "center",
               border: "none",
               background: "transparent",
-              color: "#334155",
+              color: "#684830",
               cursor: zoom <= 70 ? "default" : "pointer",
               opacity: zoom <= 70 ? 0.35 : 1,
             }}
@@ -523,14 +523,14 @@ export default function ReportToolbar({
             style={{
               fontSize: 11,
               fontWeight: 700,
-              color: "#0f172a",
+              color: "#45301D",
               minWidth: 42,
               textAlign: "center",
-              borderLeft: "1px solid #e2e8f0",
-              borderRight: "1px solid #e2e8f0",
+              borderLeft: "1px solid #E4D6BF",
+              borderRight: "1px solid #E4D6BF",
               alignSelf: "stretch",
               lineHeight: `${CONTROL_H - 2}px`,
-              background: "#f8fafc",
+              background: "#FCF7F3",
             }}
           >
             {zoom}%
@@ -547,7 +547,7 @@ export default function ReportToolbar({
               justifyContent: "center",
               border: "none",
               background: "transparent",
-              color: "#334155",
+              color: "#684830",
               cursor: zoom >= 150 ? "default" : "pointer",
               opacity: zoom >= 150 ? 0.35 : 1,
             }}
@@ -566,8 +566,8 @@ export default function ReportToolbar({
               width: CONTROL_H,
               padding: 0,
               background: chartMode ? grad : "#ffffff",
-              color: chartMode ? "#ffffff" : "#334155",
-              borderColor: chartMode ? "transparent" : "#e2e8f0",
+              color: chartMode ? "#ffffff" : "#684830",
+              borderColor: chartMode ? "transparent" : "#E4D6BF",
             }}
           >
             {chartMode ? (
@@ -600,10 +600,10 @@ export default function ReportToolbar({
                   right: 0,
                   top: CONTROL_H + 6,
                   background: "#ffffff",
-                  border: "1px solid #e2e8f0",
+                  border: "1px solid #E4D6BF",
                   borderRadius: 12,
                   boxShadow:
-                    "0 4px 12px rgba(15,23,42,0.08), 0 16px 40px rgba(15,23,42,0.14)",
+                    "0 4px 12px rgba(114,86,60,0.08), 0 16px 40px rgba(114,86,60,0.14)",
                   minWidth: 224,
                   zIndex: 200,
                   overflow: "hidden",
@@ -624,7 +624,7 @@ export default function ReportToolbar({
                       padding: "9px 10px",
                       fontSize: 12.5,
                       fontWeight: 500,
-                      color: "#0f172a",
+                      color: "#45301D",
                       cursor: "pointer",
                       textAlign: "left",
                       borderRadius: 8,
@@ -656,7 +656,7 @@ export default function ReportToolbar({
                       fontSize: 11.5,
                       fontWeight: 500,
                       color: "#059669",
-                      borderTop: "1px solid #f1f5f9",
+                      borderTop: "1px solid #FCF7F3",
                       display: "flex",
                       alignItems: "center",
                       gap: 6,
@@ -690,9 +690,9 @@ export default function ReportToolbar({
               onClick={() => onRangeChange(f, t)}
               style={{
                 border: "1px solid",
-                borderColor: active ? "transparent" : "#e2e8f0",
+                borderColor: active ? "transparent" : "#E4D6BF",
                 background: active ? grad : "#ffffff",
-                color: active ? "#ffffff" : "#475569",
+                color: active ? "#ffffff" : "#6B543E",
                 fontSize: 11.5,
                 fontWeight: 600,
                 padding: "6px 12px",
@@ -700,7 +700,7 @@ export default function ReportToolbar({
                 cursor: "pointer",
                 whiteSpace: "nowrap",
                 fontFamily: "inherit",
-                boxShadow: active ? "0 2px 6px rgba(15,23,42,0.25)" : "none",
+                boxShadow: active ? "0 2px 6px rgba(114,86,60,0.25)" : "none",
               }}
             >
               {r.label}

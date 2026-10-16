@@ -19,7 +19,7 @@ type UserRow = {
   Enable: number;
 };
 
-const ACCENT = "#eb9b46";
+const ACCENT = "#684830";
 
 /* ── inline SVG icons ── */
 const IconPlus = () => (
@@ -87,10 +87,10 @@ export default function SettingsPage() {
         }}
       >
         <div>
-          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "#0f172a", letterSpacing: -0.3 }}>
+          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "#45301D", letterSpacing: -0.3 }}>
             Users
           </h1>
-          <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#64748b" }}>
+          <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#6B543E" }}>
             {me ? `Signed in as ${me}` : "Manage application users and passwords"}
           </p>
         </div>
@@ -109,7 +109,7 @@ export default function SettingsPage() {
             fontWeight: 700,
             cursor: "pointer",
             fontFamily: "inherit",
-            boxShadow: "0 2px 8px rgba(235,155,70,0.4)",
+            boxShadow: "0 2px 8px rgba(104,72,48,0.4)",
           }}
         >
           <IconPlus />
@@ -118,9 +118,9 @@ export default function SettingsPage() {
       </div>
 
       {/* table card */}
-      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "#fff", border: "1px solid #E4D6BF", borderRadius: 12, overflow: "hidden" }}>
         {loading ? (
-          <div style={{ padding: "46px 0", textAlign: "center", fontSize: 13, color: "#64748b" }}>
+          <div style={{ padding: "46px 0", textAlign: "center", fontSize: 13, color: "#6B543E" }}>
             Loading users...
           </div>
         ) : err ? (
@@ -128,13 +128,13 @@ export default function SettingsPage() {
             {err}
           </div>
         ) : users.length === 0 ? (
-          <div style={{ padding: "46px 0", textAlign: "center", fontSize: 13, color: "#64748b" }}>
+          <div style={{ padding: "46px 0", textAlign: "center", fontSize: 13, color: "#6B543E" }}>
             No users found.
           </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+              <tr style={{ background: "#FCF7F3", borderBottom: "1px solid #E4D6BF" }}>
                 {["Login Name", "User Name", "Group", "Location", "Contact No", "Status", ""].map((h) => (
                   <th
                     key={h}
@@ -143,7 +143,7 @@ export default function SettingsPage() {
                       padding: "11px 14px",
                       fontSize: 11,
                       fontWeight: 700,
-                      color: "#64748b",
+                      color: "#6B543E",
                       letterSpacing: 0.4,
                       textTransform: "uppercase",
                       whiteSpace: "nowrap",
@@ -156,20 +156,20 @@ export default function SettingsPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.UserId} style={{ borderBottom: "1px solid #eef2f7" }}>
-                  <td style={{ padding: "11px 14px", fontWeight: 600, color: "#0f172a", whiteSpace: "nowrap" }}>
+                <tr key={u.UserId} style={{ borderBottom: "1px solid #FCF7F3" }}>
+                  <td style={{ padding: "11px 14px", fontWeight: 600, color: "#45301D", whiteSpace: "nowrap" }}>
                     {u.LoginName}
                   </td>
-                  <td style={{ padding: "11px 14px", color: "#334155", whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "11px 14px", color: "#684830", whiteSpace: "nowrap" }}>
                     {u.UserName}
                   </td>
-                  <td style={{ padding: "11px 14px", color: "#334155" }}>
+                  <td style={{ padding: "11px 14px", color: "#684830" }}>
                     {u.GroupId}
                   </td>
-                  <td style={{ padding: "11px 14px", color: "#334155" }}>
+                  <td style={{ padding: "11px 14px", color: "#684830" }}>
                     {u.LocCode}
                   </td>
-                  <td style={{ padding: "11px 14px", color: "#334155", whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "11px 14px", color: "#684830", whiteSpace: "nowrap" }}>
                     {u.ContNo}
                   </td>
                   <td style={{ padding: "11px 14px" }}>
@@ -195,9 +195,9 @@ export default function SettingsPage() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 5,
-                        border: "1px solid #dbe3ec",
+                        border: "1px solid #E4D6BF",
                         background: "#fff",
-                        color: "#334155",
+                        color: "#684830",
                         borderRadius: 7,
                         padding: "6px 10px",
                         fontSize: 12,
@@ -215,7 +215,7 @@ export default function SettingsPage() {
                         onClick={() => setToggleFor(u)}
                         title={u.Enable === 1 ? "Disable user" : "Enable user"}
                         style={{
-                          border: "1px solid #dbe3ec",
+                          border: "1px solid #E4D6BF",
                           background: "#fff",
                           color: u.Enable === 1 ? "#b91c1c" : "#047857",
                           borderRadius: 7,
@@ -282,7 +282,7 @@ function ModalShell({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(15,23,42,0.45)",
+        background: "rgba(114,86,60,0.45)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -312,7 +312,7 @@ function ModalShell({
             marginBottom: 16,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#0f172a" }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#45301D" }}>
             {title}
           </h2>
           <button
@@ -321,7 +321,7 @@ function ModalShell({
               border: "none",
               background: "transparent",
               cursor: "pointer",
-              color: "#64748b",
+              color: "#6B543E",
               padding: 4,
               display: "flex",
             }}
@@ -339,19 +339,19 @@ const fieldLabel: React.CSSProperties = {
   display: "block",
   fontSize: 11.5,
   fontWeight: 700,
-  color: "#475569",
+  color: "#6B543E",
   marginBottom: 5,
 };
 const fieldInput: React.CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
   height: 40,
-  border: "1px solid #dbe3ec",
+  border: "1px solid #E4D6BF",
   borderRadius: 8,
   padding: "0 11px",
   fontSize: 13,
-  color: "#0f172a",
-  background: "#f8fafc",
+  color: "#45301D",
+  background: "#FCF7F3",
   outline: "none",
   fontFamily: "inherit",
   marginBottom: 12,
@@ -480,7 +480,7 @@ function CreateUserModal({
             <input type="date" value={f.dob} onChange={set("dob")} style={fieldInput} />
           </div>
         </div>
-        <p style={{ margin: "0 0 14px", fontSize: 11, color: "#94a3b8" }}>
+        <p style={{ margin: "0 0 14px", fontSize: 11, color: "#907860" }}>
           The password is stored securely (scrypt hash) — it cannot be viewed later.
         </p>
         <button
@@ -573,7 +573,7 @@ function ResetPasswordModal({
           minLength={6}
           style={fieldInput}
         />
-        <p style={{ margin: "0 0 14px", fontSize: 11, color: "#94a3b8" }}>
+        <p style={{ margin: "0 0 14px", fontSize: 11, color: "#907860" }}>
           Stored as a scrypt hash — the old password stops working immediately.
         </p>
         <button type="submit" disabled={busy} style={primaryBtn(busy)}>
@@ -622,7 +622,7 @@ function ToggleModal({
       title={disabling ? "Disable User" : "Enable User"}
       onClose={onClose}
     >
-      <p style={{ margin: "0 0 18px", fontSize: 13, color: "#334155", lineHeight: 1.55 }}>
+      <p style={{ margin: "0 0 18px", fontSize: 13, color: "#684830", lineHeight: 1.55 }}>
         {disabling ? (
           <>
             <b>{user.UserName}</b> ({user.LoginName}) will no longer be able to
@@ -641,10 +641,10 @@ function ToggleModal({
           style={{
             flex: 1,
             height: 43,
-            border: "1px solid #dbe3ec",
+            border: "1px solid #E4D6BF",
             borderRadius: 9,
             background: "#fff",
-            color: "#334155",
+            color: "#684830",
             fontSize: 13.5,
             fontWeight: 700,
             cursor: "pointer",

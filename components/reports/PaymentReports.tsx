@@ -94,12 +94,12 @@ export function filterPayments(d: PaymentSummaryData, q0: string): PaymentSummar
 }
 
 // ── flat styles ──
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -107,7 +107,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function PaymentSummaryReport({ report }: { report: PaymentSummaryData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No payment records found for this range.
       </p>
     );
@@ -117,8 +117,9 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
         <div key={loc.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -141,8 +142,8 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
             <div key={g.date} style={{ marginTop: 10 }}>
               <div
                 style={{
-                  background: "#dbeafe",
-                  color: "#1e3a8a",
+                  background: "#E4D6BF",
+                  color: "#684830",
                   borderRadius: 6,
                   padding: "6px 10px",
                   display: "flex",
@@ -157,7 +158,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
-                  <tr style={{ background: "#eff6ff" }}>
+                  <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 110, fontWeight: 700 }}>BillNo</th>
                     <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Payment Description</th>
                     <th style={{ ...cell, textAlign: "right", width: 120, fontWeight: 700 }}>Amount</th>
@@ -169,7 +170,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                   {g.bills.map((b, bi) => (
                     <Fragment key={b.billNo}>
                       {b.payments.map((p, pi) => (
-                        <tr key={`${b.billNo}-${pi}`} style={{ background: bi % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                        <tr key={`${b.billNo}-${pi}`} style={{ background: bi % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                           {pi === 0 && (
                             <td rowSpan={b.payments.length} style={{ ...cell, fontWeight: 700 }}>
                               {b.billNo}
@@ -189,11 +190,11 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                           )}
                         </tr>
                       ))}
-                      <tr key={`${b.billNo}-t`} style={{ background: "#fbfdff" }}>
-                        <td colSpan={2} style={{ ...cell, color: "#64748b", fontSize: 10.5 }}>
+                      <tr key={`${b.billNo}-t`} style={{ background: "#FCF7F3" }}>
+                        <td colSpan={2} style={{ ...cell, color: "#6B543E", fontSize: 10.5 }}>
                           Bill Total
                         </td>
-                        <td style={{ ...num, fontWeight: 800, color: NAVY, borderBottom: "1px solid #dbeafe" }}>
+                        <td style={{ ...num, fontWeight: 800, color: NAVY, borderBottom: "1px solid #E4D6BF" }}>
                           {fmtAmt(b.billTotal)}
                         </td>
                         <td colSpan={2} style={cell} />
@@ -208,7 +209,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",

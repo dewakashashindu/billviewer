@@ -15,8 +15,8 @@ import {
 
 // Built-in Courier / Courier-Bold / Times-Bold families are used (no external fonts)
 
-const INK = "#1a1a1a";
-const SOFT = "#555555";
+const INK = "#45301D";
+const SOFT = "#6B543E";
 
 const fmt = (n: number) =>
   n.toLocaleString("en-LK", {
@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
   },
   header: { alignItems: "center", marginBottom: 6 },
-  logo: { width: 110, height: 55, objectFit: "contain", marginBottom: 8 },
+  logo: { width: 84, height: 84, objectFit: "contain", marginBottom: 8 },
   restaurantName: {
     fontSize: 17,
     fontFamily: "Times-Bold",
@@ -43,13 +43,13 @@ const styles = StyleSheet.create({
   addressLine: { fontSize: 9.5, color: INK, marginTop: 1 },
   dashed: {
     borderTopWidth: 1,
-    borderTopColor: "#2b2b2b",
+    borderTopColor: "#684830",
     borderTopStyle: "dashed",
     marginVertical: 10,
   },
   tblBox: {
     borderWidth: 1,
-    borderColor: "#2b2b2b",
+    borderColor: "#684830",
     borderStyle: "dashed",
     borderRadius: 4,
     paddingVertical: 7,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#2b2b2b",
+    borderTopColor: "#684830",
     borderTopStyle: "dashed",
   },
   center: { textAlign: "center", fontSize: 9, color: SOFT },

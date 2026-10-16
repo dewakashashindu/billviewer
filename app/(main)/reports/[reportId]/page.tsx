@@ -181,7 +181,7 @@ function LoadingBlock() {
         height="30"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#94a3b8"
+        stroke="#907860"
         strokeWidth="2.4"
         strokeLinecap="round"
         style={{
@@ -192,7 +192,7 @@ function LoadingBlock() {
       >
         <path d="M21 12a9 9 0 1 1-6.219-8.56" />
       </svg>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#64748b" }}>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#6B543E" }}>
         Loading Report Data...
       </p>
     </div>
@@ -364,7 +364,7 @@ export default function DynamicReportPage() {
           fontFamily: "Inter, sans-serif",
         }}
       >
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#334155" }}>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#684830" }}>
           Report Not Found.
         </p>
       </div>
@@ -683,7 +683,7 @@ export default function DynamicReportPage() {
               padding: "10px 4px 0",
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
-              color: "#334155",
+              color: "#684830",
               alignItems: "center",
             }}
           >
@@ -693,7 +693,7 @@ export default function DynamicReportPage() {
               onChange={(e) => setCashSel(e.target.value)}
               style={{
                 padding: "5px 8px",
-                border: "1px solid #cbd5e1",
+                border: "1px solid #C8B8A8",
                 borderRadius: 6,
                 fontFamily: "Inter, sans-serif",
                 fontSize: 12,
@@ -1008,7 +1008,7 @@ export default function DynamicReportPage() {
               padding: "10px 4px 0",
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
-              color: "#334155",
+              color: "#684830",
               alignItems: "center",
             }}
           >
@@ -1018,7 +1018,7 @@ export default function DynamicReportPage() {
               onChange={(e) => setCioCat(e.target.value)}
               style={{
                 padding: "5px 8px",
-                border: "1px solid #cbd5e1",
+                border: "1px solid #C8B8A8",
                 borderRadius: 6,
                 fontFamily: "Inter, sans-serif",
                 fontSize: 12,
@@ -1089,7 +1089,7 @@ export default function DynamicReportPage() {
             padding: "10px 4px 0",
             fontFamily: "Inter, sans-serif",
             fontSize: 12,
-            color: "#334155",
+            color: "#684830",
             alignItems: "center",
           }}
         >
@@ -1099,7 +1099,7 @@ export default function DynamicReportPage() {
             onChange={(e) => setKotType(e.target.value)}
             style={{
               padding: "5px 8px",
-              border: "1px solid #cbd5e1",
+              border: "1px solid #C8B8A8",
               borderRadius: 6,
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
@@ -1193,7 +1193,7 @@ export default function DynamicReportPage() {
               padding: "10px 4px 0",
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
-              color: "#334155",
+              color: "#684830",
               alignItems: "center",
             }}
           >
@@ -1203,7 +1203,7 @@ export default function DynamicReportPage() {
               onChange={(e) => setCredCus(e.target.value)}
               style={{
                 padding: "5px 8px",
-                border: "1px solid #cbd5e1",
+                border: "1px solid #C8B8A8",
                 borderRadius: 6,
                 fontFamily: "Inter, sans-serif",
                 fontSize: 12,
@@ -1276,7 +1276,7 @@ export default function DynamicReportPage() {
             padding: "10px 4px 0",
             fontFamily: "Inter, sans-serif",
             fontSize: 12,
-            color: "#334155",
+            color: "#684830",
             alignItems: "center",
             flexWrap: "wrap",
           }}
@@ -1302,7 +1302,7 @@ export default function DynamicReportPage() {
               style={{
                 width: 64,
                 padding: "4px 8px",
-                border: "1px solid #cbd5e1",
+                border: "1px solid #C8B8A8",
                 borderRadius: 6,
                 fontFamily: "Inter, sans-serif",
                 fontSize: 12,
@@ -1365,7 +1365,7 @@ export default function DynamicReportPage() {
             padding: "10px 4px 0",
             fontFamily: "Inter, sans-serif",
             fontSize: 12,
-            color: "#334155",
+            color: "#684830",
             alignItems: "center",
           }}
         >
@@ -1377,7 +1377,7 @@ export default function DynamicReportPage() {
             />
             With Sale Cost
           </label>
-          <span style={{ color: "#94a3b8", fontSize: 11 }}>
+          <span style={{ color: "#907860", fontSize: 11 }}>
             (POS dialog checkbox — uses Sp_SalesItemIssueWSC when ticked)
           </span>
         </div>

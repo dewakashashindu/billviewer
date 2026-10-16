@@ -10,7 +10,7 @@ const fmt = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#1a1a1a" },
+  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
   title: { textAlign: "center", fontSize: 13, fontFamily: "Helvetica-Bold", marginBottom: 8 },
   infoRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
   locBar: {
@@ -22,12 +22,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: "#45301D",
   },
   cat: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     padding: "3 6",
     marginTop: 6,
     fontFamily: "Helvetica-Bold",
@@ -40,16 +40,16 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   row: { flexDirection: "row", justifyContent: "space-between", padding: "1.5 6 1.5 22" },
-  dRow: { flexDirection: "row", padding: "1.5 6", borderBottom: 0.4, borderColor: "#e3e3e3" },
+  dRow: { flexDirection: "row", padding: "1.5 6", borderBottom: 0.4, borderColor: "#E4D6BF" },
   dHead: {
     flexDirection: "row",
     padding: "3 6",
-    backgroundColor: "#efefef",
+    backgroundColor: "#E4D6BF",
     fontFamily: "Helvetica-Bold",
     fontSize: 8,
     marginTop: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#999999",
+    borderBottomColor: "#907860",
   },
   tot: {
     flexDirection: "row",
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     padding: "2 6",
     fontFamily: "Helvetica-Bold",
     borderTopWidth: 1,
-    borderTopColor: "#1a1a1a",
+    borderTopColor: "#45301D",
     marginTop: 2,
   },
   grand: {
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     fontSize: 10,
     borderTopWidth: 2,
-    borderTopColor: "#1a1a1a",
+    borderTopColor: "#45301D",
     marginTop: 6,
     paddingTop: 4,
   },

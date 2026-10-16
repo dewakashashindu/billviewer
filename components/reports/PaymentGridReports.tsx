@@ -80,12 +80,12 @@ export function filterPayGrid(d: BillPayModeGridData, q0: string): BillPayModeGr
 }
 
 // -- flat styles --
-const NAVY = "#0d2b57";
+const NAVY = "#684830";
 const cell: CSSProperties = {
   padding: "5px 10px",
   fontSize: 11.5,
   fontFamily: "Inter, sans-serif",
-  color: "#1e293b",
+  color: "#45301D",
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -93,7 +93,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 export default function BillPayModeGridReport({ report }: { report: BillPayModeGridData }) {
   if ((report.locationGroups ?? []).length === 0)
     return (
-      <p style={{ padding: 30, textAlign: "center", color: "#64748b", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No payment records found for this range.
       </p>
     );
@@ -103,8 +103,9 @@ export default function BillPayModeGridReport({ report }: { report: BillPayModeG
         <div key={loc.locCode}>
           <div
             style={{
-              background: NAVY,
-              color: "#fff",
+              background: "#F0E8D8",
+              color: "#45301D",
+              border: "1px solid #E4D6BF",
               borderRadius: 8,
               padding: "8px 12px",
               display: "flex",
@@ -126,38 +127,38 @@ export default function BillPayModeGridReport({ report }: { report: BillPayModeG
           <div style={{ overflowX: "auto", marginTop: 6 }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "#dbeafe", borderBottom: "2px solid #1d4ed8" }}>
-                  <th style={{ ...cell, textAlign: "left", minWidth: 110, fontWeight: 800, color: "#1e3a8a" }}>
+                <tr style={{ background: "#E4D6BF", borderBottom: "2px solid #684830" }}>
+                  <th style={{ ...cell, textAlign: "left", minWidth: 110, fontWeight: 800, color: "#684830" }}>
                     Bill No
                   </th>
                   {loc.payModes.map((m) => (
-                    <th key={m} style={{ ...cell, textAlign: "right", fontWeight: 700, color: "#1e3a8a", whiteSpace: "nowrap" }}>
+                    <th key={m} style={{ ...cell, textAlign: "right", fontWeight: 700, color: "#684830", whiteSpace: "nowrap" }}>
                       {m}
                     </th>
                   ))}
-                  <th style={{ ...cell, textAlign: "right", minWidth: 110, fontWeight: 800, color: "#1e3a8a" }}>
+                  <th style={{ ...cell, textAlign: "right", minWidth: 110, fontWeight: 800, color: "#684830" }}>
                     Total
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {loc.bills.map((b, bi) => (
-                  <tr key={b.billNo} style={{ background: bi % 2 === 1 ? "#f8fafc" : "#fff" }}>
+                  <tr key={b.billNo} style={{ background: bi % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                     <td style={{ ...cell, fontWeight: 700 }}>{b.billNo}</td>
                     {loc.payModes.map((m) => (
                       <td key={m} style={num}>
                         {b.cells[m] !== undefined ? fmtAmt(b.cells[m]) : ""}
                       </td>
                     ))}
-                    <td style={{ ...num, fontWeight: 800, color: NAVY, background: "#eff6ff" }}>
+                    <td style={{ ...num, fontWeight: 800, color: NAVY, background: "#F0E8D8" }}>
                       {fmtAmt(b.total)}
                     </td>
                   </tr>
                 ))}
-                <tr style={{ background: "#dbeafe", borderTop: "1px solid #94a3b8" }}>
-                  <td style={{ ...cell, fontWeight: 800, color: "#1e3a8a" }}>Total</td>
+                <tr style={{ background: "#E4D6BF", borderTop: "1px solid #907860" }}>
+                  <td style={{ ...cell, fontWeight: 800, color: "#684830" }}>Total</td>
                   {loc.payModes.map((m) => (
-                    <td key={m} style={{ ...num, fontWeight: 800, color: "#1e3a8a" }}>
+                    <td key={m} style={{ ...num, fontWeight: 800, color: "#684830" }}>
                       {fmtAmt(loc.modeTotals[m] ?? 0)}
                     </td>
                   ))}
@@ -170,7 +171,7 @@ export default function BillPayModeGridReport({ report }: { report: BillPayModeG
       ))}
       <div
         style={{
-          background: "#1d4ed8",
+          background: "#684830",
           color: "#fff",
           borderRadius: 8,
           padding: "8px 12px",

@@ -25,18 +25,18 @@ const fmt = (n: number) =>
 
 // pie palette — report theme ekema professional colors
 const PIE_COLORS = [
-  "#1d4ed8",
-  "#059669",
-  "#d97706",
-  "#7c3aed",
-  "#0284c7",
-  "#dc2626",
-  "#65a30d",
-  "#db2777",
-  "#4f46e5",
-  "#0d9488",
+  "#684830",
+  "#907860",
+  "#C8B8A8",
+  "#B49B7E",
+  "#45301D",
+  "#A98F70",
+  "#D9C7AC",
+  "#7C6148",
+  "#E0D0B8",
+  "#5A4128",
 ];
-const OTHER_COLOR = "#94a3b8";
+const OTHER_COLOR = "#907860";
 
 export default function ReportChart({
   data,
@@ -61,11 +61,11 @@ export default function ReportChart({
       >
         <div
           style={{
-            border: "1px solid #e2e8f0",
+            border: "1px solid #E4D6BF",
             borderRadius: 14,
             background: "#ffffff",
             boxShadow:
-              "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+              "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
             padding: "46px 20px",
             textAlign: "center",
           }}
@@ -75,7 +75,7 @@ export default function ReportChart({
               display: "flex",
               justifyContent: "center",
               marginBottom: 10,
-              color: "#cbd5e1",
+              color: "#C8B8A8",
             }}
           >
             <IconBarChart size={30} strokeWidth={1.6} />
@@ -85,12 +85,12 @@ export default function ReportChart({
               margin: 0,
               fontSize: 13.5,
               fontWeight: 600,
-              color: "#334155",
+              color: "#684830",
             }}
           >
             No data to chart.
           </p>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#907860" }}>
             Try changing the date range or clearing the search.
           </p>
         </div>
@@ -106,8 +106,8 @@ export default function ReportChart({
   const topLabel = type === "bars" ? "Best" : "Top";
 
   const chips = [
-    { label: "Total", value: `${valuePrefix}${fmt(total)}`, color: "#0f172a" },
-    { label: "Average", value: `${valuePrefix}${fmt(avg)}`, color: "#1d4ed8" },
+    { label: "Total", value: `${valuePrefix}${fmt(total)}`, color: "#45301D" },
+    { label: "Average", value: `${valuePrefix}${fmt(avg)}`, color: "#684830" },
     { label: `${topLabel} (${best.label})`, value: `${valuePrefix}${fmt(best.value)}`, color: "#059669" },
   ];
 
@@ -176,11 +176,11 @@ export default function ReportChart({
     >
       <div
         style={{
-          border: "1px solid #e2e8f0",
+          border: "1px solid #E4D6BF",
           borderRadius: 14,
           background: "#ffffff",
           boxShadow:
-            "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
+            "0 1px 2px rgba(114,86,60,0.04), 0 8px 24px rgba(114,86,60,0.06)",
           padding: "16px 18px 10px",
           overflowX: "auto",
         }}
@@ -191,11 +191,11 @@ export default function ReportChart({
           <div
             key={c.label}
             style={{
-              border: "1px solid #e2e8f0",
+              border: "1px solid #E4D6BF",
               borderRadius: 12,
               padding: "10px 16px",
               background: "#fff",
-              boxShadow: "0 1px 3px rgba(15,23,42,0.05)",
+              boxShadow: "0 1px 3px rgba(114,86,60,0.05)",
               minWidth: 120,
             }}
           >
@@ -206,7 +206,7 @@ export default function ReportChart({
                 fontWeight: 700,
                 letterSpacing: 0.5,
                 textTransform: "uppercase",
-                color: "#64748b",
+                color: "#6B543E",
               }}
             >
               {c.label}
@@ -231,7 +231,7 @@ export default function ReportChart({
           margin: "0 0 10px",
           fontSize: 13,
           fontWeight: 700,
-          color: "#0f172a",
+          color: "#45301D",
           display: "flex",
           alignItems: "center",
           gap: 7,
@@ -242,8 +242,8 @@ export default function ReportChart({
             width: 24,
             height: 24,
             borderRadius: 7,
-            background: "#eef2ff",
-            color: "#4f46e5",
+            background: "#F0E8D8",
+            color: "#684830",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
@@ -270,8 +270,8 @@ export default function ReportChart({
           >
             <defs>
               <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#60a5fa" />
-                <stop offset="100%" stopColor="#1d4ed8" />
+                <stop offset="0%" stopColor="#C8B8A8" />
+                <stop offset="100%" stopColor="#684830" />
               </linearGradient>
               <linearGradient id="barGradMax" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#34d399" />
@@ -287,14 +287,14 @@ export default function ReportChart({
                   x2={W - 16}
                   y1={24 + H * (1 - f)}
                   y2={24 + H * (1 - f)}
-                  stroke={f === 0 ? "#cbd5e1" : "#eef2f7"}
+                  stroke={f === 0 ? "#C8B8A8" : "#FCF7F3"}
                   strokeWidth={1}
                 />
                 <text
                   x={50}
                   y={28 + H * (1 - f)}
                   fontSize={9.5}
-                  fill="#94a3b8"
+                  fill="#907860"
                   textAnchor="end"
                   fontFamily="Inter, sans-serif"
                 >
@@ -324,7 +324,7 @@ export default function ReportChart({
                     y={8}
                     width={BAR_W + GAP}
                     height={H + 16}
-                    fill={isHover ? "rgba(59,130,246,0.07)" : "transparent"}
+                    fill={isHover ? "rgba(163,140,119,0.07)" : "transparent"}
                     rx={8}
                   />
                   {/* value label */}
@@ -333,7 +333,7 @@ export default function ReportChart({
                     y={y - 7}
                     fontSize={10}
                     fontWeight={700}
-                    fill="#0f172a"
+                    fill="#45301D"
                     textAnchor="middle"
                     fontFamily="Inter, sans-serif"
                     opacity={isHover || isMax ? 1 : 0.75}
@@ -356,7 +356,7 @@ export default function ReportChart({
                     x={x + BAR_W / 2}
                     y={24 + H + 18}
                     fontSize={9.5}
-                    fill="#475569"
+                    fill="#6B543E"
                     textAnchor="middle"
                     fontFamily="Inter, sans-serif"
                   >
@@ -393,8 +393,8 @@ export default function ReportChart({
           >
             <defs>
               <linearGradient id="hbarGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#1d4ed8" />
-                <stop offset="100%" stopColor="#60a5fa" />
+                <stop offset="0%" stopColor="#684830" />
+                <stop offset="100%" stopColor="#C8B8A8" />
               </linearGradient>
               <linearGradient id="hbarGradTop" x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0%" stopColor="#059669" />
@@ -410,14 +410,14 @@ export default function ReportChart({
                   x2={labelW + (barArea - 20) * f}
                   y1={6}
                   y2={H - 18}
-                  stroke={f === 0 ? "#cbd5e1" : "#eef2f7"}
+                  stroke={f === 0 ? "#C8B8A8" : "#FCF7F3"}
                   strokeWidth={1}
                 />
                 <text
                   x={labelW + (barArea - 20) * f}
                   y={H - 4}
                   fontSize={9}
-                  fill="#94a3b8"
+                  fill="#907860"
                   textAnchor="middle"
                   fontFamily="Inter, sans-serif"
                 >
@@ -444,7 +444,7 @@ export default function ReportChart({
                     y={y - 3}
                     width={W - 4}
                     height={ROW_H - 2}
-                    fill={isHover ? "rgba(59,130,246,0.07)" : "transparent"}
+                    fill={isHover ? "rgba(163,140,119,0.07)" : "transparent"}
                     rx={7}
                   />
                   {/* rank */}
@@ -453,7 +453,7 @@ export default function ReportChart({
                     y={y + BAR_H - 4}
                     fontSize={9.5}
                     fontWeight={700}
-                    fill={isTop ? "#059669" : "#94a3b8"}
+                    fill={isTop ? "#059669" : "#907860"}
                     fontFamily="Inter, sans-serif"
                   >
                     {i + 1}
@@ -464,7 +464,7 @@ export default function ReportChart({
                     y={y + BAR_H - 4}
                     fontSize={10.5}
                     fontWeight={isTop || isHover ? 700 : 500}
-                    fill="#334155"
+                    fill="#684830"
                     fontFamily="Inter, sans-serif"
                   >
                     {trunc(d.label)}
@@ -486,7 +486,7 @@ export default function ReportChart({
                     y={y + BAR_H - 4}
                     fontSize={10}
                     fontWeight={700}
-                    fill="#0f172a"
+                    fill="#45301D"
                     fontFamily="Inter, sans-serif"
                     opacity={isHover || isTop ? 1 : 0.75}
                   >
@@ -580,7 +580,7 @@ export default function ReportChart({
                 y={CY - 4}
                 fontSize={11}
                 fontWeight={700}
-                fill="#0f172a"
+                fill="#45301D"
                 textAnchor="middle"
                 fontFamily="Inter, sans-serif"
                 pointerEvents="none"
@@ -609,7 +609,7 @@ export default function ReportChart({
                 y={CY - 4}
                 fontSize={10}
                 fontWeight={700}
-                fill="#64748b"
+                fill="#6B543E"
                 textAnchor="middle"
                 fontFamily="Inter, sans-serif"
                 letterSpacing={0.5}
@@ -621,7 +621,7 @@ export default function ReportChart({
                 y={CY + 15}
                 fontSize={14}
                 fontWeight={800}
-                fill="#0f172a"
+                fill="#45301D"
                 textAnchor="middle"
                 fontFamily="Inter, sans-serif"
               >
@@ -647,7 +647,7 @@ export default function ReportChart({
                   width={pieW - 330}
                   height={24}
                   rx={7}
-                  fill={isHover ? "rgba(59,130,246,0.07)" : "transparent"}
+                  fill={isHover ? "rgba(163,140,119,0.07)" : "transparent"}
                 />
                 <rect
                   x={332}
@@ -662,7 +662,7 @@ export default function ReportChart({
                   y={y + 4}
                   fontSize={10.5}
                   fontWeight={isHover ? 700 : 500}
-                  fill="#334155"
+                  fill="#684830"
                   fontFamily="Inter, sans-serif"
                 >
                   {s.label.length > 20 ? `${s.label.slice(0, 19)}…` : s.label}
@@ -672,7 +672,7 @@ export default function ReportChart({
                   y={y + 4}
                   fontSize={10}
                   fontWeight={700}
-                  fill="#0f172a"
+                  fill="#45301D"
                   textAnchor="end"
                   fontFamily="Inter, sans-serif"
                 >

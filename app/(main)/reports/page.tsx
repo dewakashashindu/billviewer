@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 
 /* ── inline SVG icons (emoji naha — professional icons) ── */
-const iconWrap = { width: 34, height: 34, borderRadius: 9, background: "#fff4e8", border: "1px solid #fbe0c2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } as const;
-const stroke = { stroke: "#d97a1c", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
+const iconWrap = { width: 34, height: 34, borderRadius: 9, background: "#F0E8D8", border: "1px solid #E4D6BF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } as const;
+const stroke = { stroke: "#684830", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
 const IBar = () => (<svg width="17" height="17" viewBox="0 0 24 24" {...stroke}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /><line x1="2" y1="20" x2="22" y2="20" /></svg>);
 const IBill = () => (<svg width="17" height="17" viewBox="0 0 24 24" {...stroke}><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2z" /><line x1="9" y1="7" x2="15" y2="7" /><line x1="9" y1="11" x2="15" y2="11" /><line x1="9" y1="15" x2="13" y2="15" /></svg>);
 const IPlate = () => (<svg width="17" height="17" viewBox="0 0 24 24" {...stroke}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /></svg>);
@@ -76,10 +76,10 @@ export default function ReportsLandingPage() {
   return (
     <div style={{ padding: "28px 26px", fontFamily: "Inter, sans-serif" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#0f172a" }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#45301D" }}>
           Reports
         </h1>
-        <p style={{ margin: "4px 0 0", fontSize: 13.5, color: "#64748b" }}>
+        <p style={{ margin: "4px 0 0", fontSize: 13.5, color: "#6B543E" }}>
           Click a report to view it
         </p>
       </div>
@@ -100,13 +100,13 @@ export default function ReportsLandingPage() {
             }
             style={{
               textAlign: "left",
-              border: "1px solid #e2e8f0",
+              border: "1px solid #E4D6BF",
               borderRadius: 14,
               padding: "18px 18px 16px",
-              background: r.linked ? "#fff" : "#f8fafc",
+              background: r.linked ? "#fff" : "#FCF7F3",
               cursor: r.linked ? "pointer" : "default",
               opacity: r.linked ? 1 : 0.65,
-              boxShadow: r.linked ? "0 1px 3px rgba(15,23,42,0.05)" : "none",
+              boxShadow: r.linked ? "0 1px 3px rgba(114,86,60,0.05)" : "none",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -125,8 +125,8 @@ export default function ReportsLandingPage() {
                     fontWeight: 700,
                     letterSpacing: 0.5,
                     textTransform: "uppercase",
-                    color: "#94a3b8",
-                    background: "#e2e8f0",
+                    color: "#907860",
+                    background: "#E4D6BF",
                     padding: "3px 8px",
                     borderRadius: 999,
                   }}
@@ -140,12 +140,12 @@ export default function ReportsLandingPage() {
                 margin: "10px 0 0",
                 fontSize: 14,
                 fontWeight: 700,
-                color: "#0f172a",
+                color: "#45301D",
               }}
             >
               {r.title}
             </p>
-            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748b", lineHeight: "18px" }}>
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B543E", lineHeight: "18px" }}>
               {r.desc}
             </p>
           </button>
