@@ -117,7 +117,11 @@ export default function TableQrPage() {
       .finally(() => alive && setLoading(false));
     try {
       const savedUrl = localStorage.getItem("tableqr-url");
-      if (savedUrl) setUrlTemplate(savedUrl);
+      // Default target = the built-in customer menu + ordering page,
+      // so a scanned QR opens /menu with the table already filled in.
+      setUrlTemplate(
+        savedUrl || `${window.location.origin}/menu?table={table}&group={group}`
+      );
     } catch { /* ignore */ }
     return () => { alive = false; };
   }, []);
@@ -458,6 +462,25 @@ export default function TableQrPage() {
               ? <>Preview: <b style={{ color: BROWN }}>{buildUrl({ tableNo: "T-01", tableGroup: group !== "ALL" ? group : "Main Dining Area", vacant: true, listingOrder: 0 })}</b> — the table number and table group are always included: placeholders are replaced, anything missing is appended as <b>?table=...&amp;group=...</b></>
               : "If no URL is entered, the QR code contains the table number only."}
           </p>
+          <button
+            type="button"
+            onClick={() =>
+              setUrlTemplate(`${window.location.origin}/menu?table={table}&group={group}`)
+            }
+            style={{
+              marginTop: 8,
+              background: "none",
+              border: "none",
+              padding: 0,
+              fontSize: 12,
+              fontWeight: 700,
+              color: BROWN,
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            Use the customer menu page (/menu?table=&#123;table&#125;&amp;group=&#123;group&#125;)
+          </button>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 18, marginTop: 16 }}>

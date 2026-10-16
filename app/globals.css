@@ -24,3 +24,51 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Customer menu (/menu) — small animation + scroll helpers.
+   Scoped with the `mnu-` prefix so nothing else is affected.
+   ───────────────────────────────────────────────────────────── */
+.mnu-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.mnu-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+.mnu-scroll::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes mnuFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnuSlideUp {
+  from { transform: translateY(22px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes mnuPop {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+@keyframes mnuSpin { to { transform: rotate(360deg); } }
+
+.mnu-anim-fade { animation: mnuFadeIn .22s ease both; }
+.mnu-anim-up   { animation: mnuSlideUp .26s cubic-bezier(.2,.8,.25,1) both; }
+.mnu-anim-pop  { animation: mnuPop .18s ease both; }
+.mnu-spinner   { animation: mnuSpin .9s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnu-anim-fade, .mnu-anim-up, .mnu-anim-pop, .mnu-spinner { animation: none !important; }
+}
+
+/* welcome background drift (food photo) — the web twin of the app's
+   slowly rotating / floating background image */
+@keyframes mnuBgDrift {
+  0%   { transform: scale(1.06) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.13) translate3d(0, -1.6%, 0); }
+  100% { transform: scale(1.06) translate3d(0, 0, 0); }
+}
+.mnu-bg-drift { animation: mnuBgDrift 28s ease-in-out infinite; will-change: transform; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnu-bg-drift { animation: none !important; }
+}
+
+
+/* ── phone viewport height ─────────────────────────────────────────
+  100vh on a phone includes the URL bar, so bottom buttons end up
+  below the fold (user has to scroll). 100dvh = what the phone
+  actually shows; old browsers keep the 100vh fallback. */
+.mnu-min-dvh { min-height: 100vh; min-height: 100dvh; }
