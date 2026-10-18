@@ -95,6 +95,8 @@ export default function TableQrPage() {
   const [urlTemplate, setUrlTemplate] = useState("");
   const [showLogo, setShowLogo] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  /** tableKey → signed customer URL (built on the server) */
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const createdRef = useRef<HTMLDivElement>(null);
@@ -117,10 +119,11 @@ export default function TableQrPage() {
       .finally(() => alive && setLoading(false));
     try {
       const savedUrl = localStorage.getItem("tableqr-url");
-      // Default target = the built-in customer menu + ordering page,
-      // so a scanned QR opens /menu with the table already filled in.
+      // Default target = the customer QR ordering flow, so a scanned
+      // QR opens /order with the table (and its signed token) filled in.
       setUrlTemplate(
-        savedUrl || `${window.location.origin}/menu?table={table}&group={group}`
+        savedUrl ||
+          `${window.location.origin}/order?table={table}&group={group}&t={token}`
       );
     } catch { /* ignore */ }
     return () => { alive = false; };
@@ -131,6 +134,44 @@ export default function TableQrPage() {
       localStorage.setItem("tableqr-url", urlTemplate);
     } catch { /* ignore */ }
   }, [urlTemplate]);
+
+  /* ── signed customer links ──────────────────────────────────────
+     The HMAC token is generated on the server (the secret must
+     never reach the browser). Re-run when the template or the
+     table list changes. */
+  useEffect(() => {
+    const list = [...tables, ...customTables];
+    if (!urlTemplate.trim() || !list.length) return;
+    let alive = true;
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/order/qr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            baseUrl: urlTemplate.trim(),
+            tables: list.map((t) => ({
+              tableNo: t.tableNo,
+              tableGroup: t.tableGroup,
+            })),
+          }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!alive || !res.ok || !json?.ok) return;
+        const map: Record<string, string> = {};
+        for (const u of json.data?.urls ?? []) {
+          map[keyOf(u as TableRowData)] = u.url;
+        }
+        setSignedUrls(map);
+      } catch {
+        /* fall back to the unsigned template */
+      }
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(handle);
+    };
+  }, [urlTemplate, tables, customTables]);
 
   const allTables = useMemo(
     () => [...tables, ...customTables],
@@ -150,12 +191,16 @@ export default function TableQrPage() {
     visible.length > 0 && visible.every((t) => selected.has(keyOf(t)));
 
   // The scanned URL always carries BOTH the table number and the
-  // table group, so the menu/ordering page at that URL can open
-  // with the table already filled in. If the entered URL uses
-  // {table} / {group} placeholders they are replaced; any value
-  // missing from the template is appended as a query parameter
-  // (?table=T-01&group=VIP%20Room).
+  // table group, plus a signed token (t=) that the ordering API
+  // verifies — that is what stops a guest from ordering into
+  // another table's bill.
+  //
+  // The signed links are built on the server (POST /api/order/qr)
+  // because the HMAC secret must never reach the browser.
   function buildUrl(t: TableRowData): string {
+    const signed = signedUrls[keyOf(t)];
+    if (signed) return signed;
+
     const base = urlTemplate.trim();
     if (!base) return t.tableNo;
     const hasTable = base.includes("{table}");
@@ -453,19 +498,21 @@ export default function TableQrPage() {
           <label style={lbl}>QR URL (opened when the code is scanned)</label>
           <input
             style={input}
-            placeholder="https://example.com/menu?table={table}  —  use {table} / {group} placeholders"
+            placeholder="https://example.com/order?table={table}  —  use {table} / {group} / {token} placeholders"
             value={urlTemplate}
             onChange={(e) => setUrlTemplate(e.target.value)}
           />
           <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
             {urlTemplate.trim()
-              ? <>Preview: <b style={{ color: BROWN }}>{buildUrl({ tableNo: "T-01", tableGroup: group !== "ALL" ? group : "Main Dining Area", vacant: true, listingOrder: 0 })}</b> — the table number and table group are always included: placeholders are replaced, anything missing is appended as <b>?table=...&amp;group=...</b></>
+              ? <>Preview: <b style={{ color: BROWN }}>{buildUrl({ tableNo: "T-01", tableGroup: group !== "ALL" ? group : "Main Dining Area", vacant: true, listingOrder: 0 })}</b> — the table, group and a signed token are always included, so a guest can only order for the table they scanned.</>
               : "If no URL is entered, the QR code contains the table number only."}
           </p>
           <button
             type="button"
             onClick={() =>
-              setUrlTemplate(`${window.location.origin}/menu?table={table}&group={group}`)
+              setUrlTemplate(
+                `${window.location.origin}/order?table={table}&group={group}&t={token}`
+              )
             }
             style={{
               marginTop: 8,
@@ -479,7 +526,7 @@ export default function TableQrPage() {
               textDecoration: "underline",
             }}
           >
-            Use the customer menu page (/menu?table=&#123;table&#125;&amp;group=&#123;group&#125;)
+            Use the customer ordering page (/order?table=&#123;table&#125;&amp;t=&#123;token&#125;)
           </button>
         </div>
 

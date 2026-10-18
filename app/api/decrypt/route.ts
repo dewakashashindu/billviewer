@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { requireSession } from '@/lib/actionAuth';
 
 const IV = Buffer.from([
   0x00, 0x01, 0x02, 0x03,
@@ -67,6 +68,22 @@ function decryptBillNumber(encryptedText: string): string | null {
  */
 export async function GET(request: NextRequest) {
   try {
+    // ── Staff only in production ────────────────────────────────
+    // This endpoint turns a link id into a plain bill number.
+    // Left public it lets anyone enumerate bills (and the CORS
+    // header below let any website call it), so a staff session
+    // is required once the app is live.
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        await requireSession();
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const encryptedId = searchParams.get('id');
 
@@ -132,16 +149,22 @@ export async function GET(request: NextRequest) {
 
 /**
  * OPTIONS - CORS support
+ * Same-origin only (the admin panel calls this from the same
+ * site). A wildcard origin would let any website read bills.
  */
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin') ?? '';
+  const host = request.headers.get('host') ?? '';
+  const sameOrigin = origin === '' || origin.includes(host);
   return NextResponse.json(
     {},
     {
       status: 200,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': sameOrigin ? origin || 'null' : 'null',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Vary': 'Origin',
       },
     }
   );

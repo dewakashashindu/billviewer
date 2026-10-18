@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  allowedDevOrigins: ['192.168.1.100'],
+  allowedDevOrigins: ['192.168.1.100', '*.e2b.app'],
 
   // hide the floating Next.js badge (bottom-left) that shows up when
   // the app is opened from a phone against `npm run dev`

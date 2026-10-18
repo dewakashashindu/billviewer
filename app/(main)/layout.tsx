@@ -4,7 +4,7 @@
 // login nokaralu → /login?next=<path> ekata redirect.
 // NOTE: middleware eken karanna beri (edge runtime eke node:crypto
 // nathi nisa) server-component guard eka methanama.
-// /bill SAHA / PAGES ME LAYOUT EKEN PITA — PUBLIC.
+// /bill, /order SAHA / PAGES ME LAYOUT EKEN PITA — PUBLIC.
 // ============================================================
 import { redirect } from "next/navigation";
 import { getSessionFromRequest } from "@/lib/session";

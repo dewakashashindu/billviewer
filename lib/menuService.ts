@@ -227,6 +227,8 @@ export interface ConfirmInput {
   items: ConfirmLineInput[];
   customerName?: string;
   customerPhone?: string;
+  /** Number of guests for this order (Tbl_HoldUpsCloud.LPax). */
+  pax?: number;
   requestId?: string;
 }
 export interface ConfirmResult {
@@ -290,7 +292,7 @@ async function generateInvoiceNo(tx: sql.Transaction): Promise<string> {
   return `INV-${ymd.replaceAll("-", "")}-${String(seq).padStart(3, "0")}`;
 }
 
-function validateInput(input: ConfirmInput): Required<Omit<ConfirmInput, "requestId">> & { requestId: string } {
+function validateInput(input: ConfirmInput): Required<Omit<ConfirmInput, "requestId" | "pax">> & { requestId: string; pax: number } {
   const tableNo = s(input.tableNo);
   if (!tableNo) throw new OrderError("Table number is required. Scan the table QR code.");
   if (!Array.isArray(input.items) || input.items.length === 0)
@@ -303,12 +305,15 @@ function validateInput(input: ConfirmInput): Required<Omit<ConfirmInput, "reques
       throw new OrderError(`Invalid quantity for ${s(i.itemId)}.`);
     return { itemId: s(i.itemId), quantity: qty, remark: s(i.remark).slice(0, 200) };
   });
+  const paxRaw = Number(input.pax);
+  const pax = Number.isFinite(paxRaw) && paxRaw >= 1 ? Math.min(50, Math.round(paxRaw)) : 1;
   return {
     tableNo,
     tableGroup: s(input.tableGroup),
     items,
     customerName: s(input.customerName).slice(0, 100),
     customerPhone: s(input.customerPhone).slice(0, 30),
+    pax,
     requestId: s(input.requestId),
   };
 }
@@ -431,6 +436,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         ins.input("grp", sql.Char(10), tableGrpId);
         ins.input("cusCode", sql.VarChar(30), input.customerPhone);
         ins.input("cusName", sql.VarChar(100), input.customerName);
+        ins.input("lpx", sql.Int, input.pax);
         await ins.query(`
           INSERT INTO dbo.Tbl_HoldUpsCloud (
             TabelNo, ItemCode, QTY, SalesPrice, ItemRemarks, UserID,
@@ -438,7 +444,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
             CusCode, CusName, TxnDateTime
           ) VALUES (
             @table, @item, @qty, @price, @remark, 'WEB',
-            @grp, 1, 0, 'DI', @inv, 0,
+            @grp, @lpx, 0, 'DI', @inv, 0,
             @cusCode, @cusName, DATEADD(MINUTE, 330, GETUTCDATE())
           );
         `);
@@ -454,6 +460,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       act.input("grp", sql.Char(10), tableGrpId);
       act.input("cusCode", sql.VarChar(30), input.customerPhone);
       act.input("cusName", sql.VarChar(100), input.customerName);
+      act.input("lpx", sql.Int, input.pax);
       await act.query(`
         INSERT INTO dbo.Tbl_HoldUpsCloudTemp (
           TabelNo, UserID, ItemCode, QTY, ItemRemarks, VoidRemark,
@@ -461,7 +468,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
           OrderType, AoR, UserName, InvoiceNo, CusCode, CusName
         ) VALUES (
           @table, 'WEB', @item, @qty, @remark, '',
-          @grp, DATEADD(MINUTE, 330, GETUTCDATE()), 1, 0, @price, '',
+          @grp, DATEADD(MINUTE, 330, GETUTCDATE()), @lpx, 0, @price, '',
           'DI', 'A', 'Web Menu', @inv, @cusCode, @cusName
         );
       `);
