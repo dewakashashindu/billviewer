@@ -2,12 +2,13 @@
 
 // ============================================================
 // LOCATION: components/menu/CartView.tsx
-// "Ready to Eat?" — the app's menu_cart screen.
+// "Ready to Eat?" — the app's menu_cart screen (redesigned).
 //   variant="sheet" → mobile full-screen sheet (header + sticky footer)
 //   variant="panel" → desktop right-hand sticky cart panel
 //
 // Already-ordered rows are READ-ONLY; only NEW rows can be
-// changed, exactly like the app.
+// changed, exactly like the app. Mobile groups the rows into
+// "New items" and "Already on bill" sections.
 // ============================================================
 
 import type { CSSProperties } from "react";
@@ -47,11 +48,11 @@ function Row({
   if (panel) {
     return (
       <div style={{ ...s.panelRow, ...(row.readOnly ? s.panelRowRo : null) }}>
-        <ItemPhoto item={{ id: row.itemId, name: row.name, imageUrl: item?.imageUrl ?? null }} size={46} radius={10} />
+        <ItemPhoto item={{ id: row.itemId, name: row.name, imageUrl: item?.imageUrl ?? null }} size={46} radius={12} />
         <div style={s.panelDet}>
           <div style={s.panelName}>{row.name}</div>
           <div style={s.panelMeta}>
-            {row.readOnly ? "ALREADY ON BILL · read only" : `NEW${row.remark ? ` · ${row.remark}` : ""}`}
+            {row.readOnly ? "ALREADY ON BILL · READ ONLY" : `NEW${row.remark ? ` · ${row.remark}` : ""}`}
           </div>
           {!row.readOnly && (
             <div style={s.panelActions}>
@@ -79,7 +80,7 @@ function Row({
 
   return (
     <div style={{ ...s.row, ...(row.readOnly ? s.rowRo : null) }}>
-      <ItemPhoto item={{ id: row.itemId, name: row.name, imageUrl: item?.imageUrl ?? null }} size={74} radius={12} />
+      <ItemPhoto item={{ id: row.itemId, name: row.name, imageUrl: item?.imageUrl ?? null }} size={72} radius={14} />
 
       <div style={s.det}>
         <div style={s.top}>
@@ -105,7 +106,7 @@ function Row({
         ) : (
           <>
             <button type="button" style={s.remarkBtn} onClick={onRemark}>
-              {row.remark ? "Edit Order Remark" : "Add Order Remark"}
+              {row.remark ? "Edit Order Remark" : "+ Add Order Remark"}
             </button>
             {row.remark ? <div style={s.remarkPreview}>{row.remark}</div> : null}
             <div style={s.bot}>
@@ -118,6 +119,28 @@ function Row({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Totals block shared by the sheet footer and the desktop panel. */
+function Totals({ existingTotal, newTotal, newCount }: { existingTotal: number; newTotal: number; newCount: number }) {
+  const grand = existingTotal + newTotal;
+  return (
+    <div style={s.totalsCard}>
+      <div style={s.totRow}>
+        <span>Already on bill</span>
+        <b>{formatPrice(existingTotal)}</b>
+      </div>
+      <div style={s.totRow}>
+        <span>New items ({newCount})</span>
+        <b>{formatPrice(newTotal)}</b>
+      </div>
+      <div style={s.totDivider} />
+      <div style={{ ...s.totRow, ...s.totRowGrand }}>
+        <span>Total payable</span>
+        <b style={s.grandAmt}>{formatPrice(grand)}</b>
       </div>
     </div>
   );
@@ -164,30 +187,53 @@ export default function CartView({
 }) {
   const panel = variant === "panel";
   const empty = rows.length === 0;
+  const newRows = rows.filter((r) => !r.readOnly);
+  const oldRows = rows.filter((r) => r.readOnly);
+
+  const renderRow = (row: CartRow) => (
+    <Row
+      key={row.rowId}
+      row={row}
+      item={itemsById.get(row.itemId)}
+      panel={panel}
+      onInc={() => onInc(row.lineKey)}
+      onDec={() => onDec(row.lineKey)}
+      onRemove={() => onRemove(row.lineKey)}
+      onRemark={() => onRemark(row)}
+    />
+  );
 
   const list = empty ? (
     <div style={s.empty}>
-      <span style={{ fontSize: 52 }} aria-hidden>🛒</span>
+      <span style={s.emptyArt} aria-hidden>🛒</span>
       <div style={s.emptyTitle}>Your cart is empty</div>
       <div style={s.emptySub}>Add something delicious from the menu</div>
-      <button type="button" style={s.emptyBtn} onClick={onBack}>
+      <button type="button" style={s.emptyBtn} className="mnu-tap" onClick={onBack}>
         Browse Menu
       </button>
     </div>
+  ) : panel ? (
+    <div style={s.panelList}>{rows.map(renderRow)}</div>
   ) : (
-    <div style={panel ? s.panelList : s.list}>
-      {rows.map((row) => (
-        <Row
-          key={row.rowId}
-          row={row}
-          item={itemsById.get(row.itemId)}
-          panel={panel}
-          onInc={() => onInc(row.lineKey)}
-          onDec={() => onDec(row.lineKey)}
-          onRemove={() => onRemove(row.lineKey)}
-          onRemark={() => onRemark(row)}
-        />
-      ))}
+    <div style={s.list}>
+      {newRows.length > 0 && (
+        <>
+          <div style={s.sectionRow}>
+            <span style={s.sectionLabel}>New Items</span>
+            <span style={s.sectionCount}>{newRows.length}</span>
+          </div>
+          {newRows.map(renderRow)}
+        </>
+      )}
+      {oldRows.length > 0 && (
+        <>
+          <div style={s.sectionRow}>
+            <span style={s.sectionLabel}>Already on Bill</span>
+            <span style={s.sectionCount}>{oldRows.length}</span>
+          </div>
+          {oldRows.map(renderRow)}
+        </>
+      )}
     </div>
   );
 
@@ -215,20 +261,14 @@ export default function CartView({
         </div>
 
         <div style={s.panelFooter}>
-          <div style={s.totRow}>
-            <span>Already on bill</span>
-            <b>{formatPrice(existingTotal)}</b>
-          </div>
-          <div style={{ ...s.totRow, ...s.totRowGrand }}>
-            <span>New items ({newCount})</span>
-            <b>{formatPrice(newTotal)}</b>
-          </div>
+          <Totals existingTotal={existingTotal} newTotal={newTotal} newCount={newCount} />
           {error && <div style={s.error}>{error}</div>}
           <button
             type="button"
             style={{ ...s.confirm, ...(confirming ? { opacity: 0.7 } : null) }}
+            className="mnu-tap"
             onClick={onConfirm}
-            disabled={confirming}
+            disabled={confirming || newCount === 0}
           >
             {confirming ? <span className="mnu-spinner" style={s.spinner} /> : <span style={s.tick} />}
             {confirming ? "Confirming..." : "Confirm Order"}
@@ -243,7 +283,7 @@ export default function CartView({
   return (
     <div style={s.sheet} className="mnu-anim-up">
       <div style={s.sheetHead}>
-        <button type="button" style={s.roundBtn} onClick={onBack} aria-label="Back">
+        <button type="button" style={s.roundBtn} className="mnu-tap" onClick={onBack} aria-label="Back">
           <span style={s.backChev} />
         </button>
         <div style={s.headMid}>
@@ -260,40 +300,29 @@ export default function CartView({
       </div>
 
       <div style={s.sheetBody} className="mnu-scroll">
-        {!empty && (
-          <div style={s.sectionRow}>
-            <span style={s.sectionLabel}>Your Order</span>
-            <span style={s.sectionCount}>
-              {rows.length} {rows.length === 1 ? "item" : "items"}
-            </span>
-          </div>
-        )}
         {list}
       </div>
 
       {!empty && (
-        <div style={s.sheetFooter}>
+        <div style={s.sheetFooter} className="mnu-safe-bottom">
           <div style={s.grip} />
-          <div style={s.totRow}>
-            <span>Already on bill</span>
-            <b>{formatPrice(existingTotal)}</b>
-          </div>
-          <div style={{ ...s.totRow, ...s.totRowGrand }}>
-            <span>New items ({newCount})</span>
-            <b>{formatPrice(newTotal)}</b>
-          </div>
+          <Totals existingTotal={existingTotal} newTotal={newTotal} newCount={newCount} />
           {error && <div style={s.error}>{error}</div>}
           <div style={s.footerRow}>
-            <button type="button" style={s.homeBtn} onClick={onHome} aria-label="Home">
+            <button type="button" style={s.homeBtn} className="mnu-tap" onClick={onHome} aria-label="Home">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden>
                 <path d="M12 3.2 2.6 11.4h2.6V20h5v-5.2h3.6V20h5v-8.6h2.6z" />
               </svg>
             </button>
             <button
               type="button"
-              style={{ ...s.confirm, ...(confirming ? { opacity: 0.7 } : null) }}
+              style={{
+                ...s.confirm,
+                ...(confirming || newCount === 0 ? { opacity: 0.55 } : null),
+              }}
+              className="mnu-tap"
               onClick={onConfirm}
-              disabled={confirming}
+              disabled={confirming || newCount === 0}
             >
               {confirming ? <span className="mnu-spinner" style={s.spinner} /> : <span style={s.tick} />}
               {confirming ? "Confirming..." : "Confirm Order"}
@@ -317,15 +346,16 @@ const s: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "12px 18px 14px",
+    padding: "14px 18px 14px",
     borderBottom: `1px solid ${T.line}`,
     flex: "0 0 auto",
+    background: "rgba(27,27,27,0.6)",
   },
   roundBtn: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: "50%",
-    border: `1.5px solid ${T.line}`,
+    border: `1px solid ${T.line}`,
     background: T.card,
     display: "inline-flex",
     alignItems: "center",
@@ -341,8 +371,8 @@ const s: Record<string, CSSProperties> = {
     marginLeft: 2,
     display: "block",
   },
-  headMid: { display: "flex", alignItems: "center", gap: 8 },
-  headTitle: { margin: 0, color: T.gold, fontSize: 19, fontWeight: 700 },
+  headMid: { display: "flex", alignItems: "center", gap: 9 },
+  headTitle: { margin: 0, color: T.gold, fontSize: 19, fontWeight: 800, letterSpacing: 0.3 },
   countBadge: {
     background: T.gold,
     color: T.white,
@@ -354,13 +384,25 @@ const s: Record<string, CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "0 5px",
+    padding: "0 6px",
   },
-  clear: { background: "none", border: "none", color: T.red, fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: 4 },
+  clear: { background: "none", border: "none", color: T.red, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 4 },
   sheetBody: { flex: 1, overflowY: "auto", paddingBottom: 16 },
-  sectionRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px 12px" },
-  sectionLabel: { color: T.w92, fontSize: 15, fontWeight: 700 },
-  sectionCount: { color: T.w55, fontSize: 12 },
+  sectionRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "16px 18px 11px",
+  },
+  sectionLabel: { color: T.w92, fontSize: 13, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase" },
+  sectionCount: {
+    color: T.gold,
+    fontSize: 11,
+    fontWeight: 800,
+    background: T.goldSoft,
+    borderRadius: 9,
+    padding: "3px 9px",
+  },
   list: { padding: "0 18px" },
   row: {
     display: "flex",
@@ -370,18 +412,19 @@ const s: Record<string, CSSProperties> = {
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: T.line,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
     marginBottom: 11,
+    boxShadow: "0 5px 16px rgba(0,0,0,0.22)",
   },
-  rowRo: { background: "#262626", borderColor: "rgba(255,255,255,0.05)" },
+  rowRo: { background: "#242220", borderColor: "rgba(255,255,255,0.05)" },
   det: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
   top: { display: "flex", justifyContent: "space-between", gap: 8 },
-  name: { color: T.w92, fontSize: 13.5, fontWeight: 600, lineHeight: 1.4 },
+  name: { color: T.w92, fontSize: 13.5, fontWeight: 700, lineHeight: 1.4 },
   trash: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     background: T.redSoft,
     border: "none",
     display: "inline-flex",
@@ -392,31 +435,31 @@ const s: Record<string, CSSProperties> = {
   },
   tag: {
     alignSelf: "flex-start",
-    marginTop: 5,
+    marginTop: 6,
     fontSize: 8.5,
-    fontWeight: 700,
-    letterSpacing: 0.5,
-    padding: "3px 7px",
+    fontWeight: 800,
+    letterSpacing: 0.6,
+    padding: "3px 8px",
     borderRadius: 7,
   },
-  tagRo: { background: "rgba(255,255,255,0.10)", color: T.w55 },
+  tagRo: { background: "rgba(255,255,255,0.09)", color: T.w55 },
   tagNew: { background: T.greenSoft, color: "#8fd3ac" },
-  unit: { color: T.w55, fontSize: 11.5, marginTop: 5 },
+  unit: { color: T.w55, fontSize: 11.5, marginTop: 6 },
   roLine: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, gap: 10 },
-  roTxt: { color: T.w25, fontSize: 11.5, fontStyle: "italic" },
+  roTxt: { color: T.w40, fontSize: 11.5, fontStyle: "italic" },
   remarkBtn: {
     alignSelf: "flex-start",
-    marginTop: 7,
+    marginTop: 8,
     background: "none",
     border: "none",
     padding: 0,
     color: T.gold,
     fontSize: 11.5,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: "pointer",
   },
-  remarkPreview: { color: T.w55, fontSize: 11.5, fontStyle: "italic", marginTop: 2 },
-  bot: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 9 },
+  remarkPreview: { color: T.w55, fontSize: 11.5, fontStyle: "italic", marginTop: 3 },
+  bot: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   stepper: {
     display: "inline-flex",
     alignItems: "center",
@@ -434,41 +477,62 @@ const s: Record<string, CSSProperties> = {
     fontSize: 18,
     cursor: "pointer",
   },
-  qty: { color: T.white, fontSize: 14, fontWeight: 700, minWidth: 22, textAlign: "center" },
-  lineTotal: { color: T.gold, fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap" },
-  empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "60px 40px", gap: 10 },
-  emptyTitle: { color: T.w92, fontSize: 20, fontWeight: 700, marginTop: 8 },
-  emptySub: { color: T.w55, fontSize: 14, textAlign: "center", lineHeight: 1.5 },
+  qty: { color: T.white, fontSize: 14, fontWeight: 800, minWidth: 22, textAlign: "center" },
+  lineTotal: { color: T.gold, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" },
+  empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "60px 40px", gap: 8 },
+  emptyArt: {
+    fontSize: 52,
+    width: 104,
+    height: 104,
+    borderRadius: "50%",
+    background: T.card,
+    border: `1px solid ${T.line}`,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: { color: T.w92, fontSize: 20, fontWeight: 800, marginTop: 6 },
+  emptySub: { color: T.w55, fontSize: 13.5, textAlign: "center", lineHeight: 1.55 },
   emptyBtn: {
-    marginTop: 12,
-    background: T.gold,
+    marginTop: 14,
+    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
     color: T.white,
     border: "none",
-    padding: "12px 28px",
+    padding: "13px 30px",
     borderRadius: 24,
     fontSize: 15,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: "pointer",
+    boxShadow: T.shadowGold,
   },
   sheetFooter: {
     flex: "0 0 auto",
-    background: T.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    background: "#201E1B",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     borderTop: `1px solid ${T.line}`,
-    padding: "16px 18px 22px",
-    boxShadow: "0 -8px 22px rgba(0,0,0,0.45)",
+    padding: "14px 18px 20px",
+    boxShadow: "0 -10px 26px rgba(0,0,0,0.5)",
   },
   grip: { width: 40, height: 4, borderRadius: 2, background: T.w25, margin: "0 auto 14px" },
-  totRow: { display: "flex", justifyContent: "space-between", color: T.w55, fontSize: 12.5, marginBottom: 8 },
-  totRowGrand: { fontSize: 13.5 },
+  totalsCard: {
+    background: T.card,
+    border: `1px solid ${T.line}`,
+    borderRadius: 16,
+    padding: "13px 15px",
+  },
+  totRow: { display: "flex", justifyContent: "space-between", alignItems: "center", color: T.w55, fontSize: 12.5, marginBottom: 7 },
+  totRowGrand: { fontSize: 14, marginBottom: 0, color: T.w92 },
+  totDivider: { height: 1, background: T.line, margin: "4px 0 10px" },
+  grandAmt: { color: T.gold, fontSize: 17, fontWeight: 800 },
   footerRow: { display: "flex", gap: 12, alignItems: "center", marginTop: 14 },
   homeBtn: {
     width: 56,
     height: 52,
-    borderRadius: 14,
-    background: T.gold,
-    border: "none",
+    borderRadius: 15,
+    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
+    border: "1px solid rgba(255,255,255,0.14)",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -479,19 +543,21 @@ const s: Record<string, CSSProperties> = {
   confirm: {
     flex: 1,
     height: 52,
-    borderRadius: 14,
-    background: T.green,
-    border: "none",
+    borderRadius: 15,
+    background: "linear-gradient(180deg, #469B6A 0%, #3D8C5E 100%)",
+    border: "1px solid rgba(255,255,255,0.14)",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     color: T.white,
     fontSize: 15,
-    fontWeight: 700,
+    fontWeight: 800,
+    letterSpacing: 0.2,
     boxShadow: T.shadowGreen,
     cursor: "pointer",
   },
+  confirmDisabled: { opacity: 0.55 },
   tick: {
     width: 14,
     height: 8,
@@ -509,23 +575,23 @@ const s: Record<string, CSSProperties> = {
     display: "inline-block",
   },
   moreLink: {
-    marginTop: 12,
+    marginTop: 13,
     width: "100%",
     background: "none",
     border: "none",
     color: T.gold,
     fontSize: 13,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: "pointer",
   },
-  error: { color: "#ffb4b4", fontSize: 12, margin: "4px 0 10px" },
+  error: { color: "#ffb4b4", fontSize: 12, margin: "10px 0 0", textAlign: "center" },
   note: { color: T.w25, fontSize: 11, textAlign: "center", marginTop: 12, lineHeight: 1.6 },
 
   /* desktop panel */
   panel: {
     width: 372,
     flex: "0 0 372px",
-    background: "#171717",
+    background: "#171614",
     borderLeft: "1px solid #232323",
     display: "flex",
     flexDirection: "column",
@@ -533,30 +599,36 @@ const s: Record<string, CSSProperties> = {
     minHeight: 0,
   },
   panelHead: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flex: "0 0 auto" },
-  panelTitle: { color: T.white, fontSize: 16, fontWeight: 800 },
+  panelTitle: { color: T.white, fontSize: 17, fontWeight: 800 },
   panelSub: { color: T.w40, fontSize: 12, marginTop: 4 },
   panelList: { paddingTop: 16, paddingBottom: 8 },
   panelRow: {
     display: "flex",
     gap: 11,
     padding: 11,
-    borderRadius: 13,
-    background: "#1F1F1F",
+    borderRadius: 15,
+    background: "#211F1C",
     // longhands so panelRowRo can override borderColor alone
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: T.line,
     marginBottom: 10,
   },
-  panelRowRo: { background: "#1B1B1B", borderColor: "rgba(255,255,255,0.04)" },
+  panelRowRo: { background: "#1C1A18", borderColor: "rgba(255,255,255,0.04)" },
   panelDet: { flex: 1, minWidth: 0 },
-  panelName: { color: T.w92, fontSize: 12.5, fontWeight: 600 },
-  panelMeta: { color: T.w40, fontSize: 11, marginTop: 3 },
-  panelActions: { display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" },
-  stepperSm: { display: "inline-flex", alignItems: "center", background: T.surface, borderRadius: 20, border: `1px solid ${T.line}` },
+  panelName: { color: T.w92, fontSize: 12.5, fontWeight: 700 },
+  panelMeta: { color: T.w40, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, marginTop: 3 },
+  panelActions: { display: "flex", alignItems: "center", gap: 10, marginTop: 9, flexWrap: "wrap" },
+  stepperSm: {
+    display: "inline-flex",
+    alignItems: "center",
+    background: T.surface,
+    borderRadius: 20,
+    border: `1px solid ${T.line}`,
+  },
   stepSm: { width: 26, height: 24, background: "none", border: "none", color: T.white, fontSize: 15, cursor: "pointer" },
-  qtySm: { color: T.white, fontSize: 12.5, fontWeight: 700, minWidth: 18, textAlign: "center" },
-  linkBtn: { background: "none", border: "none", padding: 0, color: T.gold, fontSize: 11.5, fontWeight: 600, cursor: "pointer" },
+  qtySm: { color: T.white, fontSize: 12.5, fontWeight: 800, minWidth: 18, textAlign: "center" },
+  linkBtn: { background: "none", border: "none", padding: 0, color: T.gold, fontSize: 11.5, fontWeight: 700, cursor: "pointer" },
   iconBtn: {
     width: 24,
     height: 24,
@@ -570,5 +642,5 @@ const s: Record<string, CSSProperties> = {
   },
   panelRight: { textAlign: "right", flex: "0 0 auto" },
   qtyTxt: { color: T.w55, fontSize: 11, marginTop: 5 },
-  panelFooter: { marginTop: "auto", borderTop: `1px solid ${T.line}`, paddingTop: 14, flex: "0 0 auto" },
+  panelFooter: { marginTop: "auto", paddingTop: 14, flex: "0 0 auto" },
 };

@@ -2,11 +2,12 @@
 
 // ============================================================
 // LOCATION: components/menu/MenuItemCard.tsx
-// The circular-photo + card design from the app's menu_cato
-// (image overlaps the card top), with the ADD / qty stepper.
+// Redesigned dish card: rounded photo header, clamped name,
+// gold price and an ADD pill / qty stepper. The circular-photo
+// variant (ItemPhoto) is still exported for cart + search rows.
 // ============================================================
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { formatPriceShort, itemEmoji, T } from "./theme";
 import type { MenuItem } from "./types";
 
@@ -24,12 +25,12 @@ export function AddQtyButton({
   large?: boolean;
 }) {
   const pad: CSSProperties = large
-    ? { padding: "8px 22px", fontSize: 11 }
-    : { padding: "6px 16px", fontSize: 9.5 };
+    ? { padding: "9px 24px", fontSize: 11.5 }
+    : { padding: "7px 18px", fontSize: 10.5 };
 
   if (qty === 0) {
     return (
-      <button type="button" onClick={onAdd} style={{ ...s.addBtn, ...pad }}>
+      <button type="button" onClick={onAdd} className="mnu-tap" style={{ ...s.addBtn, ...pad }}>
         ADD
       </button>
     );
@@ -57,6 +58,7 @@ export function AddQtyButton({
   );
 }
 
+/** Square/round photo with an emoji fallback when the image fails. */
 export function ItemPhoto({
   item,
   size,
@@ -66,6 +68,7 @@ export function ItemPhoto({
   size: number;
   radius?: string | number;
 }) {
+  const [failed, setFailed] = useState(false);
   const box: CSSProperties = {
     width: size,
     height: size,
@@ -79,7 +82,7 @@ export function ItemPhoto({
     overflow: "hidden",
     flex: "0 0 auto",
   };
-  if (item.imageUrl) {
+  if (item.imageUrl && !failed) {
     return (
       <span style={box}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -87,6 +90,7 @@ export function ItemPhoto({
           src={item.imageUrl}
           alt={item.name}
           loading="lazy"
+          onError={() => setFailed(true)}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       </span>
@@ -94,6 +98,28 @@ export function ItemPhoto({
   }
   return (
     <span style={box} aria-hidden>
+      {itemEmoji(item.name)}
+    </span>
+  );
+}
+
+/** Photo that fills its parent (used for the card header). */
+function CardPhoto({ item }: { item: Pick<MenuItem, "name" | "imageUrl"> }) {
+  const [failed, setFailed] = useState(false);
+  if (item.imageUrl && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={item.imageUrl}
+        alt={item.name}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={s.cardPhotoImg}
+      />
+    );
+  }
+  return (
+    <span style={s.cardPhotoFallback} aria-hidden>
       {itemEmoji(item.name)}
     </span>
   );
@@ -117,23 +143,29 @@ export default function MenuItemCard({
   alreadyOrdered?: number;
 }) {
   return (
-    <div style={s.wrap}>
-      <div style={s.circle}>
-        <ItemPhoto item={item} size={92} />
-      </div>
-      <div style={s.card}>
-        <button type="button" onClick={onOpen} style={s.openArea}>
-          <span style={s.name}>{item.name}</span>
-          <span style={s.price}>{formatPriceShort(item.price)}</span>
-        </button>
+    <div style={s.card} className="mnu-anim-up">
+      {/* photo header */}
+      <button type="button" onClick={onOpen} style={s.photoBtn} aria-label={`View ${item.name}`}>
+        <CardPhoto item={item} />
+        <span style={s.photoScrim} aria-hidden />
         {alreadyOrdered > 0 && (
-          <span style={s.badge}>ALREADY ON BILL ×{alreadyOrdered}</span>
+          <span style={s.badge}>ON BILL ×{alreadyOrdered}</span>
         )}
-        <div style={s.row}>
+        {!item.available && <span style={s.soldOut}>Sold out</span>}
+      </button>
+
+      {/* body */}
+      <div style={s.body}>
+        <button type="button" onClick={onOpen} style={s.nameBtn}>
+          <span style={s.name} className="mnu-clamp2">
+            {item.name}
+          </span>
+        </button>
+        <div style={s.priceRow}>
+          <span style={s.price}>{formatPriceShort(item.price)}</span>
           <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex" }}>
             <AddQtyButton qty={qty} onAdd={onAdd} onInc={onInc} onDec={onDec} />
           </span>
-          <span style={s.chev} onClick={onOpen} role="button" aria-label="View details" />
         </div>
       </div>
     </div>
@@ -141,90 +173,138 @@ export default function MenuItemCard({
 }
 
 const s: Record<string, CSSProperties> = {
-  wrap: { position: "relative", paddingTop: 46, width: "100%" },
-  circle: { position: "absolute", top: 0, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 2 },
   card: {
     background: T.cardDeep,
-    border: "1px solid rgba(201,201,201,0.30)",
-    borderRadius: 12,
-    padding: "56px 13px 12px",
+    border: `1px solid ${T.line}`,
+    borderRadius: 18,
+    overflow: "hidden",
     display: "flex",
     flexDirection: "column",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
   },
-  openArea: {
+  photoBtn: {
+    position: "relative",
+    display: "block",
+    width: "100%",
+    aspectRatio: "16 / 11",
+    padding: 0,
+    border: "none",
+    background: "radial-gradient(circle at 32% 28%, #4a3a22, #241b11 75%)",
+    cursor: "pointer",
+    overflow: "hidden",
+  },
+  cardPhotoImg: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+  cardPhotoFallback: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 52,
+  },
+  photoScrim: {
+    position: "absolute",
+    inset: 0,
+    background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(20,17,14,0.55) 100%)",
+    pointerEvents: "none",
+  },
+  badge: {
+    position: "absolute",
+    top: 9,
+    left: 9,
+    fontSize: 8.5,
+    fontWeight: 800,
+    letterSpacing: 0.5,
+    color: T.w72,
+    background: "rgba(20,17,14,0.72)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    padding: "3px 8px",
+    borderRadius: 8,
+    backdropFilter: "blur(4px)",
+  },
+  soldOut: {
+    position: "absolute",
+    top: 9,
+    right: 9,
+    fontSize: 8.5,
+    fontWeight: 800,
+    letterSpacing: 0.5,
+    color: "#ffd7d7",
+    background: "rgba(224,82,82,0.85)",
+    padding: "3px 8px",
+    borderRadius: 8,
+  },
+  body: { padding: "11px 12px 12px", display: "flex", flexDirection: "column", gap: 9, flex: 1 },
+  nameBtn: {
     background: "none",
     border: "none",
     padding: 0,
     textAlign: "left",
     cursor: "pointer",
-    display: "flex",
-    flexDirection: "column",
     color: "inherit",
     font: "inherit",
   },
-  name: { color: T.white, fontSize: 13.5, fontWeight: 500, lineHeight: 1.35 },
-  price: { color: T.gold90, fontSize: 12, fontWeight: 600, marginTop: 4 },
-  badge: {
-    alignSelf: "flex-start",
-    marginTop: 7,
-    fontSize: 8.5,
-    fontWeight: 700,
-    letterSpacing: 0.4,
-    color: T.w55,
-    background: "rgba(255,255,255,0.10)",
-    padding: "3px 7px",
-    borderRadius: 7,
+  name: { color: T.w92, fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 },
+  priceRow: {
+    marginTop: "auto",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  row: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
-  chev: {
-    width: 11,
-    height: 11,
-    borderTop: "1.6px solid rgba(255,255,255,0.8)",
-    borderRight: "1.6px solid rgba(255,255,255,0.8)",
-    transform: "rotate(45deg)",
-    cursor: "pointer",
-    marginRight: 3,
-  },
+  price: { color: T.gold, fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap" },
   addBtn: {
-    background: "rgba(171,119,60,0.85)",
+    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
     color: T.white,
-    fontWeight: 700,
-    letterSpacing: 1.1,
-    border: "none",
+    fontWeight: 800,
+    letterSpacing: 1.4,
+    border: "1px solid rgba(255,255,255,0.16)",
     borderRadius: 11,
     cursor: "pointer",
+    boxShadow: "0 4px 12px rgba(171,119,60,0.35)",
   },
   stepper: {
     display: "inline-flex",
     alignItems: "center",
-    background: "rgba(171,119,60,0.85)",
+    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
+    border: "1px solid rgba(255,255,255,0.16)",
     borderRadius: 11,
     overflow: "hidden",
+    boxShadow: "0 4px 12px rgba(171,119,60,0.35)",
   },
   stepBtn: {
-    width: 28,
-    height: 26,
+    width: 30,
+    height: 28,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     background: "none",
     border: "none",
     color: T.white,
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: 700,
     cursor: "pointer",
   },
   stepBtnLg: {
-    width: 34,
-    height: 32,
+    width: 36,
+    height: 34,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     background: "none",
     border: "none",
     color: T.white,
-    fontSize: 17,
+    fontSize: 18,
+    fontWeight: 700,
     cursor: "pointer",
   },
-  qtyNum: { color: T.white, fontSize: 12.5, fontWeight: 700, minWidth: 20, textAlign: "center" },
-  qtyNumLg: { color: T.white, fontSize: 14, fontWeight: 700, minWidth: 24, textAlign: "center" },
+  qtyNum: { color: T.white, fontSize: 13, fontWeight: 800, minWidth: 22, textAlign: "center" },
+  qtyNumLg: { color: T.white, fontSize: 14.5, fontWeight: 800, minWidth: 26, textAlign: "center" },
 };

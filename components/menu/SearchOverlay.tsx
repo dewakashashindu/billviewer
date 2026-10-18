@@ -3,7 +3,8 @@
 // ============================================================
 // LOCATION: components/menu/SearchOverlay.tsx
 // Search by dish name, category or sub-category (the app's
-// SearchOverlay). Results can be added to the cart directly.
+// SearchOverlay, redesigned). Results can be added to the cart
+// directly.
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -57,9 +58,9 @@ export default function SearchOverlay({
 
   return (
     <div style={s.overlay} className="mnu-anim-fade" role="dialog" aria-modal="true">
-      <div style={s.barRow}>
+      <div style={s.barRow} className="mnu-anim-up">
         <div style={s.bar}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.gold} strokeWidth="2.2" aria-hidden>
             <circle cx="10.5" cy="10.5" r="6.5" />
             <path d="M15.5 15.5 21 21" />
           </svg>
@@ -86,13 +87,13 @@ export default function SearchOverlay({
       <div style={s.body} className="mnu-scroll">
         {q.trim().length === 0 ? (
           <div style={s.empty}>
-            <span style={{ fontSize: 46 }}>🍽️</span>
+            <span style={s.emptyArt} aria-hidden>🍽️</span>
             <div style={s.emptyTitle}>Find Your Favorite</div>
             <div style={s.emptySub}>Search by dish name, cuisine, or category</div>
           </div>
         ) : results.length === 0 ? (
           <div style={s.empty}>
-            <span style={{ fontSize: 46 }}>😔</span>
+            <span style={s.emptyArt} aria-hidden>😔</span>
             <div style={s.emptyTitle}>No Results Found</div>
             <div style={s.emptySub}>Try searching with a different keyword</div>
           </div>
@@ -103,9 +104,9 @@ export default function SearchOverlay({
               <b style={{ color: T.gold }}>&quot;{q.trim()}&quot;</b>
             </div>
             {results.map((item) => (
-              <div key={item.id} style={s.row}>
+              <div key={item.id} style={s.row} className="mnu-anim-up">
                 <button type="button" style={s.rowBtn} onClick={() => onOpenItem(item.id)}>
-                  <ItemPhoto item={item} size={52} />
+                  <ItemPhoto item={item} size={54} radius={14} />
                   <span style={s.det}>
                     <span style={s.name}>{item.name}</span>
                     <span style={s.meta}>
@@ -149,9 +150,10 @@ const s: Record<string, CSSProperties> = {
     alignItems: "center",
     gap: 10,
     background: T.card,
-    border: "1px solid rgba(171,119,60,0.3)",
-    borderRadius: 14,
-    padding: "13px 14px",
+    border: `1px solid ${T.goldLine}`,
+    borderRadius: 15,
+    padding: "13px 15px",
+    boxShadow: "0 10px 26px rgba(0,0,0,0.35)",
   },
   input: {
     flex: 1,
@@ -166,13 +168,24 @@ const s: Record<string, CSSProperties> = {
     width: 22,
     height: 22,
     borderRadius: "50%",
-    background: "rgba(255,255,255,0.15)",
+    background: "rgba(255,255,255,0.14)",
     border: "none",
     color: T.w55,
     fontSize: 10,
     cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cancel: { background: "none", border: "none", color: T.gold, fontSize: 13.5, fontWeight: 600, cursor: "pointer", padding: "8px 2px" },
+  cancel: {
+    background: "none",
+    border: "none",
+    color: T.gold,
+    fontSize: 13.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    padding: "8px 2px",
+  },
   body: { flex: 1, overflowY: "auto", paddingBottom: 90, maxWidth: 900, width: "100%", margin: "0 auto" },
   count: { color: T.w40, fontSize: 12, padding: "18px 0 12px" },
   row: {
@@ -180,13 +193,15 @@ const s: Record<string, CSSProperties> = {
     alignItems: "center",
     gap: 12,
     background: T.card,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 11,
-    marginBottom: 12,
+    marginBottom: 11,
     border: `1px solid ${T.line}`,
+    boxShadow: "0 4px 14px rgba(0,0,0,0.2)",
   },
   rowBtn: {
     flex: 1,
+    minWidth: 0,
     display: "flex",
     alignItems: "center",
     gap: 12,
@@ -196,11 +211,23 @@ const s: Record<string, CSSProperties> = {
     cursor: "pointer",
     textAlign: "left",
   },
-  det: { display: "flex", flexDirection: "column", gap: 2 },
-  name: { color: T.white, fontSize: 13.5, fontWeight: 600 },
+  det: { display: "flex", flexDirection: "column", gap: 3, minWidth: 0 },
+  name: { color: T.white, fontSize: 13.5, fontWeight: 700 },
   meta: { color: T.w40, fontSize: 11 },
-  price: { color: T.gold, fontSize: 11.5, fontWeight: 600 },
-  empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: 120, gap: 10 },
-  emptyTitle: { color: T.white, fontSize: 20, fontWeight: 700 },
+  price: { color: T.gold, fontSize: 12, fontWeight: 800 },
+  empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: 110, gap: 8 },
+  emptyArt: {
+    width: 96,
+    height: 96,
+    borderRadius: "50%",
+    background: T.card,
+    border: `1px solid ${T.line}`,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 42,
+    marginBottom: 8,
+  },
+  emptyTitle: { color: T.white, fontSize: 20, fontWeight: 800 },
   emptySub: { color: "rgba(255,255,255,0.45)", fontSize: 13, textAlign: "center", lineHeight: 1.6 },
 };

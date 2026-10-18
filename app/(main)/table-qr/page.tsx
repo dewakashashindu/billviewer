@@ -97,6 +97,8 @@ export default function TableQrPage() {
   const [busy, setBusy] = useState<string | null>(null);
   /** tableKey → signed customer URL (built on the server) */
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  /** tableKey → does the table exist in the POS (Tbl_Tables)? */
+  const [tableExists, setTableExists] = useState<Record<string, boolean>>({});
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const createdRef = useRef<HTMLDivElement>(null);
@@ -159,10 +161,13 @@ export default function TableQrPage() {
         const json = await res.json().catch(() => null);
         if (!alive || !res.ok || !json?.ok) return;
         const map: Record<string, string> = {};
+        const exists: Record<string, boolean> = {};
         for (const u of json.data?.urls ?? []) {
           map[keyOf(u as TableRowData)] = u.url;
+          if (typeof u.exists === "boolean") exists[keyOf(u as TableRowData)] = u.exists;
         }
         setSignedUrls(map);
+        setTableExists(exists);
       } catch {
         /* fall back to the unsigned template */
       }
@@ -203,6 +208,11 @@ export default function TableQrPage() {
 
     const base = urlTemplate.trim();
     if (!base) return t.tableNo;
+    // The {id} placeholder is filled server-side (encrypted table
+    // id — the key never reaches the browser). If we are here the
+    // signing request failed; show the raw template so the problem
+    // is visible instead of silently building a broken link.
+    if (base.includes("{id}")) return base;
     const hasTable = base.includes("{table}");
     const hasGroup = base.includes("{group}");
     let url = base
@@ -253,7 +263,9 @@ export default function TableQrPage() {
       };
       setCustomTables((p) => [...p, entry]);
       setSelected((p) => new Set(p).add(keyOf(entry)));
-      setMsg(`"${name}" added and selected.`);
+      setMsg(
+        `"${name}" added and selected — if the POS (Tbl_Tables) doesn't have this table, its QR will be flagged “Not in POS” and orders will fail.`
+      );
     }
     setCustomName("");
   }
@@ -416,6 +428,10 @@ export default function TableQrPage() {
               />
               <button style={btnBrown} onClick={addCustom}>Add</button>
             </div>
+            <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
+              Must match a table in the POS (Tbl_Tables, enabled) — otherwise the QR is
+              flagged “Not in POS” and guest orders from it will fail.
+            </p>
           </div>
                   </div>
 
@@ -471,6 +487,17 @@ export default function TableQrPage() {
                     <span style={{ fontWeight: 800, color: DARK, minWidth: 80 }}>{t.tableNo}</span>
                     <span style={{ color: FAINT }}>{t.tableGroup || "—"}</span>
                     <span style={{ flex: 1 }} />
+                    {source === "database" && tableExists[keyOf(t)] === false && (
+                      <span
+                        title="This table number is not in the POS (Tbl_Tables, Enable=1). Orders from its QR will fail with 'Table not found'."
+                        style={{
+                          fontSize: 9.5, fontWeight: 800, padding: "2px 7px", borderRadius: 99,
+                          background: "#fef3c7", color: "#b45309",
+                        }}
+                      >
+                        ⚠ Not in POS
+                      </span>
+                    )}
                     <span style={{
                       fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
                       background: t.vacant ? "#dcfce7" : "#fee2e2",
@@ -487,6 +514,14 @@ export default function TableQrPage() {
 
         {msg && <p style={{ margin: "10px 0 0", fontSize: 12.5, color: BROWN, fontWeight: 600 }}>{msg}</p>}
 
+        {source === "database" &&
+          selectedTables.some((t) => tableExists[keyOf(t)] === false) && (
+            <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "#b45309", fontWeight: 700 }}>
+              ⚠ Some selected tables are not in the POS (Tbl_Tables) — guests scanning those
+              QRs will see “Table not found”. Add the tables in the POS or remove them here.
+            </p>
+          )}
+
               </div>
 
       {/* ── 2) QR output settings (separate) ── */}
@@ -498,20 +533,23 @@ export default function TableQrPage() {
           <label style={lbl}>QR URL (opened when the code is scanned)</label>
           <input
             style={input}
-            placeholder="https://example.com/order?table={table}  —  use {table} / {group} / {token} placeholders"
+            placeholder="https://example.com/menu?id={id}  —  use the {id} placeholder (encrypted table id)"
             value={urlTemplate}
             onChange={(e) => setUrlTemplate(e.target.value)}
           />
           <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
             {urlTemplate.trim()
-              ? <>Preview: <b style={{ color: BROWN }}>{buildUrl({ tableNo: "T-01", tableGroup: group !== "ALL" ? group : "Main Dining Area", vacant: true, listingOrder: 0 })}</b> — the table, group and a signed token are always included, so a guest can only order for the table they scanned.</>
+              ? <>Preview: <b style={{ color: BROWN }}>{buildUrl({ tableNo: "T-01", tableGroup: group !== "ALL" ? group : "Main Dining Area", vacant: true, listingOrder: 0 })}</b> — the link carries only the encrypted table id; the table number is decrypted on the menu page and shown on the welcome screen.</>
               : "If no URL is entered, the QR code contains the table number only."}
+          </p>
+          <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
+            Placeholders: <b>{'{id}'}</b> = encrypted table id (recommended — nothing readable in the link) · <b>{'{table}'}</b> / <b>{'{group}'}</b> / <b>{'{token}'}</b> = legacy format (plain table + group + signed token).
           </p>
           <button
             type="button"
             onClick={() =>
               setUrlTemplate(
-                `${window.location.origin}/order?table={table}&group={group}&t={token}`
+                `${window.location.origin}/menu?id={id}`
               )
             }
             style={{
@@ -526,7 +564,7 @@ export default function TableQrPage() {
               textDecoration: "underline",
             }}
           >
-            Use the customer ordering page (/order?table=&#123;table&#125;&amp;t=&#123;token&#125;)
+            Use the customer menu page (/menu?id=&#123;id&#125; — encrypted table id only)
           </button>
         </div>
 

@@ -1,0 +1,128 @@
+/* ============================================================
+   Customer menu flow (/menu) — scoped styles.
+   Everything is prefixed with `mnu-` so nothing leaks into
+   the rest of the app (same pattern as /order/order.css).
+
+   This file defines the animation / layout helper classes the
+   menu components reference (mnu-anim-*, mnu-spinner, …) plus
+   the shared press-feedback + skeleton utilities used by the
+   redesigned screens.
+   ============================================================ */
+
+/* ── full-height helper (mobile browser chrome aware) ───────── */
+.mnu-min-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* welcome screen column marker (height comes from .mnu-min-dvh) */
+.mnu-welcome-col {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ── scrollbars ─────────────────────────────────────────────── */
+.mnu-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+.mnu-scroll::-webkit-scrollbar-thumb {
+  background: rgba(171, 119, 60, 0.35);
+  border-radius: 3px;
+}
+.mnu-scroll::-webkit-scrollbar-track { background: transparent; }
+.mnu-scroll { scrollbar-width: thin; scrollbar-color: rgba(171,119,60,0.35) transparent; }
+
+/* hide the horizontal scrollbar on pill strips (tabs / chips) ─ */
+.mnu-no-bar { scrollbar-width: none; -ms-overflow-style: none; }
+.mnu-no-bar::-webkit-scrollbar { display: none; }
+
+/* ── animations ─────────────────────────────────────────────── */
+@keyframes mnuFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mnuUp {
+  from { transform: translateY(18px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes mnuPop {
+  from { transform: scale(0.93); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+@keyframes mnuSpin { to { transform: rotate(360deg); } }
+@keyframes mnuDrift {
+  0%   { transform: scale(1.06) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.14) translate3d(0, -1.6%, 0); }
+  100% { transform: scale(1.06) translate3d(0, 0, 0); }
+}
+@keyframes mnuShimmer {
+  0%   { background-position: -240px 0; }
+  100% { background-position: 240px 0; }
+}
+@keyframes mnuPulseGold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(171, 119, 60, 0.45); }
+  50%      { box-shadow: 0 0 0 9px rgba(171, 119, 60, 0); }
+}
+@keyframes mnuSuccessPing {
+  0%   { transform: scale(0.9);  opacity: 0.7; }
+  70%  { transform: scale(1.45); opacity: 0; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.mnu-anim-fade { animation: mnuFade 0.22s ease both; }
+.mnu-anim-up   { animation: mnuUp 0.3s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+.mnu-anim-pop  { animation: mnuPop 0.2s ease both; }
+.mnu-spinner   { animation: mnuSpin 0.85s linear infinite; }
+.mnu-bg-drift  { animation: mnuDrift 28s ease-in-out infinite; will-change: transform; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mnu-anim-fade, .mnu-anim-up, .mnu-anim-pop, .mnu-spinner,
+  .mnu-bg-drift, .mnu-skel, .mnu-pulse-gold { animation: none !important; }
+  [style*="mnuSuccessPing"] { animation: none !important; }
+}
+
+/* ── press feedback (attach to buttons / cards) ─────────────── */
+.mnu-tap {
+  transition: transform 0.13s ease, box-shadow 0.18s ease, border-color 0.18s ease,
+    background 0.18s ease, opacity 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.mnu-tap:active { transform: scale(0.965); }
+.mnu-tap-soft:active { transform: scale(0.985); }
+
+/* ── skeleton loading shimmer ───────────────────────────────── */
+.mnu-skel {
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 480px 100%;
+  animation: mnuShimmer 1.4s linear infinite;
+}
+
+/* ── gold attention pulse (e.g. cart FAB after an add) ──────── */
+.mnu-pulse-gold { animation: mnuPulseGold 0.9s ease-out 1; }
+
+/* ── safe areas ─────────────────────────────────────────────── */
+.mnu-safe-top { padding-top: env(safe-area-inset-top, 0px); }
+.mnu-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* ── glass surface (sticky headers / bars) ──────────────────── */
+.mnu-glass {
+  background: rgba(23, 22, 20, 0.82);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  backdrop-filter: saturate(160%) blur(14px);
+}
+
+/* ── text helpers ───────────────────────────────────────────── */
+.mnu-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(171, 119, 60, 0.95);
+}
+.mnu-clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

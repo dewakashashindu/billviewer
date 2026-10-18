@@ -1,10 +1,11 @@
 // ============================================================
 // LOCATION: components/menu/types.ts
 // Customer menu (/menu) — shared types.
-// Shapes match the existing APIs:
-//   GET  /api/menu/items?limit=&after=   → MenuItem[]
-//   GET  /api/orders/existing?table=     → { invoiceNo, lines[] }
-//   POST /api/orders/confirm             → { invoiceNo, ... }
+// Shapes match the existing (guarded) APIs:
+//   GET  /api/menu/items?limit=&after=       → MenuItem[]
+//   GET  /api/order/table?table=&t=          → table info (validation)
+//   GET  /api/order/existing?table=&t=       → { invoiceNo, lines[] }
+//   POST /api/order/confirm                  → { invoiceNo, ... }
 // ============================================================
 
 export interface MenuItem {

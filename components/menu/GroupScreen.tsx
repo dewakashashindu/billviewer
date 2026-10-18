@@ -2,17 +2,39 @@
 
 // ============================================================
 // LOCATION: components/menu/GroupScreen.tsx
-// Step 3/4 — a Level-1 group (Chinese, Sri Lankan …): hero,
-// breadcrumb, Level-2 sub-category cards and the item grid.
+// Step 3/4 — a Level-1 group (Chinese, Sri Lankan …): photo hero
+// with overlay title, breadcrumb chips, Level-2 sub-categories as
+// a horizontal chip scroller and the item grid (redesigned).
 // When `subGroup` is set it behaves as the app's SubItems screen.
 // ============================================================
 
-import type { CSSProperties } from "react";
-import { T } from "./theme";
+import { useState, type CSSProperties } from "react";
+import { itemEmoji, T } from "./theme";
 import { groupCircleImage } from "./groupImages";
 import MenuItemCard from "./MenuItemCard";
 import type { CartRow } from "./useCustomerCart";
 import type { GroupCard, SubGroup } from "./types";
+
+/** Hero photo with an emoji fallback if the image fails. */
+function HeroPhoto({ src, name }: { src: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed || !src) {
+    return (
+      <div style={s.heroFallback} aria-hidden>
+        <span style={{ fontSize: 64 }}>{itemEmoji(name)}</span>
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      style={s.heroImg}
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export default function GroupScreen({
   group,
@@ -54,61 +76,50 @@ export default function GroupScreen({
   return (
     <div className="mnu-anim-up">
       {/* hero */}
-      <div style={{ ...s.hero, height: desktop ? 220 : 232 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={heroSource} alt="" style={s.heroImg} />
+      <div style={{ ...s.hero, height: desktop ? 200 : 208 }}>
+        <HeroPhoto src={heroSource} name={title} />
         <div style={s.heroOverlay} />
-        <button type="button" style={s.backBtn} onClick={onBack} aria-label="Back">
+        <button type="button" style={s.backBtn} className="mnu-tap" onClick={onBack} aria-label="Back">
           <span style={s.backChev} />
         </button>
-        <div style={s.heroLabel}>
-          {(subGroup ? group.name : title).toUpperCase()} · {count} ITEMS
+        <div style={s.heroMeta}>
+          <span style={s.heroKicker}>
+            {(subGroup ? group.name : title).toUpperCase()} · {count} ITEMS
+          </span>
+          <h2 style={s.heroTitle}>{title.toUpperCase()}</h2>
         </div>
       </div>
 
-      {/* header */}
-      <div style={s.head}>
-        {subGroup && (
-          <div style={s.crumb}>
-            <button type="button" style={s.crumbBtn} onClick={onBack}>
-              {group.name.toUpperCase()}
-            </button>
-            <span style={s.crumbSep}>›</span>
-            <b style={{ color: T.gold }}>{subGroup.name.toUpperCase()}</b>
-          </div>
-        )}
-        <div style={s.titleRow}>
-          <h2 style={s.title}>{title.toUpperCase()}</h2>
-          <span style={s.count}>{count} Items</span>
+      {/* breadcrumb (sub-group view) */}
+      {subGroup && (
+        <div style={s.crumbRow}>
+          <button type="button" style={s.crumbBtn} className="mnu-tap" onClick={onBack}>
+            {group.name.toUpperCase()}
+          </button>
+          <span style={s.crumbSep}>›</span>
+          <b style={{ color: T.gold }}>{subGroup.name.toUpperCase()}</b>
         </div>
-        <p style={s.desc}>
-          {subGroup
-            ? `Browse ${subGroup.name} items from the current Dining menu.`
-            : `Browse ${group.name} items from the current Dining menu.`}
-        </p>
-      </div>
+      )}
 
-      <div style={s.divider} />
+      <p style={s.desc}>
+        {subGroup
+          ? `Browse ${subGroup.name} items from the current Dining menu.`
+          : `Browse ${group.name} items from the current Dining menu.`}
+      </p>
 
-      {/* sub-categories */}
+      {/* sub-categories as a chip scroller */}
       {!subGroup && group.subGroups.length > 0 && (
-        <div style={{ ...s.subGrid, gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))" }}>
+        <div style={s.chipRow} className="mnu-scroll mnu-no-bar">
           {group.subGroups.map((sub) => (
-            <button key={sub.key} type="button" style={s.subCard} onClick={() => onOpenSub(sub)}>
-              <span style={s.subName}>{sub.name}</span>
-              <span style={s.subCount}>
-                {sub.items.length}&nbsp;{sub.items.length === 1 ? "Item" : "Items"}
-              </span>
-              <span style={s.subView}>View →</span>
-              <span style={s.subCircle} aria-hidden>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={groupCircleImage(sub.items.find((i) => i.imageUrl)?.imageUrl, sub.name)}
-                  alt=""
-                  loading="lazy"
-                  style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
-                />
-              </span>
+            <button
+              key={sub.key}
+              type="button"
+              style={s.chip}
+              className="mnu-tap"
+              onClick={() => onOpenSub(sub)}
+            >
+              <span>{sub.name}</span>
+              <span style={s.chipCount}>{sub.items.length}</span>
             </button>
           ))}
         </div>
@@ -117,8 +128,16 @@ export default function GroupScreen({
       {/* items */}
       {items.length > 0 && (
         <>
-          <div style={s.gridLabel}>All Items</div>
-          <div style={{ ...s.itemGrid, gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))" }}>
+          <div style={s.gridLabel}>
+            <span>All Items</span>
+            <span style={s.gridLabelCount}>{items.length}</span>
+          </div>
+          <div
+            style={{
+              ...s.itemGrid,
+              gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))",
+            }}
+          >
             {items.map((item) => (
               <MenuItemCard
                 key={item.id}
@@ -137,8 +156,10 @@ export default function GroupScreen({
 
       {items.length === 0 && !subGroup && group.subGroups.length === 0 && (
         <div style={s.empty}>
-          <span style={{ fontSize: 44 }}>🍽️</span>
-          <div style={{ color: T.white, fontSize: 17, fontWeight: 700, marginTop: 10 }}>Coming Soon</div>
+          <span style={{ fontSize: 48 }} aria-hidden>🍽️</span>
+          <div style={{ color: T.white, fontSize: 17, fontWeight: 700, marginTop: 12 }}>
+            Coming Soon
+          </div>
           <div style={{ color: T.w40, fontSize: 13, marginTop: 6 }}>
             {title} items will be available soon.
           </div>
@@ -151,26 +172,40 @@ export default function GroupScreen({
 const s: Record<string, CSSProperties> = {
   hero: {
     position: "relative",
-    borderRadius: "0 0 42px 42px",
+    borderRadius: 22,
     overflow: "hidden",
     background: "linear-gradient(150deg,#4c3820,#221a12 70%)",
-    marginBottom: 18,
+    marginBottom: 16,
+    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
   },
-  heroImg: { width: "100%", height: "100%", objectFit: "cover" },
-  heroOverlay: { position: "absolute", inset: 0, background: "rgba(0,0,0,0.28)" },
+  heroImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  heroFallback: {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "linear-gradient(180deg, rgba(10,9,8,0.34) 0%, rgba(10,9,8,0.05) 40%, rgba(10,9,8,0.82) 100%)",
+  },
   backBtn: {
     position: "absolute",
-    top: 16,
-    left: 18,
+    top: 14,
+    left: 14,
     width: 40,
     height: 40,
     borderRadius: "50%",
-    border: "1.5px solid rgba(255,255,255,0.6)",
-    background: "rgba(0,0,0,0.4)",
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "rgba(15,13,11,0.55)",
+    backdropFilter: "blur(8px)",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     cursor: "pointer",
+    zIndex: 2,
   },
   backChev: {
     width: 10,
@@ -181,72 +216,96 @@ const s: Record<string, CSSProperties> = {
     marginLeft: 2,
     display: "block",
   },
-  heroLabel: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 14,
-    textAlign: "center",
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 11,
-    letterSpacing: 1.6,
+  heroMeta: { position: "absolute", left: 16, right: 16, bottom: 13, zIndex: 1 },
+  heroKicker: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: 1.8,
   },
-  head: { padding: "0 0 4px" },
-  crumb: { display: "flex", alignItems: "center", gap: 6, color: T.w40, fontSize: 12.5, fontWeight: 500, marginBottom: 8 },
-  crumbBtn: {
-    background: "none",
-    border: "none",
-    padding: 0,
+  heroTitle: {
+    margin: "4px 0 0",
+    color: T.white,
+    fontSize: 23,
+    fontWeight: 800,
+    letterSpacing: 0.4,
+    textShadow: "0 2px 12px rgba(0,0,0,0.5)",
+  },
+  crumbRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
     color: T.w40,
-    fontSize: 12.5,
-    fontWeight: 500,
+    fontSize: 11.5,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    marginBottom: 10,
+  },
+  crumbBtn: {
+    background: "rgba(255,255,255,0.05)",
+    border: `1px solid ${T.line}`,
+    borderRadius: 14,
+    padding: "6px 12px",
+    color: T.w55,
+    fontSize: 11.5,
+    fontWeight: 700,
+    letterSpacing: 0.6,
     cursor: "pointer",
   },
   crumbSep: { color: T.w25 },
-  titleRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
-  title: { margin: 0, color: T.white, fontSize: 24, fontWeight: 700, letterSpacing: 0.2 },
-  count: { color: T.gold, fontSize: 13, fontWeight: 600, marginTop: 6, whiteSpace: "nowrap" },
-  desc: { color: "rgba(255,255,255,0.5)", fontSize: 12.5, lineHeight: 1.65, margin: "8px 0 0" },
-  divider: { height: 1, background: "rgba(255,255,255,0.13)", margin: "18px 0 16px" },
-  subGrid: { display: "grid", gap: 12, marginBottom: 18 },
-  subCard: {
-    position: "relative",
-    height: 116,
-    borderRadius: 14,
-    background: T.card2,
-    border: `1px solid ${T.line}`,
-    padding: "14px 74px 14px 14px",
-    textAlign: "left",
-    cursor: "pointer",
-    overflow: "hidden",
-  },
-  subName: { display: "block", color: T.white, fontSize: 15, fontWeight: 600 },
-  subCount: { display: "block", marginTop: 4, color: T.gold90, fontSize: 12.5, fontWeight: 600 },
-  subView: { position: "absolute", bottom: 9, left: 14, color: "rgba(171,119,60,0.75)", fontSize: 10.5, fontWeight: 600 },
-  subCircle: {
-    position: "absolute",
-    right: 4,
-    bottom: 6,
-    width: 62,
-    height: 62,
-    borderRadius: "50%",
-    background: "radial-gradient(circle at 34% 30%, #5d4728, #2c2117)",
-    display: "flex",
+  desc: { color: "rgba(255,255,255,0.5)", fontSize: 12.5, lineHeight: 1.65, margin: "0 0 14px" },
+  chipRow: { display: "flex", gap: 9, overflowX: "auto", paddingBottom: 14, marginBottom: 4 },
+  chip: {
+    display: "inline-flex",
     alignItems: "center",
-    justifyContent: "center",
-    fontSize: 25,
-    overflow: "hidden",
+    gap: 8,
+    padding: "9px 14px",
+    borderRadius: 18,
+    background: T.card,
+    border: `1px solid ${T.line}`,
+    color: T.w72,
+    fontSize: 12.5,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    flex: "0 0 auto",
+  },
+  chipCount: {
+    fontSize: 10,
+    fontWeight: 800,
+    padding: "2px 7px",
+    borderRadius: 9,
+    background: T.goldSoft,
+    color: T.gold,
   },
   gridLabel: {
-    color: "rgba(255,255,255,0.6)",
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    color: "rgba(255,255,255,0.65)",
     fontSize: 11.5,
-    fontWeight: 700,
-    letterSpacing: 1.2,
+    fontWeight: 800,
+    letterSpacing: 1.4,
     textTransform: "uppercase",
-    marginBottom: 14,
+    margin: "6px 0 13px",
   },
-  itemGrid: { display: "grid", gap: 16, paddingBottom: 12 },
-  empty: { display: "flex", flexDirection: "column", alignItems: "center", padding: "60px 0 80px" },
+  gridLabelCount: {
+    fontSize: 10,
+    fontWeight: 800,
+    color: T.gold,
+    background: T.goldSoft,
+    borderRadius: 8,
+    padding: "2px 8px",
+    letterSpacing: 0.5,
+  },
+  itemGrid: { display: "grid", gap: 14, paddingBottom: 14 },
+  empty: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: "64px 0 90px",
+    textAlign: "center",
+  },
 };
 
 export type { CartRow };

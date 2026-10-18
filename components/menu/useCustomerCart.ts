@@ -36,6 +36,9 @@ export interface CartRow {
 interface Options {
   table: string;
   tableGroup?: string;
+  /** Signed table token from the QR (?t=…) — required by the
+   *  guarded /api/order/* endpoints in production. */
+  token?: string;
   itemsById: Map<string, MenuItem>;
 }
 
@@ -62,7 +65,7 @@ function writeStore(table: string, store: CartStore | null) {
   }
 }
 
-export function useCustomerCart({ table, tableGroup, itemsById }: Options) {
+export function useCustomerCart({ table, tableGroup, token, itemsById }: Options) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [baseline, setBaseline] = useState<CartStore["baseline"]>({});
   const [invoiceNo, setInvoiceNo] = useState("");
@@ -83,7 +86,11 @@ export function useCustomerCart({ table, tableGroup, itemsById }: Options) {
       let serverLines: ExistingLine[] = [];
       let serverInvoice = "";
       try {
-        const res = await fetch(`/api/orders/existing?table=${encodeURIComponent(table)}`, {
+        // Guarded endpoint — the table token proves the guest scanned
+        // this table's QR (required in production).
+        const qs = new URLSearchParams({ table });
+        if (token) qs.set("t", token);
+        const res = await fetch(`/api/order/existing?${qs.toString()}`, {
           cache: "no-store",
         });
         const json = await res.json().catch(() => null);
@@ -144,7 +151,7 @@ export function useCustomerCart({ table, tableGroup, itemsById }: Options) {
     return () => {
       alive = false;
     };
-  }, [table]);
+  }, [table, token]);
 
   /* ── 2. persist on every change ──────────────────────────── */
   useEffect(() => {
@@ -321,12 +328,15 @@ export function useCustomerCart({ table, tableGroup, itemsById }: Options) {
     inFlightRef.current = true;
     setConfirming(true);
     try {
-      const res = await fetch("/api/orders/confirm", {
+      // Guarded endpoint — token check + rate limits + server-side
+      // price resolution (same as the /order flow).
+      const res = await fetch("/api/order/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tableNo: table,
           tableGroup: tableGroup || undefined,
+          t: token || undefined,
           items: payloadItems,
         }),
       });
@@ -364,7 +374,7 @@ export function useCustomerCart({ table, tableGroup, itemsById }: Options) {
       inFlightRef.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, lines, newLines, table, tableGroup]);
+  }, [baseline, confirming, lines, newLines, table, tableGroup, token]);
 
   const resetAll = useCallback(() => {
     setLines([]);

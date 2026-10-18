@@ -2,7 +2,7 @@
 
 // ============================================================
 // LOCATION: components/menu/OrderSuccess.tsx
-// Step 8 — order confirmed: invoice number + next actions.
+// Step 8 — order confirmed: invoice number + next actions (redesigned).
 // ============================================================
 
 import type { CSSProperties } from "react";
@@ -21,6 +21,7 @@ export default function OrderSuccess({
   return (
     <div style={s.wrap} className="mnu-anim-up">
       <div style={s.tickCircle}>
+        <span style={s.tickGlow} aria-hidden />
         <span style={s.tick} />
       </div>
       <h2 style={s.title}>Order Confirmed</h2>
@@ -31,30 +32,36 @@ export default function OrderSuccess({
       </p>
 
       <div style={s.card}>
-        <div>
-          <div style={s.k}>Invoice No</div>
-          <div style={s.v}>{result.invoiceNo || "—"}</div>
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <div style={s.k}>Table</div>
-          <div style={{ ...s.v, fontSize: 15 }}>
-            {result.tableNo}
-            {result.tableGroup ? ` · ${result.tableGroup}` : ""}
+        <div style={s.cardRow}>
+          <div>
+            <div style={s.k}>Invoice No</div>
+            <div style={s.v}>{result.invoiceNo || "—"}</div>
           </div>
-        </div>
-        {result.itemCount > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <div style={s.k}>Items added</div>
-            <div style={{ ...s.v, fontSize: 15 }}>{result.itemCount}</div>
+          <div style={s.cardDivider} />
+          <div>
+            <div style={s.k}>Table</div>
+            <div style={{ ...s.v, fontSize: 16 }}>
+              {result.tableNo}
+              {result.tableGroup ? ` · ${result.tableGroup}` : ""}
+            </div>
           </div>
-        )}
+          {result.itemCount > 0 && (
+            <>
+              <div style={s.cardDivider} />
+              <div>
+                <div style={s.k}>Items added</div>
+                <div style={{ ...s.v, fontSize: 16 }}>{result.itemCount}</div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div style={s.actions}>
-        <button type="button" style={s.primary} onClick={onAddMore}>
+        <button type="button" style={s.primary} className="mnu-tap" onClick={onAddMore}>
           Add more items
         </button>
-        <button type="button" style={s.ghost} onClick={onDone}>
+        <button type="button" style={s.ghost} className="mnu-tap" onClick={onDone}>
           Done
         </button>
       </div>
@@ -80,60 +87,72 @@ const s: Record<string, CSSProperties> = {
     width: "100%",
   },
   tickCircle: {
-    width: 96,
-    height: 96,
+    position: "relative",
+    width: 100,
+    height: 100,
     borderRadius: "50%",
     background: T.greenSoft,
-    border: `2px solid ${T.green}`,
+    border: "2px solid " + T.green,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 22,
+    marginBottom: 24,
+    boxShadow: "0 0 0 10px rgba(61,140,94,0.08), 0 16px 40px rgba(61,140,94,0.25)",
+  },
+  tickGlow: {
+    position: "absolute",
+    inset: -2,
+    borderRadius: "50%",
+    border: "2px solid rgba(111,207,151,0.5)",
+    animation: "mnuSuccessPing 1.6s ease-out 1",
   },
   tick: {
-    width: 34,
-    height: 18,
-    borderLeft: "4px solid #6FCF97",
-    borderBottom: "4px solid #6FCF97",
+    width: 36,
+    height: 19,
+    borderLeft: "4.5px solid #6FCF97",
+    borderBottom: "4.5px solid #6FCF97",
     transform: "rotate(-45deg) translateY(-3px)",
     display: "block",
   },
-  title: { margin: 0, color: T.white, fontSize: 24, fontWeight: 800 },
-  sub: { color: T.w55, fontSize: 13.5, lineHeight: 1.7, margin: "10px 0 0" },
+  title: { margin: 0, color: T.white, fontSize: 25, fontWeight: 800, letterSpacing: 0.2 },
+  sub: { color: T.w55, fontSize: 13.5, lineHeight: 1.75, margin: "10px 0 0" },
   card: {
     background: T.surface,
     border: `1px solid ${T.line}`,
-    borderRadius: 16,
-    padding: "18px 26px",
-    margin: "22px 0 26px",
-    minWidth: 260,
-    textAlign: "center",
+    borderRadius: 18,
+    padding: "18px 10px",
+    margin: "24px 0 26px",
+    width: "100%",
+    maxWidth: 420,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
   },
-  k: { color: T.w40, fontSize: 10.5, letterSpacing: 1.3, textTransform: "uppercase" },
-  v: { color: T.gold, fontSize: 19, fontWeight: 700, marginTop: 5, letterSpacing: 0.6 },
+  cardRow: { display: "flex", alignItems: "stretch", justifyContent: "space-around", gap: 6 },
+  cardDivider: { width: 1, background: T.line, alignSelf: "stretch" },
+  k: { color: T.w40, fontSize: 10, letterSpacing: 1.4, textTransform: "uppercase", fontWeight: 700 },
+  v: { color: T.gold, fontSize: 19, fontWeight: 800, marginTop: 6, letterSpacing: 0.6 },
   actions: { display: "flex", gap: 12, width: "100%", maxWidth: 420 },
   primary: {
     flex: 1,
-    height: 50,
-    borderRadius: 14,
-    background: T.gold,
-    border: "none",
+    height: 52,
+    borderRadius: 15,
+    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
+    border: "1px solid rgba(255,255,255,0.14)",
     color: T.white,
     fontSize: 14,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: "pointer",
     boxShadow: T.shadowGold,
   },
   ghost: {
     flex: 1,
-    height: 50,
-    borderRadius: 14,
+    height: 52,
+    borderRadius: 15,
     background: T.card,
     border: `1px solid ${T.line}`,
     color: T.w92,
     fontSize: 14,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: "pointer",
   },
-  note: { color: T.w25, fontSize: 11.5, marginTop: 18, lineHeight: 1.6 },
+  note: { color: T.w40, fontSize: 11.5, marginTop: 20, lineHeight: 1.65, maxWidth: 340 },
 };
