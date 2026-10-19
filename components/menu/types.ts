@@ -87,6 +87,8 @@ export interface ConfirmResult {
   invoiceNo: string;
   itemCount: number;
   source: "database" | "mock";
+  /** 'DI' = dine-in · 'TA' = takeaway (invoiceNo = the TA number) */
+  orderType?: "DI" | "TA";
 }
 
 export const lineKey = (itemId: string, remark: string) =>

@@ -26,9 +26,11 @@ export default function OrderSuccess({
       </div>
       <h2 style={s.title}>Order Confirmed</h2>
       <p style={s.sub}>
-        Your items have been sent to the kitchen.
+        {result.orderType === "TA"
+          ? "Your takeaway order has been sent to the kitchen. Please collect it at the counter when your number is called."
+          : "Your items have been sent to the kitchen."}
         <br />
-        Please wait — we&apos;ll serve it fresh.
+        {result.orderType === "TA" ? "Thank you!" : "Please wait — we'll serve it fresh."}
       </p>
 
       <div style={s.card}>
@@ -39,10 +41,12 @@ export default function OrderSuccess({
           </div>
           <div style={s.cardDivider} />
           <div>
-            <div style={s.k}>Table</div>
+            <div style={s.k}>{result.orderType === "TA" ? "Takeaway No" : "Table"}</div>
             <div style={{ ...s.v, fontSize: 16 }}>
-              {result.tableNo}
-              {result.tableGroup ? ` · ${result.tableGroup}` : ""}
+              {result.orderType === "TA" ? "Takeaway" : result.tableNo}
+              {result.orderType !== "TA" && result.tableGroup
+                ? ` · ${result.tableGroup}`
+                : ""}
             </div>
           </div>
           {result.itemCount > 0 && (

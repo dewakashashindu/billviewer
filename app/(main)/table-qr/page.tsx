@@ -1,16 +1,25 @@
 "use client";
 
 // ============================================================
-// Table QR Codes — /table-qr
-// Data: Tbl_TableGroup + Tbl_Tables (app/actions/tables.ts).
-// Flow: select group -> select table(s) from dropdown or the
-// checkbox list (or add a custom table name) ->
-// set the QR URL -> Create QR Codes ->
-// download single PNGs or a bulk PDF (one QR per page).
-// The restaurant logo sits in the centre of each QR and the
-// table number is printed underneath.
+// LOCATION: app/(main)/table-qr/page.tsx
+// Printed table QR cards.
+//
+// Flow:
+//   1. filter tables by table group (Tbl_TableGroup.GroupID)
+//   2. tick the tables you want (or add a custom name for a
+//      table that has no group)
+//   3. design the card — width / height in INCHES
+//   4. Create QR Codes → download PNG / print / bulk PDF
+//
+// The scanned link is ALWAYS
+//     <QR_MENU_BASE_URL>?id=<encrypted table no + group>
+// The base URL is hardcoded in config/qr.config.ts — it is never
+// shown or editable here, and nothing readable is in the URL.
+// The encryption happens server-side (POST /api/order/qr), so the
+// key never reaches the browser.
 // ============================================================
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   getTablesDataAction,
@@ -18,6 +27,11 @@ import {
   type TableRowData,
 } from "@/app/actions/tables";
 import { RESTAURANT_INFO } from "@/lib/billFormat";
+import {
+  QR_CARD_PRESETS,
+  QR_CARD_SIZE,
+  QR_EXPORT_DPI,
+} from "@/config/qr.config";
 
 /* ── theme (Sample A — Cream Classic) ── */
 const BROWN = "#684830";
@@ -27,6 +41,8 @@ const FAINT = "#6B543E";
 const BORDER = "#E4D6BF";
 const PALE = "#F0E8D8";
 const CREAM = "#FCF7F3";
+
+const NO_GROUP = "__NO_GROUP__";
 
 /* ── vendored PDF/PNG libraries (same pattern as the bill page) ── */
 interface WindowWithVendors extends Window {
@@ -38,10 +54,10 @@ interface WindowWithVendors extends Window {
     jsPDF: new (opts: {
       orientation: string;
       unit: string;
-      format: string;
+      format: [number, number] | string;
     }) => {
       addImage: (...args: unknown[]) => void;
-      addPage: () => void;
+      addPage: (format?: [number, number], orientation?: string) => void;
       save: (name: string) => void;
     };
   };
@@ -74,8 +90,373 @@ function saveBlob(blob: Blob, name: string) {
 }
 const fileSafe = (s: string) => s.replace(/[^a-zA-Z0-9-_]+/g, "-");
 
-const keyOf = (t: TableRowData) => `${t.tableGroup}||${t.tableNo}`;
-const QR_SIZE = 200;
+const keyOf = (t: TableRowData) => `${t.groupId || t.tableGroup}||${t.tableNo}`;
+
+/* ══════════════════════════════════════════════════════════
+   THE CARD — one component used by the preview, the grid and
+   the hidden export layer, so what you see is what prints.
+   Every measurement is derived from the inch size (96 CSS px
+   per inch), so any width/height stays proportional.
+   ══════════════════════════════════════════════════════════ */
+function QrCard({
+  tableNo,
+  name,
+  group,
+  url,
+  widthIn,
+  heightIn,
+  showLogo,
+  showGroup,
+}: {
+  tableNo: string;
+  name: string;
+  group: string;
+  url: string;
+  widthIn: number;
+  heightIn: number;
+  showLogo: boolean;
+  showGroup: boolean;
+}) {
+  const W = Math.round(widthIn * 96);
+  const H = Math.round(heightIn * 96);
+  const horizontal = W / H >= 1.25;
+  const unit = Math.min(W, H);
+
+  const pad = Math.round(Math.max(6, unit * 0.055));
+  const border = Math.max(1.5, Math.round(unit * 0.011));
+  const radius = Math.round(unit * 0.055);
+
+  const qr = horizontal
+    ? Math.round(Math.min(H - pad * 2.4, W * 0.44))
+    : Math.round(Math.min(W - pad * 2.4, H * 0.5));
+
+  /* Long names (e.g. "Takeaway", "Garden Patio") shrink instead of
+     wrapping mid-word. 7 characters fit at full size. */
+  const displayName = name || tableNo;
+  const nameFit = Math.max(0.52, Math.min(1, 7 / Math.max(4, displayName.length)));
+  const namePx = Math.round(
+    Math.max(
+      9,
+      (horizontal ? Math.min(W * 0.1, H * 0.19) : Math.min(W * 0.115, H * 0.15)) * nameFit
+    )
+  );
+  const subPx = Math.max(6, Math.round(namePx * 0.38));
+  const brandPx = Math.max(5, Math.round(namePx * 0.33));
+  const logoPx = Math.round(qr * 0.22);
+
+  /* footer — always printed on every card */
+  const footerPx = Math.max(6, Math.round(unit * 0.042));
+  const footerSpace = Math.round(footerPx * 2.3);
+
+  const qrBlock: ReactNode = url ? (
+    <div
+      style={{
+        position: "relative",
+        width: qr,
+        height: qr,
+        flexShrink: 0,
+        background: "#fff",
+      }}
+    >
+      <QRCodeSVG
+        value={url}
+        size={qr}
+        level="H"
+        bgColor="#ffffff"
+        fgColor={DARK}
+        style={{ display: "block" }}
+        imageSettings={
+          showLogo
+            ? {
+                src: RESTAURANT_INFO.logoPath,
+                height: logoPx,
+                width: logoPx,
+                excavate: true,
+              }
+            : undefined
+        }
+      />
+      {showLogo && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={RESTAURANT_INFO.logoPath}
+          alt=""
+          style={{
+            position: "absolute",
+            left: (qr - logoPx) / 2,
+            top: (qr - logoPx) / 2,
+            width: logoPx,
+            height: logoPx,
+            borderRadius: "50%",
+            objectFit: "contain",
+            background: "#ffffff",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+    </div>
+  ) : (
+    <div
+      style={{
+        width: qr,
+        height: qr,
+        flexShrink: 0,
+        border: `1px dashed ${BORDER}`,
+        borderRadius: Math.round(qr * 0.06),
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: MID,
+        fontSize: Math.max(8, Math.round(qr * 0.12)),
+      }}
+    >
+      …
+    </div>
+  );
+
+  const textBlock = (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: horizontal ? "flex-start" : "center",
+        justifyContent: "center",
+        textAlign: horizontal ? "left" : "center",
+        minWidth: 0,
+        flex: horizontal ? 1 : "initial",
+        gap: Math.max(1, Math.round(subPx * 0.4)),
+      }}
+    >
+      <div
+        style={{
+          fontSize: brandPx,
+          fontWeight: 700,
+          letterSpacing: Math.max(0.4, brandPx * 0.18),
+          textTransform: "uppercase",
+          color: MID,
+          lineHeight: 1.2,
+        }}
+      >
+        {RESTAURANT_INFO.name}
+      </div>
+
+      <div
+        style={{
+          fontSize: namePx,
+          fontWeight: 800,
+          letterSpacing: 0.2,
+          color: DARK,
+          lineHeight: 1.12,
+          maxWidth: "100%",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {name || tableNo}
+      </div>
+
+      {showGroup && group ? (
+        <div
+          style={{
+            fontSize: subPx,
+            fontWeight: 600,
+            letterSpacing: Math.max(0.3, subPx * 0.12),
+            textTransform: "uppercase",
+            color: BROWN,
+            lineHeight: 1.25,
+            maxWidth: "100%",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {group}
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          width: Math.round(unit * 0.16),
+          height: Math.max(1, Math.round(unit * 0.008)),
+          borderRadius: 99,
+          background: `linear-gradient(90deg, ${BROWN}, ${PALE})`,
+          marginTop: Math.max(1, Math.round(subPx * 0.3)),
+        }}
+      />
+
+      <div
+        style={{
+          fontSize: subPx,
+          fontWeight: 600,
+          letterSpacing: Math.max(0.3, subPx * 0.1),
+          textTransform: "uppercase",
+          color: MID,
+          lineHeight: 1.25,
+        }}
+      >
+        Scan to order
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        width: W,
+        height: H,
+        boxSizing: "border-box",
+        background: "#ffffff",
+        border: `${border}px solid ${BROWN}`,
+        borderRadius: radius,
+        padding: `${pad}px ${pad}px ${pad + footerSpace}px`,
+        display: "flex",
+        flexDirection: horizontal ? "row" : "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: Math.round(pad * 0.9),
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "Inter, sans-serif",
+        color: DARK,
+      }}
+    >
+      {/* hairline inner frame */}
+      <div
+        style={{
+          position: "absolute",
+          inset: Math.max(3, Math.round(pad * 0.5)),
+          border: `1px solid ${PALE}`,
+          borderRadius: Math.max(2, radius - 4),
+          pointerEvents: "none",
+        }}
+      />
+      {/* footer — Powered by MicroE-Chef */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: Math.max(3, Math.round(pad * 0.55)),
+          textAlign: "center",
+          fontSize: footerPx,
+          fontWeight: 600,
+          letterSpacing: Math.max(0.2, footerPx * 0.06),
+          color: MID,
+          lineHeight: 1.2,
+          pointerEvents: "none",
+        }}
+      >
+        Powered by MicroE-Chef
+      </div>
+      {horizontal ? (
+        <>
+          {qrBlock}
+          {textBlock}
+        </>
+      ) : (
+        <>
+          <div
+            style={{
+              fontSize: brandPx,
+              fontWeight: 700,
+              letterSpacing: Math.max(0.4, brandPx * 0.18),
+              textTransform: "uppercase",
+              color: MID,
+              lineHeight: 1.2,
+            }}
+          >
+            {RESTAURANT_INFO.name}
+          </div>
+          {qrBlock}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              gap: Math.max(1, Math.round(subPx * 0.4)),
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize: namePx,
+                fontWeight: 800,
+                letterSpacing: 0.2,
+                color: DARK,
+                lineHeight: 1.12,
+                maxWidth: "100%",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {name || tableNo}
+            </div>
+            {showGroup && group ? (
+              <div
+                style={{
+                  fontSize: subPx,
+                  fontWeight: 600,
+                  letterSpacing: Math.max(0.3, subPx * 0.12),
+                  textTransform: "uppercase",
+                  color: BROWN,
+                  lineHeight: 1.25,
+                  maxWidth: "100%",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {group}
+              </div>
+            ) : null}
+            <div
+              style={{
+                fontSize: subPx,
+                fontWeight: 600,
+                letterSpacing: Math.max(0.3, subPx * 0.1),
+                textTransform: "uppercase",
+                color: MID,
+                lineHeight: 1.25,
+              }}
+            >
+              Scan to order
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── scales a fixed-size card down to fit the available width ── */
+function ScaleBox({ width, height, children }: { width: number; height: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setAvail(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const k = avail > 0 ? Math.min(1, avail / width) : 1;
+
+  return (
+    <div ref={ref} style={{ width: "100%" }}>
+      <div style={{ width: width * k, height: height * k, margin: "0 auto" }}>
+        <div
+          style={{
+            width,
+            height,
+            transform: `scale(${k})`,
+            transformOrigin: "top left",
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function TableQrPage() {
   const [groups, setGroups] = useState<TableGroupRow[]>([]);
@@ -84,7 +465,7 @@ export default function TableQrPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [group, setGroup] = useState<string>("ALL");
+  const [groupFilter, setGroupFilter] = useState<string>("ALL");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customTables, setCustomTables] = useState<TableRowData[]>([]);
   const [customName, setCustomName] = useState("");
@@ -92,16 +473,44 @@ export default function TableQrPage() {
 
   const [created, setCreated] = useState<TableRowData[]>([]);
 
-  const [urlTemplate, setUrlTemplate] = useState("");
+  /* card design */
+  const [widthInput, setWidthInput] = useState(String(QR_CARD_SIZE.defaultWidth));
+  const [heightInput, setHeightInput] = useState(String(QR_CARD_SIZE.defaultHeight));
   const [showLogo, setShowLogo] = useState(true);
+  const [showGroup, setShowGroup] = useState(true);
+
+  /* optional per-table card names (name + group printed on the card).
+     Read lazily from localStorage so no state is set from an effect. */
+  const [cardNames, setCardNames] = useState<
+    Record<string, { name: string; group: string }>
+  >(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = localStorage.getItem("tableqr-card-names");
+      return raw ? (JSON.parse(raw) as Record<string, { name: string; group: string }>) : {};
+    } catch {
+      return {};
+    }
+  });
+
   const [busy, setBusy] = useState<string | null>(null);
-  /** tableKey → signed customer URL (built on the server) */
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  /** tableKey → encrypted customer URL (built on the server) */
+  const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
   /** tableKey → does the table exist in the POS (Tbl_Tables)? */
   const [tableExists, setTableExists] = useState<Record<string, boolean>>({});
+  const [signing, setSigning] = useState(false);
 
-  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const exportRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const createdRef = useRef<HTMLDivElement>(null);
+
+  const clampIn = useCallback((raw: string, fallback: number) => {
+    const n = parseFloat(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(QR_CARD_SIZE.max, Math.max(QR_CARD_SIZE.min, Math.round(n * 20) / 20));
+  }, []);
+  const widthIn = clampIn(widthInput, QR_CARD_SIZE.defaultWidth);
+  const heightIn = clampIn(heightInput, QR_CARD_SIZE.defaultHeight);
 
   /* ── load data ── */
   useEffect(() => {
@@ -119,73 +528,35 @@ export default function TableQrPage() {
       })
       .catch(() => alive && setError("Failed to load tables"))
       .finally(() => alive && setLoading(false));
-    try {
-      const savedUrl = localStorage.getItem("tableqr-url");
-      // Default target = the customer QR ordering flow, so a scanned
-      // QR opens /order with the table (and its signed token) filled in.
-      setUrlTemplate(
-        savedUrl ||
-          `${window.location.origin}/order?table={table}&group={group}&t={token}`
-      );
-    } catch { /* ignore */ }
-    return () => { alive = false; };
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("tableqr-url", urlTemplate);
-    } catch { /* ignore */ }
-  }, [urlTemplate]);
-
-  /* ── signed customer links ──────────────────────────────────────
-     The HMAC token is generated on the server (the secret must
-     never reach the browser). Re-run when the template or the
-     table list changes. */
-  useEffect(() => {
-    const list = [...tables, ...customTables];
-    if (!urlTemplate.trim() || !list.length) return;
-    let alive = true;
-    const handle = setTimeout(async () => {
-      try {
-        const res = await fetch("/api/order/qr", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            baseUrl: urlTemplate.trim(),
-            tables: list.map((t) => ({
-              tableNo: t.tableNo,
-              tableGroup: t.tableGroup,
-            })),
-          }),
-        });
-        const json = await res.json().catch(() => null);
-        if (!alive || !res.ok || !json?.ok) return;
-        const map: Record<string, string> = {};
-        const exists: Record<string, boolean> = {};
-        for (const u of json.data?.urls ?? []) {
-          map[keyOf(u as TableRowData)] = u.url;
-          if (typeof u.exists === "boolean") exists[keyOf(u as TableRowData)] = u.exists;
-        }
-        setSignedUrls(map);
-        setTableExists(exists);
-      } catch {
-        /* fall back to the unsigned template */
-      }
-    }, 250);
     return () => {
       alive = false;
-      clearTimeout(handle);
     };
-  }, [urlTemplate, tables, customTables]);
+  }, []);
 
-  const allTables = useMemo(
-    () => [...tables, ...customTables],
-    [tables, customTables]
-  );
+  /* ── persist card names ── */
+  useEffect(() => {
+    try {
+      localStorage.setItem("tableqr-card-names", JSON.stringify(cardNames));
+    } catch {
+      /* ignore */
+    }
+  }, [cardNames]);
+
+  const allTables = useMemo(() => [...tables, ...customTables], [tables, customTables]);
+
+  const hasUngrouped = useMemo(() => allTables.some((t) => !t.groupId), [allTables]);
+
+  const taEntry = useMemo(() => allTables.find((t) => t.takeaway) ?? null, [allTables]);
+
   const visible = useMemo(
     () =>
-      allTables.filter((t) => group === "ALL" || t.tableGroup === group),
-    [allTables, group]
+      allTables.filter((t) => {
+        if (t.takeaway) return false; // shown in its own Takeaway row
+        if (groupFilter === "ALL") return true;
+        if (groupFilter === NO_GROUP) return !t.groupId;
+        return t.groupId === groupFilter;
+      }),
+    [allTables, groupFilter]
   );
 
   const selectedTables = useMemo(
@@ -195,48 +566,76 @@ export default function TableQrPage() {
   const allVisibleSelected =
     visible.length > 0 && visible.every((t) => selected.has(keyOf(t)));
 
-  // The scanned URL always carries BOTH the table number and the
-  // table group, plus a signed token (t=) that the ordering API
-  // verifies — that is what stops a guest from ordering into
-  // another table's bill.
-  //
-  // The signed links are built on the server (POST /api/order/qr)
-  // because the HMAC secret must never reach the browser.
-  function buildUrl(t: TableRowData): string {
-    const signed = signedUrls[keyOf(t)];
-    if (signed) return signed;
-
-    const base = urlTemplate.trim();
-    if (!base) return t.tableNo;
-    // The {id} placeholder is filled server-side (encrypted table
-    // id — the key never reaches the browser). If we are here the
-    // signing request failed; show the raw template so the problem
-    // is visible instead of silently building a broken link.
-    if (base.includes("{id}")) return base;
-    const hasTable = base.includes("{table}");
-    const hasGroup = base.includes("{group}");
-    let url = base
-      .replaceAll("{table}", encodeURIComponent(t.tableNo))
-      .replaceAll("{group}", encodeURIComponent(t.tableGroup));
-    const appendParam = (u: string, key: string, value: string) => {
-      if (!value) return u;
-      const [beforeHash, hash] = u.split("#", 2);
-      const sep = beforeHash.includes("?") ? "&" : "?";
-      return `${beforeHash}${sep}${key}=${encodeURIComponent(value)}${hash ? `#${hash}` : ""}`;
+  /* ── encrypted customer links (server-side key) ──
+     The URL is never shown in the UI — it is only encoded into the
+     QR SVG. Re-run when the table list changes. */
+  useEffect(() => {
+    const list = [...tables, ...customTables];
+    if (!list.length) return;
+    let alive = true;
+    const handle = setTimeout(async () => {
+      if (alive) setSigning(true);
+      try {
+        const res = await fetch("/api/order/qr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tables: list.map((t) => ({
+              tableNo: t.tableNo,
+              tableGroup: t.groupId || t.tableGroup,
+              takeaway: t.takeaway === true,
+            })),
+          }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!alive) return;
+        if (!res.ok || !json?.ok) {
+          setSigning(false);
+          return;
+        }
+        const urls: Record<string, string> = {};
+        const exists: Record<string, boolean> = {};
+        for (const u of (json.data?.urls ?? []) as (TableRowData & {
+          url: string;
+          exists?: boolean;
+        })[]) {
+          const key = keyOf({
+            ...u,
+            groupId: u.tableGroup,
+          } as TableRowData);
+          urls[key] = u.url;
+          if (typeof u.exists === "boolean") exists[key] = u.exists;
+        }
+        setQrUrls(urls);
+        setTableExists(exists);
+      } catch {
+        /* cards will show a placeholder instead of a broken QR */
+      } finally {
+        if (alive) setSigning(false);
+      }
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(handle);
     };
-    if (!hasTable) url = appendParam(url, "table", t.tableNo);
-    if (!hasGroup) url = appendParam(url, "group", t.tableGroup);
-    return url;
-  }
+  }, [tables, customTables]);
 
   function toggle(t: TableRowData, on: boolean) {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(keyOf(t)); else next.delete(keyOf(t));
+      /* The takeaway QR is exclusive — one card only, never mixed
+         with table cards (and vice versa). */
+      const next = on && t.takeaway ? new Set<string>() : new Set(prev);
+      if (on) {
+        if (!t.takeaway) {
+          allTables.forEach((x) => x.takeaway && next.delete(keyOf(x)));
+        }
+        next.add(keyOf(t));
+      } else {
+        next.delete(keyOf(t));
+      }
       return next;
     });
   }
-
   function toggleAllVisible(on: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -245,35 +644,68 @@ export default function TableQrPage() {
     });
   }
 
+  function addTakeaway() {
+    if (taEntry) {
+      toggle(taEntry, true);
+      setMsg("Only one Takeaway (TA) QR exists — it has been selected (all table cards cleared).");
+      return;
+    }
+    const entry: TableRowData = {
+      tableNo: "TA",
+      tableGroup: "",
+      groupId: "",
+      groupName: "Takeaway",
+      vacant: true,
+      listingOrder: 0,
+      inDb: false,
+      takeaway: true,
+    };
+    setCustomTables((prev) => [...prev.filter((t) => !t.takeaway), entry]);
+    setSelected(new Set([keyOf(entry)]));
+    setMsg("Takeaway (TA) QR selected — one card only. Orders from it are saved with Order Type TA.");
+  }
+
   function addCustom() {
     const name = customName.trim();
     if (!name) return;
+    if (name.toUpperCase() === "TA") {
+      addTakeaway();
+      setCustomName("");
+      return;
+    }
     const existing = allTables.find(
       (t) => t.tableNo.toUpperCase() === name.toUpperCase()
     );
     if (existing) {
       toggle(existing, true);
       setMsg(`"${name}" already exists — it has been selected.`);
-    } else {
-      const entry: TableRowData = {
-        tableNo: name,
-        tableGroup: group !== "ALL" ? group : "",
-        vacant: true,
-        listingOrder: 9999,
-      };
-      setCustomTables((p) => [...p, entry]);
-      setSelected((p) => new Set(p).add(keyOf(entry)));
-      setMsg(
-        `"${name}" added and selected — if the POS (Tbl_Tables) doesn't have this table, its QR will be flagged “Not in POS” and orders will fail.`
-      );
+      setCustomName("");
+      return;
     }
+    const entry: TableRowData = {
+      tableNo: name,
+      tableGroup: "",
+      groupId: "",
+      groupName: "",
+      vacant: true,
+      listingOrder: 9999,
+      inDb: false,
+    };
+    setCustomTables((prev) => [...prev, entry]);
+    setSelected((prev) => new Set(prev).add(keyOf(entry)));
+    setMsg(
+      `"${name}" added and selected. If this table is not in the POS (Tbl_Tables) its QR will be marked “Not in POS” and orders from it will fail.`
+    );
     setCustomName("");
   }
+
   function createQrs() {
     setCreated(selectedTables);
     setMsg(
       selectedTables.length
-        ? `${selectedTables.length} QR code(s) created.`
+        ? selectedTables[0].takeaway
+          ? `Takeaway (TA) card ready — ${widthIn}″ × ${heightIn}″.`
+          : `${selectedTables.length} card(s) ready — ${widthIn}″ × ${heightIn}″.`
         : "No tables selected."
     );
     setTimeout(
@@ -282,118 +714,271 @@ export default function TableQrPage() {
     );
   }
 
-  /* ── downloads (operate on the created QR codes) ── */
-  async function downloadPng(t: TableRowData) {
-    const el = cardRefs.current.get(keyOf(t));
-    if (!el) return;
-    setBusy(t.tableNo);
-    try {
-      const w = await getVendors();
-      const canvas = await w.html2canvas!(el, {
-        scale: 3, backgroundColor: "#ffffff", useCORS: true, logging: false,
-      });
-      canvas.toBlob((b) => b && saveBlob(b, `QR-${fileSafe(t.tableNo)}.png`), "image/png");
-    } catch { alert("PNG download failed. Please try again."); }
-    finally { setBusy(null); }
+  /* ── export helpers ── */
+  async function capture(key: string) {
+    const el = exportRefs.current.get(key);
+    if (!el) return null;
+    const w = await getVendors();
+    return w.html2canvas!(el, {
+      scale: QR_EXPORT_DPI / 96,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      logging: false,
+    });
   }
+
+  async function downloadPng(t: TableRowData) {
+    const key = keyOf(t);
+    setBusy(key);
+    try {
+      const canvas = await capture(key);
+      if (!canvas) throw new Error("card not found");
+      canvas.toBlob(
+        (b) => b && saveBlob(b, `QR-${fileSafe(t.tableNo)}.png`),
+        "image/png"
+      );
+    } catch {
+      alert("PNG download failed. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function printCard(t: TableRowData) {
+    const key = keyOf(t);
+    setBusy(key);
+    try {
+      const canvas = await capture(key);
+      if (!canvas) throw new Error("card not found");
+      const dataUrl = canvas.toDataURL("image/png");
+      const win = window.open("", "_blank", "width=640,height=640");
+      if (!win) {
+        alert("Allow pop-ups for this site to print the card.");
+        return;
+      }
+      win.document.write(`<!doctype html><html><head><title>QR ${t.tableNo}</title>
+        <style>
+          @page { size: ${widthIn}in ${heightIn}in; margin: 0; }
+          html, body { margin: 0; padding: 0; background: #fff; }
+          img { width: ${widthIn}in; height: ${heightIn}in; display: block; }
+        </style></head>
+        <body><img src="${dataUrl}" alt="" onload="window.focus();window.print();"></body></html>`);
+      win.document.close();
+    } catch {
+      alert("Print failed. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function downloadPdf() {
     if (!created.length) return;
     setBusy("pdf");
     try {
       const w = await getVendors();
-      const pdf = new w.jspdf!.jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      // One QR code per page, centred on an A4 page.
-      const PAGE_W = 595, PAGE_H = 842;
-      const cardW = 320;
+      const orientation = widthIn >= heightIn ? "landscape" : "portrait";
+      const pdf = new w.jspdf!.jsPDF({
+        orientation,
+        unit: "in",
+        format: [widthIn, heightIn],
+      });
       let first = true;
       for (const t of created) {
-        const el = cardRefs.current.get(keyOf(t));
-        if (!el) continue;
-        const canvas = await w.html2canvas!(el, {
-          scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false,
-        });
-        const h = (canvas.height / canvas.width) * cardW;
-        if (!first) pdf.addPage();
+        const canvas = await capture(keyOf(t));
+        if (!canvas) continue;
+        if (!first) {
+          pdf.addPage([widthIn, heightIn], orientation);
+        }
         first = false;
-        pdf.addImage(
-          canvas.toDataURL("image/png"), "PNG",
-          (PAGE_W - cardW) / 2, (PAGE_H - h) / 2, cardW, h
-        );
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, widthIn, heightIn);
       }
-      pdf.save("table-qr-codes.pdf");
-    } catch { alert("PDF download failed. Please try again."); }
-    finally { setBusy(null); }
+      pdf.save(`table-qr-cards-${widthIn}x${heightIn}in.pdf`);
+    } catch {
+      alert("PDF download failed. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /* ── card name helpers ──
+     An empty field falls back to the POS values, so typing a name
+     never wipes the group (and vice versa). */
+  const nameOf = (t: TableRowData) => {
+    if (t.takeaway) return (cardNames[keyOf(t)]?.name ?? "").trim() || "Takeaway";
+    return (cardNames[keyOf(t)]?.name ?? "").trim() || (t.inDb ? "" : t.tableNo);
+  };
+  const groupOf = (t: TableRowData) => {
+    if (t.takeaway)
+      return (cardNames[keyOf(t)]?.group ?? "").trim() || "Order type · TA";
+    return (cardNames[keyOf(t)]?.group ?? "").trim() || t.groupName || t.tableGroup || "";
+  };
+
+  function setName(t: TableRowData, field: "name" | "group", value: string) {
+    const key = keyOf(t);
+    setCardNames((prev) => ({
+      ...prev,
+      [key]: {
+        name: field === "name" ? value : prev[key]?.name ?? "",
+        group: field === "group" ? value : prev[key]?.group ?? "",
+      },
+    }));
   }
 
   /* ── shared styles ── */
-  const input: React.CSSProperties = {
-    padding: "9px 12px", border: `1px solid ${BORDER}`, borderRadius: 9,
-    fontSize: 13, fontFamily: "Inter, sans-serif", color: DARK,
-    background: "#fff", outline: "none", width: "100%",
+  const input: CSSProperties = {
+    padding: "9px 12px",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 9,
+    fontSize: 13,
+    fontFamily: "Inter, sans-serif",
+    color: DARK,
+    background: "#fff",
+    outline: "none",
+    width: "100%",
+    boxSizing: "border-box",
   };
-  const lbl: React.CSSProperties = {
-    display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
-    textTransform: "uppercase", color: MID, marginBottom: 6,
+  const lbl: CSSProperties = {
+    display: "block",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: MID,
+    marginBottom: 6,
     fontFamily: "Inter, sans-serif",
   };
-  const card: React.CSSProperties = {
-    marginTop: 18, background: "#fff", border: `1px solid ${BORDER}`,
-    borderRadius: 14, padding: "18px",
+  const card: CSSProperties = {
+    marginTop: 18,
+    background: "#fff",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 14,
+    padding: 18,
   };
-  const btnBrown: React.CSSProperties = {
-    padding: "10px 18px", background: BROWN, color: "#fff", border: "none",
-    borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
-    fontFamily: "Inter, sans-serif", whiteSpace: "nowrap",
-  };
-  const btnGhost: React.CSSProperties = {
-    padding: "10px 18px", background: "#fff", color: BROWN,
-    border: `1px solid ${BORDER}`, borderRadius: 9, fontSize: 13,
-    fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif",
+  const btnBrown: CSSProperties = {
+    padding: "10px 18px",
+    background: BROWN,
+    color: "#fff",
+    border: "none",
+    borderRadius: 9,
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
     whiteSpace: "nowrap",
   };
+  const btnGhost: CSSProperties = {
+    padding: "10px 18px",
+    background: "#fff",
+    color: BROWN,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 9,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "Inter, sans-serif",
+    whiteSpace: "nowrap",
+  };
+  const sectionTitle: CSSProperties = {
+    margin: "0 0 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: MID,
+  };
+
+  /* preview: the first selected table, otherwise the first table in
+     the list, so the designer always shows a real QR */
+  const previewKey = selectedTables[0] ?? allTables[0] ?? null;
+  const previewUrl = previewKey ? qrUrls[keyOf(previewKey)] ?? "" : "";
+  const qrTooSmall = Math.min(widthIn, heightIn) < 2;
 
   return (
-    <div style={{ padding: "22px 24px 32px", fontFamily: "Inter, sans-serif" }}>
+    <div style={{ padding: "22px 24px 40px", fontFamily: "Inter, sans-serif" }}>
       {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
         <div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: DARK }}>Table QR Codes</h1>
-          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: FAINT }}>
-            Select a table group and tables, set your URL, then create QR codes.
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: DARK }}>
+            Table QR Cards
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: FAINT, maxWidth: 640 }}>
+            Pick the tables, design the card (size in inches), then download or print.
+            Each QR opens the customer menu with an encrypted table id — nothing readable
+            is in the link.
             {source === "mock" && (
-              <span style={{ color: BROWN, fontWeight: 700 }}> (Mock data — database not configured)</span>
+              <span style={{ color: BROWN, fontWeight: 700 }}>
+                {" "}
+                (Mock data — database not configured)
+              </span>
             )}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button style={{ ...btnBrown, opacity: created.length ? 1 : 0.5 }} disabled={!created.length || busy != null} onClick={downloadPdf}>
-            {busy === "pdf" ? "Preparing..." : `Download PDF (${created.length})`}
+          <button
+            style={{ ...btnBrown, opacity: created.length ? 1 : 0.5 }}
+            disabled={!created.length || busy != null}
+            onClick={downloadPdf}
+          >
+            {busy === "pdf" ? "Preparing…" : `Download all PDF (${created.length})`}
           </button>
         </div>
       </div>
 
       {error && (
-        <div style={{ marginTop: 16, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: 10, padding: "12px 14px", fontSize: 13 }}>
-          {error} — you can still create QR codes using the Custom Table Name field below.
+        <div
+          style={{
+            marginTop: 16,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#b91c1c",
+            borderRadius: 10,
+            padding: "12px 14px",
+            fontSize: 13,
+          }}
+        >
+          {error} — you can still build cards from the Custom Name field below.
         </div>
       )}
 
-      {/* ── 1) Table selection ── */}
+      {/* ── 1) Tables ── */}
       <div style={card}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 14 }}>
+        <p style={sectionTitle}>1 · Tables</p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
+            gap: 14,
+          }}
+        >
           <div>
             <label style={lbl}>Table Group</label>
-            <select style={input} value={group} onChange={(e) => setGroup(e.target.value)}>
-              <option value="ALL">All Groups ({allTables.length} tables)</option>
+            <select
+              style={input}
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+            >
+              <option value="ALL">All groups ({allTables.length} tables)</option>
               {groups.map((g) => (
-                <option key={g.groupName} value={g.groupName}>
-                  {g.groupName} ({g.tableCount})
+                <option key={g.groupId || g.groupName} value={g.groupId}>
+                  {g.groupName}
+                  {g.groupId && g.groupId !== g.groupName ? ` (${g.groupId})` : ""} ·{" "}
+                  {g.tableCount}
                 </option>
               ))}
+              {hasUngrouped && <option value={NO_GROUP}>No group</option>}
             </select>
           </div>
           <div>
-            <label style={lbl}>Table (filtered by group)</label>
+            <label style={lbl}>Quick add a table</label>
             <select
               style={input}
               value=""
@@ -405,49 +990,45 @@ export default function TableQrPage() {
                 }
               }}
             >
-              <option value="">Select a table...</option>
+              <option value="">Select a table…</option>
               {visible.map((t) => (
                 <option key={keyOf(t)} value={keyOf(t)}>
-                  {t.tableNo}{t.tableGroup ? ` — ${t.tableGroup}` : ""}
+                  {t.tableNo}
+                  {t.groupName ? ` — ${t.groupName}` : t.tableGroup ? ` — ${t.tableGroup}` : " — no group"}
                 </option>
               ))}
             </select>
           </div>
-                  </div>
+        </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 14, marginTop: 14 }}>
-          <div>
-            <label style={lbl}>Custom Table Name</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                style={input}
-                placeholder="e.g. T-99 or Patio-01"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addCustom()}
-              />
-              <button style={btnBrown} onClick={addCustom}>Add</button>
-            </div>
-            <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
-              Must match a table in the POS (Tbl_Tables, enabled) — otherwise the QR is
-              flagged “Not in POS” and guest orders from it will fail.
-            </p>
-          </div>
-                  </div>
-
-        {/* checkbox list */}
-        <div style={{ marginTop: 16, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: "hidden" }}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 10, padding: "10px 13px",
-            background: PALE, borderBottom: `1px solid ${BORDER}`,
-            fontSize: 12.5, fontWeight: 700, color: DARK,
-          }}>
+        {/* list */}
+        <div
+          style={{
+            marginTop: 16,
+            border: `1px solid ${BORDER}`,
+            borderRadius: 12,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 13px",
+              background: PALE,
+              borderBottom: `1px solid ${BORDER}`,
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: DARK,
+            }}
+          >
             <input
               type="checkbox"
               checked={allVisibleSelected}
               onChange={(e) => toggleAllVisible(e.target.checked)}
             />
-            <span>Select All</span>
+            <span>Select all</span>
             <span style={{ color: FAINT, fontWeight: 600 }}>
               {visible.length} tables · {selectedTables.length} selected
             </span>
@@ -456,15 +1037,17 @@ export default function TableQrPage() {
               style={{ ...btnGhost, padding: "5px 10px", fontSize: 11.5 }}
               onClick={() => setSelected(new Set())}
             >
-              Clear Selection
+              Clear
             </button>
           </div>
           <div style={{ maxHeight: 300, overflowY: "auto" }}>
             {loading ? (
-              <p style={{ padding: "14px", margin: 0, color: FAINT, fontSize: 13 }}>Loading tables...</p>
+              <p style={{ padding: 14, margin: 0, color: FAINT, fontSize: 13 }}>
+                Loading tables…
+              </p>
             ) : visible.length === 0 ? (
-              <p style={{ padding: "14px", margin: 0, color: FAINT, fontSize: 13 }}>
-                No tables found. Change the group, or add a name using Custom Table Name above.
+              <p style={{ padding: 14, margin: 0, color: FAINT, fontSize: 13 }}>
+                No tables in this group. Use “Custom table name” below to add one.
               </p>
             ) : (
               visible.map((t) => {
@@ -473,8 +1056,12 @@ export default function TableQrPage() {
                   <label
                     key={keyOf(t)}
                     style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "9px 13px", cursor: "pointer", fontSize: 13,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "9px 13px",
+                      cursor: "pointer",
+                      fontSize: 13,
                       background: checked ? "#FBF6EC" : "#fff",
                       borderBottom: `1px solid ${CREAM}`,
                     }}
@@ -484,25 +1071,52 @@ export default function TableQrPage() {
                       checked={checked}
                       onChange={(e) => toggle(t, e.target.checked)}
                     />
-                    <span style={{ fontWeight: 800, color: DARK, minWidth: 80 }}>{t.tableNo}</span>
-                    <span style={{ color: FAINT }}>{t.tableGroup || "—"}</span>
+                    <span style={{ fontWeight: 800, color: DARK, minWidth: 80 }}>
+                      {t.tableNo}
+                    </span>
+                    <span style={{ color: FAINT }}>
+                      {t.groupName || t.tableGroup || "no group"}
+                    </span>
                     <span style={{ flex: 1 }} />
-                    {source === "database" && tableExists[keyOf(t)] === false && (
+                    {source === "database" && !t.takeaway && tableExists[keyOf(t)] === false && (
                       <span
                         title="This table number is not in the POS (Tbl_Tables, Enable=1). Orders from its QR will fail with 'Table not found'."
                         style={{
-                          fontSize: 9.5, fontWeight: 800, padding: "2px 7px", borderRadius: 99,
-                          background: "#fef3c7", color: "#b45309",
+                          fontSize: 9.5,
+                          fontWeight: 800,
+                          padding: "2px 7px",
+                          borderRadius: 99,
+                          background: "#fef3c7",
+                          color: "#b45309",
                         }}
                       >
                         ⚠ Not in POS
                       </span>
                     )}
-                    <span style={{
-                      fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
-                      background: t.vacant ? "#dcfce7" : "#fee2e2",
-                      color: t.vacant ? "#15803d" : "#b91c1c",
-                    }}>
+                    {!t.groupId && (
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 800,
+                          padding: "2px 7px",
+                          borderRadius: 99,
+                          background: "#eef2ff",
+                          color: "#4338ca",
+                        }}
+                      >
+                        no group
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: 99,
+                        background: t.vacant ? "#dcfce7" : "#fee2e2",
+                        color: t.vacant ? "#15803d" : "#b91c1c",
+                      }}
+                    >
                       {t.vacant ? "Vacant" : "Occupied"}
                     </span>
                   </label>
@@ -512,179 +1126,429 @@ export default function TableQrPage() {
           </div>
         </div>
 
-        {msg && <p style={{ margin: "10px 0 0", fontSize: 12.5, color: BROWN, fontWeight: 600 }}>{msg}</p>}
-
-        {source === "database" &&
-          selectedTables.some((t) => tableExists[keyOf(t)] === false) && (
-            <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "#b45309", fontWeight: 700 }}>
-              ⚠ Some selected tables are not in the POS (Tbl_Tables) — guests scanning those
-              QRs will see “Table not found”. Add the tables in the POS or remove them here.
-            </p>
-          )}
-
-              </div>
-
-      {/* ── 2) QR output settings (separate) ── */}
-      <div style={card}>
-        <p style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: MID }}>
-          QR Output Settings
-        </p>
-        <div>
-          <label style={lbl}>QR URL (opened when the code is scanned)</label>
-          <input
-            style={input}
-            placeholder="https://example.com/menu?id={id}  —  use the {id} placeholder (encrypted table id)"
-            value={urlTemplate}
-            onChange={(e) => setUrlTemplate(e.target.value)}
-          />
-          <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
-            {urlTemplate.trim()
-              ? <>Preview: <b style={{ color: BROWN }}>{buildUrl({ tableNo: "T-01", tableGroup: group !== "ALL" ? group : "Main Dining Area", vacant: true, listingOrder: 0 })}</b> — the link carries only the encrypted table id; the table number is decrypted on the menu page and shown on the welcome screen.</>
-              : "If no URL is entered, the QR code contains the table number only."}
-          </p>
-          <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
-            Placeholders: <b>{'{id}'}</b> = encrypted table id (recommended — nothing readable in the link) · <b>{'{table}'}</b> / <b>{'{group}'}</b> / <b>{'{token}'}</b> = legacy format (plain table + group + signed token).
-          </p>
-          <button
-            type="button"
-            onClick={() =>
-              setUrlTemplate(
-                `${window.location.origin}/menu?id={id}`
-              )
-            }
+        {/* the takeaway card row */}
+        {taEntry && (
+          <label
             style={{
-              marginTop: 8,
-              background: "none",
-              border: "none",
-              padding: 0,
-              fontSize: 12,
-              fontWeight: 700,
-              color: BROWN,
+              marginTop: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 13px",
+              borderRadius: 10,
+              border: `1px solid ${BROWN}`,
+              background: selected.has(keyOf(taEntry)) ? "#FBF6EC" : "#fff",
               cursor: "pointer",
-              textDecoration: "underline",
+              fontSize: 13,
             }}
           >
-            Use the customer menu page (/menu?id=&#123;id&#125; — encrypted table id only)
-          </button>
+            <input
+              type="checkbox"
+              checked={selected.has(keyOf(taEntry))}
+              onChange={(e) => toggle(taEntry, e.target.checked)}
+            />
+            <span style={{ fontWeight: 800, color: DARK }}>TA</span>
+            <span style={{ color: FAINT }}>Takeaway — one QR only · Order Type TA</span>
+            <span style={{ flex: 1 }} />
+            <span
+              style={{
+                fontSize: 9.5,
+                fontWeight: 800,
+                padding: "2px 7px",
+                borderRadius: 99,
+                background: "#eef2ff",
+                color: "#4338ca",
+              }}
+            >
+              Takeaway
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                setCustomTables((prev) => prev.filter((t) => !t.takeaway));
+                setSelected((prev) => {
+                  const next = new Set(prev);
+                  next.delete(keyOf(taEntry));
+                  return next;
+                });
+              }}
+              style={{
+                border: "none",
+                background: "none",
+                color: "#b91c1c",
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              Remove
+            </button>
+          </label>
+        )}
+
+        {/* custom table name (no group field) */}
+        <div style={{ marginTop: 14 }}>
+          <label style={lbl}>Custom table name</label>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(160px,1fr) auto",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <input
+              style={input}
+              placeholder="Table name — e.g. PATIO 1"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCustom()}
+            />
+            <button style={btnBrown} onClick={addCustom}>
+              Add table
+            </button>
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: 11.5, color: FAINT }}>
+            For tables that are not in the POS table list. The card prints this name; the QR
+            still carries the real table number, so orders only reach the kitchen if that
+            table exists in the POS.
+          </p>
+
+          {/* Takeaway note + one-tap TA card */}
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              background: "#FBF6EC",
+              border: `1px dashed ${BORDER}`,
+              borderRadius: 10,
+              padding: "9px 12px",
+            }}
+          >
+            <span style={{ fontSize: 12, color: FAINT, lineHeight: 1.55 }}>
+              <b style={{ color: BROWN }}>Takeaway:</b> type <b>TA</b> above (or press the
+              button) — only <b>one</b> Takeaway QR can be created. Orders from it are saved
+              with Order Type <b>TA</b> and a takeaway number from <b>Tbl_Serials</b>.
+            </span>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              style={{ ...btnGhost, padding: "7px 12px", fontSize: 12 }}
+              onClick={addTakeaway}
+            >
+              + Takeaway (TA) QR
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 18, marginTop: 16 }}>
-                    <div>
-            <label style={lbl}>Logo in QR centre</label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: DARK, paddingTop: 6, cursor: "pointer" }}>
-              <input type="checkbox" checked={showLogo} onChange={(e) => setShowLogo(e.target.checked)} />
-              Show the Mila Mirissa logo in the centre of the QR code
-            </label>
+        {msg && (
+          <p style={{ margin: "10px 0 0", fontSize: 12.5, color: BROWN, fontWeight: 600 }}>
+            {msg}
+          </p>
+        )}
+      </div>
+
+      {/* ── 2) Card design ── */}
+      <div style={card}>
+        <p style={sectionTitle}>2 · Card design &amp; size (inches)</p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
+            gap: 22,
+          }}
+        >
+          <div>
+            <label style={lbl}>Presets</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+              {QR_CARD_PRESETS.map((p) => {
+                const active = widthIn === p.width && heightIn === p.height;
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => {
+                      setWidthInput(String(p.width));
+                      setHeightInput(String(p.height));
+                    }}
+                    style={{
+                      padding: "7px 12px",
+                      borderRadius: 99,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontFamily: "Inter, sans-serif",
+                      border: `1px solid ${active ? BROWN : BORDER}`,
+                      background: active ? BROWN : "#fff",
+                      color: active ? "#fff" : BROWN,
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={lbl}>Width (in)</label>
+                <input
+                  style={input}
+                  type="number"
+                  min={QR_CARD_SIZE.min}
+                  max={QR_CARD_SIZE.max}
+                  step={0.1}
+                  value={widthInput}
+                  onChange={(e) => setWidthInput(e.target.value)}
+                  onBlur={() => setWidthInput(String(widthIn))}
+                />
+              </div>
+              <div>
+                <label style={lbl}>Height (in)</label>
+                <input
+                  style={input}
+                  type="number"
+                  min={QR_CARD_SIZE.min}
+                  max={QR_CARD_SIZE.max}
+                  step={0.1}
+                  value={heightInput}
+                  onChange={(e) => setHeightInput(e.target.value)}
+                  onBlur={() => setHeightInput(String(heightIn))}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 14 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 13,
+                  color: DARK,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showLogo}
+                  onChange={(e) => setShowLogo(e.target.checked)}
+                />
+                Logo in QR centre
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 13,
+                  color: DARK,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showGroup}
+                  onChange={(e) => setShowGroup(e.target.checked)}
+                />
+                Print the group name
+              </label>
+            </div>
+
+            <p style={{ margin: "12px 0 0", fontSize: 11.5, color: FAINT, lineHeight: 1.6 }}>
+              {widthIn}″ × {heightIn}″ ({Math.round(widthIn * 25.4)} × {Math.round(heightIn * 25.4)} mm)
+              · exported at {QR_EXPORT_DPI} DPI.
+              {qrTooSmall && (
+                <span style={{ color: "#b45309", fontWeight: 700 }}>
+                  {" "}
+                  ⚠ Under 2″ the QR gets tight — test one print before the full batch.
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* live preview */}
+          <div>
+            <label style={lbl}>Live preview</label>
+            <div
+              style={{
+                background: CREAM,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 12,
+                padding: 16,
+              }}
+            >
+              <ScaleBox
+                width={Math.round(widthIn * 96)}
+                height={Math.round(heightIn * 96)}
+              >
+                <QrCard
+                  tableNo={previewKey?.tableNo ?? "TABLE"}
+                  name={previewKey ? nameOf(previewKey) || previewKey.tableNo : "TABLE 01"}
+                  group={
+                    previewKey
+                      ? groupOf(previewKey)
+                      : groups[0]?.groupName ?? "Main Dining"
+                  }
+                  url={previewUrl}
+                  widthIn={widthIn}
+                  heightIn={heightIn}
+                  showLogo={showLogo}
+                  showGroup={showGroup}
+                />
+              </ScaleBox>
+            </div>
           </div>
         </div>
       </div>
 
-      
-      {/* Create — after the QR URL / output settings */}
-      <button
-          style={{ ...btnBrown, width: "100%", marginTop: 14, padding: "12px 18px", fontSize: 14, opacity: selectedTables.length ? 1 : 0.5 }}
-          disabled={!selectedTables.length}
-          onClick={createQrs}
-        >
-          Create QR Codes ({selectedTables.length} selected)
-        </button>
+      {/* ── 3) Card names ── */}
+      {selectedTables.length > 0 && (
+        <div style={card}>
+          <p style={sectionTitle}>3 · Names printed on the cards (optional)</p>
+          <p style={{ margin: "-4px 0 12px", fontSize: 11.5, color: FAINT }}>
+            Leave blank to print the POS table number. Handy for tables that have no group
+            in the POS.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {selectedTables.map((t) => (
+              <div
+                key={keyOf(t)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "120px minmax(120px,1fr) minmax(120px,1fr)",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 800,
+                    color: DARK,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={t.tableNo}
+                >
+                  {t.tableNo}
+                </span>
+                <input
+                  style={input}
+                  placeholder={`Card name — default ${t.tableNo}`}
+                  value={cardNames[keyOf(t)]?.name ?? ""}
+                  onChange={(e) => setName(t, "name", e.target.value)}
+                />
+                <input
+                  style={input}
+                  placeholder={`Group on card — default ${
+                    t.groupName || t.tableGroup || "none"
+                  }`}
+                  value={cardNames[keyOf(t)]?.group ?? ""}
+                  onChange={(e) => setName(t, "group", e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* ── 3) Generated QR codes ── */}
+      {/* ── Create ── */}
+      <button
+        style={{
+          ...btnBrown,
+          width: "100%",
+          marginTop: 14,
+          padding: "12px 18px",
+          fontSize: 14,
+          opacity: selectedTables.length && !signing ? 1 : 0.55,
+        }}
+        disabled={!selectedTables.length || signing}
+        onClick={createQrs}
+      >
+        {signing
+          ? "Preparing links…"
+          : `Create QR cards (${selectedTables.length} selected · ${widthIn}″ × ${heightIn}″)`}
+      </button>
+
+      {/* ── 4) Generated cards ── */}
       <div ref={createdRef} style={{ marginTop: 26 }}>
-        <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: MID }}>
-          Generated QR Codes — {created.length}
-        </p>
+        <p style={sectionTitle}>4 · Generated cards — {created.length}</p>
         {created.length === 0 ? (
-          <div style={{ background: "#fff", border: `1px dashed ${BORDER}`, borderRadius: 14, padding: "36px 20px", textAlign: "center", color: FAINT, fontSize: 13 }}>
-            Select one or more tables above and click <b>Create QR Codes</b>.
+          <div
+            style={{
+              background: "#fff",
+              border: `1px dashed ${BORDER}`,
+              borderRadius: 14,
+              padding: "36px 20px",
+              textAlign: "center",
+              color: FAINT,
+              fontSize: 13,
+            }}
+          >
+            Select tables above and click <b>Create QR cards</b>.
           </div>
         ) : (
-          <div style={{ background: CREAM, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 14 }}>
+          <div
+            style={{
+              background: CREAM,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 14,
+              padding: 16,
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))",
+                gap: 18,
+              }}
+            >
               {created.map((t) => {
-                const url = buildUrl(t);
-                const logoSize = Math.round(QR_SIZE * 0.22);
+                const key = keyOf(t);
                 return (
-                  <div key={keyOf(t)} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div
-                      ref={(el) => {
-                        if (el) cardRefs.current.set(keyOf(t), el);
-                        else cardRefs.current.delete(keyOf(t));
-                      }}
-                      style={{
-                        background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 16,
-                        padding: "18px 14px 14px", textAlign: "center",
-                      }}
+                  <div
+                    key={key}
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    <ScaleBox
+                      width={Math.round(widthIn * 96)}
+                      height={Math.round(heightIn * 96)}
                     >
-                      {/* Fixed-size, centred QR box. (width:100% caused
-                          the QR to stretch/shift when captured to PNG,
-                          and the logo inside the SVG did not render in
-                          downloads — so the logo is also overlaid as a
-                          normal image in the exact centre.) */}
-                      <div
-                        style={{
-                          position: "relative",
-                          width: QR_SIZE,
-                          height: QR_SIZE,
-                          margin: "0 auto",
-                        }}
+                      <QrCard
+                        tableNo={t.tableNo}
+                        name={nameOf(t) || t.tableNo}
+                        group={groupOf(t)}
+                        url={qrUrls[key] ?? ""}
+                        widthIn={widthIn}
+                        heightIn={heightIn}
+                        showLogo={showLogo}
+                        showGroup={showGroup}
+                      />
+                    </ScaleBox>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        style={{ ...btnGhost, flex: 1, padding: "8px 10px", fontSize: 12 }}
+                        disabled={busy != null}
+                        onClick={() => downloadPng(t)}
                       >
-                        <QRCodeSVG
-                          value={url}
-                          size={QR_SIZE}
-                          level="H"
-                          bgColor="#ffffff"
-                          fgColor={DARK}
-                          style={{ display: "block" }}
-                          imageSettings={
-                            showLogo
-                              ? { src: RESTAURANT_INFO.logoPath, height: logoSize, width: logoSize, excavate: true }
-                              : undefined
-                          }
-                        />
-                        {showLogo && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={RESTAURANT_INFO.logoPath}
-                            alt=""
-                            style={{
-                              position: "absolute",
-                              left: (QR_SIZE - logoSize) / 2,
-                              top: (QR_SIZE - logoSize) / 2,
-                              width: logoSize,
-                              height: logoSize,
-                              borderRadius: "50%",
-                              objectFit: "contain",
-                              background: "#ffffff",
-                              pointerEvents: "none",
-                            }}
-                          />
-                        )}
-                      </div>
-                      <div style={{ marginTop: 10, fontSize: 22, fontWeight: 800, color: DARK, letterSpacing: 0.4 }}>
-                        {t.tableNo}
-                      </div>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: MID }}>
-                        {RESTAURANT_INFO.name}
-                        {t.tableGroup ? ` · ${t.tableGroup}` : ""}
-                      </div>
+                        {busy === key ? "…" : "Download PNG"}
+                      </button>
+                      <button
+                        style={{ ...btnGhost, flex: 1, padding: "8px 10px", fontSize: 12 }}
+                        disabled={busy != null}
+                        onClick={() => printCard(t)}
+                      >
+                        {busy === key ? "…" : "Print"}
+                      </button>
                     </div>
-                    <span
-                      title={url}
-                      style={{
-                        fontSize: 10, color: FAINT, textAlign: "center",
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                      }}
-                    >
-                      {url}
-                    </span>
-                    <button
-                      style={{ ...btnGhost, padding: "8px 10px", fontSize: 12 }}
-                      disabled={busy != null}
-                      onClick={() => downloadPng(t)}
-                    >
-                      {busy === t.tableNo ? "Preparing..." : `Download ${t.tableNo} PNG`}
-                    </button>
                   </div>
                 );
               })}
@@ -692,6 +1556,39 @@ export default function TableQrPage() {
           </div>
         )}
       </div>
+
+      {/* ── hidden export layer — real-size cards at 96 CSS px / inch ── */}
+      {created.length > 0 && (
+        <div
+          aria-hidden
+          style={{ position: "fixed", top: 0, left: -20000, pointerEvents: "none" }}
+        >
+          {created.map((t) => {
+            const key = keyOf(t);
+            return (
+              <div
+                key={`export-${key}`}
+                ref={(el) => {
+                  if (el) exportRefs.current.set(key, el);
+                  else exportRefs.current.delete(key);
+                }}
+                style={{ marginBottom: 10 }}
+              >
+                <QrCard
+                  tableNo={t.tableNo}
+                  name={nameOf(t) || t.tableNo}
+                  group={groupOf(t)}
+                  url={qrUrls[key] ?? ""}
+                  widthIn={widthIn}
+                  heightIn={heightIn}
+                  showLogo={showLogo}
+                  showGroup={showGroup}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

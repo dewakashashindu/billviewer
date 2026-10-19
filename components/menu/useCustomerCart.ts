@@ -35,15 +35,19 @@ export interface CartRow {
 
 /** Guest details collected on the form between welcome and menu. */
 export interface GuestDetails {
-  /** Local guests (Tbl_HoldUpsCloud.LPax). */
+  /** Local guests (Tbl_HoldUpsCloud.LPax) — not used for takeaway. */
   localPax: number;
-  /** Foreign guests (Tbl_HoldUpsCloud.FPax). */
+  /** Foreign guests (Tbl_HoldUpsCloud.FPax) — not used for takeaway. */
   foreignPax: number;
-  /** Customer name (Tbl_HoldUpsCloud.CusName). */
+  /** Customer name (Tbl_HoldUpsCloud.CusName) — mandatory. */
   cusName: string;
+  /** Customer phone (Tbl_HoldUpsCloud.CusCode / lookup key) — mandatory. */
+  cusPhone: string;
+  /** Tbl_CustomerMaster.CusCode when the phone is a known customer. */
+  cusCode: string;
 }
 
-const guestStorageKey = (table: string) => `mnu-guest:v1:${table}`;
+const guestStorageKey = (table: string) => `mnu-guest:v2:${table}`;
 
 interface Options {
   table: string;
@@ -52,6 +56,8 @@ interface Options {
    *  guarded /api/order/* endpoints in production. */
   token?: string;
   itemsById: Map<string, MenuItem>;
+  /** Takeaway QR — no pax, orders are saved with OrderType TA. */
+  takeaway?: boolean;
 }
 
 const storageKey = (table: string) => `mnu-cart:v1:${table}`;
@@ -77,7 +83,7 @@ function writeStore(table: string, store: CartStore | null) {
   }
 }
 
-export function useCustomerCart({ table, tableGroup, token, itemsById }: Options) {
+export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway = false }: Options) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [baseline, setBaseline] = useState<CartStore["baseline"]>({});
   const [invoiceNo, setInvoiceNo] = useState("");
@@ -94,6 +100,8 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
     localPax: 0,
     foreignPax: 0,
     cusName: "",
+    cusPhone: "",
+    cusCode: "",
   });
   const [guestHydrated, setGuestHydrated] = useState(false);
 
@@ -109,6 +117,8 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
             localPax: Math.max(0, Number(g.localPax) || 0),
             foreignPax: Math.max(0, Number(g.foreignPax) || 0),
             cusName: String(g.cusName ?? "").slice(0, 100),
+            cusPhone: String(g.cusPhone ?? "").slice(0, 30),
+            cusCode: String(g.cusCode ?? "").slice(0, 10),
           });
         }
       } catch {
@@ -142,16 +152,40 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
           : Math.max(0, Math.min(50, Math.floor(Number(patch.foreignPax) || 0))),
       cusName:
         patch.cusName === undefined ? prev.cusName : String(patch.cusName).slice(0, 100),
+      cusPhone:
+        patch.cusPhone === undefined ? prev.cusPhone : String(patch.cusPhone).slice(0, 30),
+      cusCode:
+        patch.cusCode === undefined ? prev.cusCode : String(patch.cusCode).slice(0, 10),
     }));
   }, []);
 
-  /** Form already filled in (at least one guest) → skip it next time. */
-  const hasGuest = guestHydrated && guest.localPax + guest.foreignPax >= 1;
+  /** Form already filled in → skip it next time.
+   *  Dine-in: pax + phone + name · Takeaway: phone + name. */
+  const hasGuest =
+    guestHydrated &&
+    guest.cusName.trim().length > 0 &&
+    guest.cusPhone.trim().length >= 9 &&
+    (takeaway || guest.localPax + guest.foreignPax >= 1);
 
   /* ── 1. load the table's current unpaid bill ─────────────── */
   useEffect(() => {
     if (!table) return;
     let alive = true;
+
+    /* Takeaway has no table bill — every confirm is its own TA order. */
+    if (takeaway) {
+      const saved = readStore(table);
+      void Promise.resolve().then(() => {
+        if (!alive) return;
+        setLines([]);
+        setBaseline(saved?.baseline ?? {});
+        setInvoiceNo("");
+        setHydrated(true);
+      });
+      return () => {
+        alive = false;
+      };
+    }
 
     (async () => {
       let serverLines: ExistingLine[] = [];
@@ -222,7 +256,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
     return () => {
       alive = false;
     };
-  }, [table, token]);
+  }, [table, token, takeaway]);
 
   /* ── 2. persist on every change ──────────────────────────── */
   useEffect(() => {
@@ -408,9 +442,12 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
           tableNo: table,
           tableGroup: tableGroup || undefined,
           t: token || undefined,
-          localPax: guest.localPax || undefined,
-          foreignPax: guest.foreignPax || undefined,
+          orderType: takeaway ? "TA" : "DI",
+          localPax: takeaway ? undefined : guest.localPax || undefined,
+          foreignPax: takeaway ? undefined : guest.foreignPax || undefined,
           customerName: guest.cusName || undefined,
+          customerPhone: guest.cusPhone || undefined,
+          customerCode: guest.cusCode || undefined,
           items: payloadItems,
         }),
       });
@@ -425,6 +462,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
         invoiceNo: data.invoiceNo ?? "",
         itemCount: data.itemCount ?? 0,
         source: data.source ?? "database",
+        orderType: data.orderType ?? (takeaway ? "TA" : "DI"),
       };
 
       // Confirmed → the whole cart becomes the new read-only baseline.
@@ -448,7 +486,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
       inFlightRef.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, guest, lines, newLines, table, tableGroup, token]);
+  }, [baseline, confirming, guest, lines, newLines, table, tableGroup, token, takeaway]);
 
   const resetAll = useCallback(() => {
     setLines([]);

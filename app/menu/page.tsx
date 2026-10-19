@@ -16,7 +16,7 @@
 
 import type { Metadata } from "next";
 import MenuClient from "@/components/menu/MenuClient";
-import { decryptTableId } from "@/lib/tableLink";
+import { decryptTableLink, TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
 import { signTableToken } from "@/lib/orderToken";
 import "./menu.css";
 
@@ -35,16 +35,23 @@ export default async function MenuPage({
   let table = "";
   let token = "";
   let invalidLink = false;
+  let legacyGroup = "";
+  let isTakeaway = false;
 
   const id = (params.id ?? "").trim();
   if (id) {
     /* New format — decrypt the table id and mint a fresh API token.
        The token is passed to the client as a prop; it never appears
        in the URL, so it cannot be copied out of the address bar. */
-    const decrypted = decryptTableId(id);
+    const decrypted = decryptTableLink(id);
     if (decrypted) {
-      table = decrypted;
-      token = signTableToken(decrypted);
+      table = decrypted.tableNo;
+      token = signTableToken(decrypted.tableNo);
+      // The group is inside the encrypted payload too — used as the
+      // initial value while /api/order/table resolves the live one.
+      legacyGroup = decrypted.tableGroup;
+      // Takeaway QR → no table, no pax; orders go in as OrderType TA.
+      isTakeaway = decrypted.kind === "takeaway";
     } else {
       invalidLink = true; // tampered / wrong key / not a table link
     }
@@ -52,11 +59,14 @@ export default async function MenuPage({
     /* Legacy format — ?table=…&group=…&t=… */
     table = (params.table ?? "").trim();
     token = (params.t ?? "").trim();
+    isTakeaway = table.toUpperCase() === TAKEAWAY_TABLE_NO;
   }
 
-  // Only legacy links carry a group; new links omit it and the client
-  // resolves the table group from the POS (Tbl_Tables) instead.
-  const tableGroup = (params.group ?? "").trim();
+  // New links carry the group INSIDE the encrypted id (table no + group);
+  // the client still adopts the live group name from the POS
+  // (Tbl_Tables / Tbl_TableGroup) as soon as /api/order/table answers.
+  const tableGroup =
+    (params.group ?? "").trim() || legacyGroup || (isTakeaway ? "Takeaway" : "");
 
   return (
     <MenuClient
@@ -64,6 +74,7 @@ export default async function MenuPage({
       tableGroup={tableGroup}
       token={token}
       invalidLink={invalidLink}
+      isTakeaway={isTakeaway}
     />
   );
 }

@@ -11,7 +11,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkTableAccess } from "@/lib/orderToken";
 import { getOrderTableInfo } from "@/lib/orderService";
+import { TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { isDbConfigured } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +42,23 @@ export async function GET(request: NextRequest) {
     const access = checkTableAccess(tableNo, token);
     if (!access.ok) {
       return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
+    }
+
+    /* Takeaway QR — "TA" is not a POS table; answer with the
+       takeaway context instead of a 404. */
+    if (tableNo.toUpperCase() === TAKEAWAY_TABLE_NO) {
+      return NextResponse.json({
+        ok: true,
+        data: {
+          tableNo: TAKEAWAY_TABLE_NO,
+          tableGroup: "Takeaway",
+          groupId: "",
+          vacant: true,
+          area: "Takeaway",
+          source: isDbConfigured() ? "database" : "mock",
+          takeaway: true,
+        },
+      });
     }
 
     const info = await getOrderTableInfo(tableNo);

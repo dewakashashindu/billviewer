@@ -21,11 +21,14 @@ import { T } from "./theme";
 export default function WelcomeScreen({
   table,
   tableGroup,
+  takeaway = false,
   onOpenMenu,
   opening,
 }: {
   table: string;
   tableGroup?: string;
+  /** Takeaway QR — show "Takeaway" instead of a table number. */
+  takeaway?: boolean;
   onOpenMenu: () => void;
   opening: boolean;
 }) {
@@ -71,7 +74,12 @@ export default function WelcomeScreen({
         <div style={s.spacer} />
 
         <div style={{ ...s.tableTag, animationDelay: "0.26s" }} className="mnu-anim-up">
-          {table ? (
+          {takeaway ? (
+            <span style={s.tableChip}>
+              <span style={s.tableDot} />
+              <b style={{ color: T.gold }}>Takeaway</b>&nbsp;·&nbsp;no table needed
+            </span>
+          ) : table ? (
             <span style={s.tableChip}>
               <span style={s.tableDot} />
               Table&nbsp;<b style={{ color: T.gold }}>{table}</b>
@@ -102,7 +110,11 @@ export default function WelcomeScreen({
               )}
             </span>
           </button>
-          <div style={s.hint}>Browse the menu · order straight from your table</div>
+          <div style={s.hint}>
+            {takeaway
+              ? "Browse the menu · pick up your order at the counter"
+              : "Browse the menu · order straight from your table"}
+          </div>
         </div>
       </div>
     </div>

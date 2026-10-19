@@ -17,7 +17,6 @@
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
 import { categoryLabel, T } from "./theme";
 import { useCustomerCart, type CartRow } from "./useCustomerCart";
 import { useIsDesktop } from "./useMedia";
@@ -41,6 +40,7 @@ export default function MenuClient({
   tableGroup,
   token,
   invalidLink = false,
+  isTakeaway = false,
 }: {
   table: string;
   tableGroup: string;
@@ -48,8 +48,9 @@ export default function MenuClient({
   token?: string;
   /** The ?id= link could not be decrypted — show the scan screen. */
   invalidLink?: boolean;
+  /** Takeaway QR — no table, no pax, orders go in as OrderType TA. */
+  isTakeaway?: boolean;
 }) {
-  const router = useRouter();
   const desktop = useIsDesktop();
   const tree = useMenuTree();
 
@@ -78,6 +79,9 @@ export default function MenuClient({
 
   useEffect(() => {
     if (!table) return;
+    /* The takeaway QR has no POS table to verify — the TA order type
+       is decided on the server from the table number. */
+    if (isTakeaway) return;
     let alive = true;
     (async () => {
       try {
@@ -87,8 +91,11 @@ export default function MenuClient({
         if (!alive) return;
         if (res.ok) {
           const json = await res.json().catch(() => null);
+          /* The POS is authoritative (it returns the readable group
+             NAME, e.g. "A. Ground Floor"), so it replaces the group
+             carried in the URL / encrypted id ("001"). */
           const group = String(json?.data?.tableGroup ?? "").trim();
-          if (group) setResolvedGroup((prev) => prev || group);
+          if (group) setResolvedGroup(group);
           setTableCheckResult({ table, token: token ?? "", status: "ok" });
         } else if (res.status === 404 || res.status === 403) {
           setTableCheckResult({ table, token: token ?? "", status: "blocked" });
@@ -102,12 +109,13 @@ export default function MenuClient({
     return () => {
       alive = false;
     };
-  }, [table, token]);
+  }, [table, token, isTakeaway]);
 
   /* "checking" is derived — a result only counts for the table (and
      token) it was fetched for, so a table change re-checks. */
-  const tableCheck: "checking" | "ok" | "blocked" | "offline" =
-    tableCheckResult && tableCheckResult.table === table && tableCheckResult.token === (token ?? "")
+  const tableCheck: "checking" | "ok" | "blocked" | "offline" = isTakeaway
+    ? "ok"
+    : tableCheckResult && tableCheckResult.table === table && tableCheckResult.token === (token ?? "")
       ? tableCheckResult.status
       : "checking";
 
@@ -118,6 +126,7 @@ export default function MenuClient({
     tableGroup: resolvedGroup || tableGroup,
     token,
     itemsById,
+    takeaway: isTakeaway,
   });
 
   const [view, setView] = useState<View>("welcome");
@@ -130,7 +139,6 @@ export default function MenuClient({
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [opening, setOpening] = useState(false);
   const [pulse, setPulse] = useState(false);
-  const [manualTable, setManualTable] = useState("");
   const pulseTimer = useRef<number | null>(null);
 
   /* first tab is the default — derived, so no state sync in an effect */
@@ -227,7 +235,10 @@ export default function MenuClient({
     }
   }, [cart]);
 
-  /* ══════════════════ no table → ask for the QR ═════════════ */
+  /* ══════════════════ no table → ask for the QR ═════════════
+     Manual table entry is intentionally NOT offered — ordering is
+     QR-scan only, so a guest can only reach the menu through a
+     valid table QR link. */
   if (!table && !invalidLink) {
     return (
       <div className="mnu-min-dvh" style={s.root}>
@@ -237,26 +248,8 @@ export default function MenuClient({
           <p style={s.scanSub}>
             To order, please scan the QR code on your table.
             <br />
-            Or enter your table number below (staff will confirm).
+            Ask a member of our staff if you need help.
           </p>
-          <form
-            style={s.scanForm}
-            onSubmit={(e) => {
-              e.preventDefault();
-              const t = manualTable.trim();
-              if (t) router.replace(`/menu?table=${encodeURIComponent(t)}`);
-            }}
-          >
-            <input
-              value={manualTable}
-              onChange={(e) => setManualTable(e.target.value)}
-              placeholder="e.g. T-07"
-              style={s.scanInput}
-            />
-            <button type="submit" style={s.scanBtn} className="mnu-tap">
-              Open menu
-            </button>
-          </form>
         </div>
       </div>
     );
@@ -282,28 +275,10 @@ export default function MenuClient({
                 <br />
                 Please scan the QR code on your table,
                 <br />
-                or check the table number below (staff will confirm).
+                or ask a member of our staff for assistance.
               </>
             )}
           </p>
-          <form
-            style={s.scanForm}
-            onSubmit={(e) => {
-              e.preventDefault();
-              const t = manualTable.trim();
-              if (t) router.replace(`/menu?table=${encodeURIComponent(t)}`);
-            }}
-          >
-            <input
-              value={manualTable}
-              onChange={(e) => setManualTable(e.target.value)}
-              placeholder="e.g. T-07"
-              style={s.scanInput}
-            />
-            <button type="submit" style={s.scanBtn} className="mnu-tap">
-              Open menu
-            </button>
-          </form>
         </div>
       </div>
     );
@@ -316,6 +291,7 @@ export default function MenuClient({
         <WelcomeScreen
           table={table}
           tableGroup={resolvedGroup || tableGroup}
+          takeaway={isTakeaway}
           opening={opening}
           onOpenMenu={() => void openMenu()}
         />
@@ -333,13 +309,16 @@ export default function MenuClient({
     );
   }
 
-  /* ══════════════════ guest form (pax + customer name) ══════ */
+  /* ══════════════════ guest form ═════════════════════════════
+     Dine-in: pax + phone (Tbl_CustomerMaster lookup) + name.
+     Takeaway: phone + name only (no pax). */
   if (view === "guest") {
     return (
       <div className="mnu-min-dvh" style={s.root}>
         <GuestForm
           table={table}
           tableGroup={resolvedGroup || tableGroup}
+          takeaway={isTakeaway}
           initial={cart.guest}
           onSubmit={(g) => {
             cart.setGuestDetails(g);
@@ -452,8 +431,8 @@ export default function MenuClient({
             </button>
           </div>
           <div style={s.dTable}>
-            <span style={s.dTableK}>Your table</span>
-            <span style={s.dTableV}>{table}</span>
+            <span style={s.dTableK}>{isTakeaway ? "Order type" : "Your table"}</span>
+            <span style={s.dTableV}>{isTakeaway ? "TAKEAWAY" : table}</span>
           </div>
         </header>
 
@@ -579,7 +558,9 @@ export default function MenuClient({
         <div style={s.mBrand}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/millamirissa.png" alt="Mila Mirissa" style={s.mLogo} />
-          <span style={s.mBrandSub}>TABLE {table}</span>
+          <span style={s.mBrandSub}>
+            {isTakeaway ? "TAKEAWAY" : `TABLE ${table}`}
+          </span>
         </div>
         <button
           type="button"
@@ -764,32 +745,6 @@ const s: Record<string, CSSProperties> = {
   },
   scanTitle: { margin: "20px 0 0", fontSize: 23, fontWeight: 800 },
   scanSub: { color: T.w55, fontSize: 13.5, lineHeight: 1.75, margin: "10px 0 24px", maxWidth: 340 },
-  scanForm: { display: "flex", gap: 10, width: "100%", maxWidth: 380 },
-  scanInput: {
-    flex: 1,
-    height: 50,
-    borderRadius: 14,
-    background: T.card,
-    border: `1px solid ${T.line}`,
-    color: T.white,
-    padding: "0 16px",
-    fontSize: 14,
-    fontFamily: "inherit",
-    outline: "none",
-  },
-  scanBtn: {
-    height: 50,
-    padding: "0 22px",
-    borderRadius: 14,
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    color: T.white,
-    fontWeight: 800,
-    fontSize: 14,
-    cursor: "pointer",
-    boxShadow: T.shadowGold,
-  },
-
   /* loading overlay */
   preparing: {
     position: "fixed",

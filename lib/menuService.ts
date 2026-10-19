@@ -16,6 +16,9 @@
 //   availability are re-read from the database — the price the
 //   browser shows is never trusted.
 //   Invoice: Tbl_Serials (SeriCode 'INV') -> INV-YYYYMMDD-NNN
+//   Takeaway: Tbl_Serials (SeriCode 'TA') -> next serial (SeriNo+1)
+//             saved as the new takeaway number, OrderType = 'TA'
+//             (TabelNo = 'TA', no table is marked occupied)
 //
 // If the DB_* env vars are not set, mock menu data is served
 // and confirms return a mock invoice (dev/demo mode).
@@ -23,6 +26,7 @@
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { convertMenuImage, type ConvertedImage } from "./menuImage";
+import { TAKEAWAY_TABLE_NO } from "./tableLink";
 
 export interface MenuItem {
   id: string;
@@ -89,6 +93,72 @@ async function resolveMenuColumns(pool: sql.ConnectionPool): Promise<MenuColumns
   return menuColsCache;
 }
 const col = (src: ColSrc, name: string): string | null => (src ? `${src}.[${name}]` : null);
+
+/* ── destination column sizes ─────────────────────────────────
+   SQL error 8152 ("String or binary data would be truncated")
+   happens when a value is longer than its column. The POS schema
+   differs between installs (CusCode char(10), CusName varchar(50)
+   or 100, InvoiceNo char(20) …), so the real sizes are read once
+   from INFORMATION_SCHEMA and every string parameter is clamped
+   to fit before it is sent. */
+const colSizeCache = new Map<string, Record<string, number>>();
+
+async function loadColumnSizes(
+  tx: sql.Transaction,
+  tables: string[]
+): Promise<void> {
+  const missing = tables.filter((t) => !colSizeCache.has(t));
+  if (!missing.length) return;
+  try {
+    const req = tx.request();
+    const inList = missing.map((_, i) => `@t${i}`).join(", ");
+    missing.forEach((t, i) => req.input(`t${i}`, sql.VarChar(128), t));
+    const res = await req.query(`
+      SELECT UPPER(TABLE_NAME) AS TableName,
+             UPPER(COLUMN_NAME) AS ColumnName,
+             CHARACTER_MAXIMUM_LENGTH AS MaxLen
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME IN (${inList})
+        AND CHARACTER_MAXIMUM_LENGTH IS NOT NULL;
+    `);
+    for (const t of missing) colSizeCache.set(t, {});
+    for (const r of res.recordset) {
+      const table = String(r.TableName);
+      const map = colSizeCache.get(table) ?? {};
+      map[String(r.ColumnName)] = Number(r.MaxLen);
+      colSizeCache.set(table, map);
+    }
+    const sizes = [...colSizeCache.entries()].map(([t, m]) => `${t}: ${Object.keys(m).length} cols`);
+    console.log("Order column sizes loaded:", sizes.join(" · "));
+  } catch (error) {
+    console.error("Could not read column sizes (clamping disabled):", error);
+    for (const t of missing) colSizeCache.set(t, {});
+  }
+}
+
+/** Clamp `value` to the real column size, logging anything cut. */
+function makeFitter() {
+  return (table: string, column: string, value: string): string => {
+    const max = colSizeCache.get(table.toUpperCase())?.[column.toUpperCase()];
+    if (!max || max <= 0 || value.length <= max) return value; // -1 / nvarchar(max)
+    const cut = value.slice(0, max);
+    console.warn(
+      `⚠️ ${table}.${column} holds ${max} chars — value cut from "${value}" to "${cut}"`
+    );
+    return cut;
+  };
+}
+
+/* ── phone normalisation ─────────────────────────────────────
+   CusCode is char(10) on this POS: keep local 10-digit numbers.
+   "+94 77 123 4567" → "0771234567" */
+export function normalisePhone(raw: string): string {
+  let d = String(raw ?? "").replace(/[^0-9]/g, "");
+  if (d.startsWith("0094")) d = `0${d.slice(4)}`; // 0094 77 …
+  else if (d.startsWith("94") && d.length >= 11) d = `0${d.slice(2)}`; // +94 77 …
+  if (d.length > 10 && !d.startsWith("0")) d = d.slice(-10);
+  return d.slice(0, 10);
+}
 
 /* ─────────────────────────── mock data ─────────────────────────── */
 const MOCK: MenuItem[] = [
@@ -227,6 +297,8 @@ export interface ConfirmInput {
   items: ConfirmLineInput[];
   customerName?: string;
   customerPhone?: string;
+  /** Tbl_CustomerMaster.CusCode when the phone matched a customer. */
+  customerCode?: string;
   /** Number of guests for this order (Tbl_HoldUpsCloud.LPax). */
   pax?: number;
   /** Local guests (Tbl_HoldUpsCloud.LPax) — preferred over `pax`. */
@@ -241,7 +313,13 @@ export interface ConfirmResult {
   invoiceNo: string;
   itemCount: number;
   source: "database" | "mock";
+  /** 'DI' = dine-in table · 'TA' = takeaway */
+  orderType: "DI" | "TA";
 }
+
+/** Takeaway QR — the table number is the fixed "TA" code. */
+export const isTakeawayTable = (tableNo: string) =>
+  String(tableNo ?? "").trim().toUpperCase() === TAKEAWAY_TABLE_NO;
 
 export class OrderError extends Error {
   status: number;
@@ -261,7 +339,10 @@ function slDateParts(): { ymd: string; date: Date } {
   return { ymd, date: new Date(`${ymd}T00:00:00Z`) };
 }
 
-async function generateInvoiceNo(tx: sql.Transaction): Promise<string> {
+async function generateInvoiceNo(
+  tx: sql.Transaction,
+  maxLen: number = 50
+): Promise<string> {
   const { ymd, date } = slDateParts();
   const req = tx.request();
   req.input("code", sql.Char(10), "INV");
@@ -293,7 +374,67 @@ async function generateInvoiceNo(tx: sql.Transaction): Promise<string> {
       VALUES (@code, 1, @date);
     `);
   }
-  return `INV-${ymd.replaceAll("-", "")}-${String(seq).padStart(3, "0")}`;
+  /* Pick the longest format that still fits InvoiceNo on this DB
+     (some installs have char(10)/char(20), not char(50)). */
+  const compact = ymd.replaceAll("-", "");       // YYYYMMDD
+  const nnn = String(seq).padStart(3, "0");
+  const candidates = [
+    `INV-${compact}-${nnn}`,                     // INV-20261019-001 (16)
+    `INV-${compact.slice(2)}-${nnn}`,            // INV-261019-001    (14)
+    `INV-${compact.slice(4)}-${nnn}`,            // INV-1019-001      (12)
+    `INV-${nnn}`,                                // INV-001           (7)
+    nnn,                                         // 001
+  ];
+  return candidates.find((c) => c.length <= maxLen) ?? candidates[candidates.length - 1];
+}
+
+/**
+ * Takeaway number — Tbl_Serials (SeriCode 'TA').
+ *
+ *   next = Current Serial + 1   → saved as the new serial
+ *   returns the new takeaway number, e.g. "TA-0007"
+ *
+ * UPDLOCK/HOLDLOCK keeps two simultaneous TA orders from getting
+ * the same number (the whole order runs in one transaction).
+ */
+async function generateTakeawayNo(
+  tx: sql.Transaction,
+  maxLen: number = 20
+): Promise<string> {
+  const { date } = slDateParts();
+  const req = tx.request();
+  req.input("code", sql.Char(10), "TA");
+  const res = await req.query(`
+    SELECT SeriNo FROM dbo.Tbl_Serials WITH (UPDLOCK, HOLDLOCK)
+    WHERE SeriCode = @code;
+  `);
+  let seq = 1;
+  if (res.recordset.length) {
+    seq = n(res.recordset[0].SeriNo) + 1;
+    const upd = tx.request();
+    upd.input("code", sql.Char(10), "TA");
+    upd.input("seq", sql.Int, seq);
+    upd.input("date", sql.DateTime, date);
+    await upd.query(`
+      UPDATE dbo.Tbl_Serials SET SeriNo = @seq, SeriDate = @date
+      WHERE SeriCode = @code;
+    `);
+  } else {
+    const ins = tx.request();
+    ins.input("code", sql.Char(10), "TA");
+    ins.input("date", sql.DateTime, date);
+    await ins.query(`
+      INSERT INTO dbo.Tbl_Serials (SeriCode, SeriNo, SeriDate)
+      VALUES (@code, 1, @date);
+    `);
+  }
+  const candidates = [
+    `TA-${String(seq).padStart(4, "0")}`, // TA-0007
+    `TA-${String(seq).padStart(3, "0")}`, // TA-007
+    `T${String(seq).padStart(3, "0")}`,   // T007
+    String(seq),                          // 7
+  ];
+  return candidates.find((c) => c.length <= maxLen) ?? candidates[candidates.length - 1];
 }
 
 function validateInput(
@@ -303,9 +444,11 @@ function validateInput(
   pax: number;
   localPax: number;
   foreignPax: number;
+  takeaway: boolean;
 } {
   const tableNo = s(input.tableNo);
   if (!tableNo) throw new OrderError("Table number is required. Scan the table QR code.");
+  const takeaway = isTakeawayTable(tableNo);
   if (!Array.isArray(input.items) || input.items.length === 0)
     throw new OrderError("Your cart is empty.");
   if (input.items.length > 50) throw new OrderError("Too many items in one order.");
@@ -325,15 +468,29 @@ function validateInput(
   // localPax wins over the legacy single `pax` (backward compatible).
   const localPax = clampPax(input.localPax, pax);
   const foreignPax = clampPax(input.foreignPax, 0);
+
+  /* ── mandatory guest details ──────────────────────────────
+     Both flows: name + phone. Dine-in: pax ≥ 1 as well. */
+  const customerName = s(input.customerName).slice(0, 100);
+  const customerPhone = s(input.customerPhone).slice(0, 30);
+  if (customerName.length < 2)
+    throw new OrderError("Please enter the customer name.");
+  if (customerPhone.replace(/[^0-9]/g, "").length < 9)
+    throw new OrderError("Please enter a valid phone number.");
+  if (!takeaway && localPax + foreignPax < 1)
+    throw new OrderError("Please enter the number of guests.");
+
   return {
     tableNo,
     tableGroup: s(input.tableGroup),
     items,
-    customerName: s(input.customerName).slice(0, 100),
-    customerPhone: s(input.customerPhone).slice(0, 30),
+    customerName,
+    customerPhone,
     pax,
-    localPax,
-    foreignPax,
+    localPax: takeaway ? 0 : localPax,
+    foreignPax: takeaway ? 0 : foreignPax,
+    customerCode: s(input.customerCode).slice(0, 10),
+    takeaway,
     requestId: s(input.requestId),
   };
 }
@@ -350,10 +507,11 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     const { ymd } = slDateParts();
     return {
       tableNo: input.tableNo,
-      tableGroup: input.tableGroup,
-      invoiceNo: `INV-${ymd.replaceAll("-", "")}-001`,
+      tableGroup: input.takeaway ? "Takeaway" : input.tableGroup,
+      invoiceNo: input.takeaway ? "TA-0001" : `INV-${ymd.replaceAll("-", "")}-001`,
       itemCount: input.items.reduce((a, i) => a + i.quantity, 0),
       source: "mock",
+      orderType: input.takeaway ? "TA" : "DI",
     };
   }
 
@@ -362,28 +520,38 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
-    /* 1) Table context — table must exist and be enabled */
+    /* 1) Order context — dine-in table or the takeaway (TA) flow */
+    let dbTableGroup = "Takeaway";
+    let tableGrpId = "";
+    let invoiceNo = "";
+
     const tReq = tx.request();
     tReq.input("table", sql.VarChar(10), input.tableNo);
-    const tRes = await tReq.query(`
-      SELECT LTRIM(RTRIM(TableNo)) AS TableNo, LTRIM(RTRIM(TableGroup)) AS TableGroup
-      FROM dbo.Tbl_Tables WITH (UPDLOCK, HOLDLOCK)
-      WHERE LTRIM(RTRIM(TableNo)) = @table AND Enable = 1;
-    `);
-    if (!tRes.recordset.length)
-      throw new OrderError("Table not found. Please scan the QR code on your table again.", 404);
-    const dbTableGroup = s(tRes.recordset[0].TableGroup);
+    if (!input.takeaway) {
+      const tRes = await tReq.query(`
+        SELECT LTRIM(RTRIM(TableNo)) AS TableNo, LTRIM(RTRIM(TableGroup)) AS TableGroup
+        FROM dbo.Tbl_Tables WITH (UPDLOCK, HOLDLOCK)
+        WHERE LTRIM(RTRIM(TableNo)) = @table AND Enable = 1;
+      `);
+      if (!tRes.recordset.length)
+        throw new OrderError("Table not found. Please scan the QR code on your table again.", 404);
+      dbTableGroup = s(tRes.recordset[0].TableGroup);
 
-    /* Table group id (Tbl_TableGroup.GroupID, by GroupName) */
-    let tableGrpId = dbTableGroup;
-    const gReq = tx.request();
-    gReq.input("gname", sql.VarChar(50), dbTableGroup);
-    const gRes = await gReq.query(`
-      SELECT LTRIM(RTRIM(GroupID)) AS GroupID
-      FROM dbo.Tbl_TableGroup WITH (NOLOCK)
-      WHERE LTRIM(RTRIM(GroupName)) = @gname;
-    `);
-    if (gRes.recordset.length) tableGrpId = s(gRes.recordset[0].GroupID);
+      /* Table group id (Tbl_TableGroup.GroupID).
+         Tbl_Tables.TableGroup holds the group ID on this POS, but older
+         installs store the group name — try the ID first, then the name. */
+      tableGrpId = dbTableGroup;
+      const gReq = tx.request();
+      gReq.input("gval", sql.VarChar(50), dbTableGroup);
+      const gRes = await gReq.query(`
+        SELECT TOP 1 LTRIM(RTRIM(GroupID)) AS GroupID
+        FROM dbo.Tbl_TableGroup WITH (NOLOCK)
+        WHERE LTRIM(RTRIM(GroupID)) = @gval
+           OR LTRIM(RTRIM(GroupName)) = @gval
+        ORDER BY CASE WHEN LTRIM(RTRIM(GroupID)) = @gval THEN 0 ELSE 1 END;
+      `);
+      if (gRes.recordset.length) tableGrpId = s(gRes.recordset[0].GroupID);
+    }
 
     /* 2) Authoritative prices + availability from the DB */
     const priced: (ConfirmLineInput & { price: number })[] = [];
@@ -405,26 +573,57 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       priced.push({ ...line, price: n(pRes.recordset[0].SalesPrice) });
     }
 
-    /* 3) Existing unpaid invoice for this table, or a new one */
-    const invReq = tx.request();
-    invReq.input("table", sql.VarChar(10), input.tableNo);
-    const invRes = await invReq.query(`
-      SELECT TOP 1 LTRIM(RTRIM(InvoiceNo)) AS InvoiceNo
-      FROM dbo.Tbl_HoldUpsCloud WITH (UPDLOCK, HOLDLOCK)
-      WHERE LTRIM(RTRIM(TabelNo)) = @table AND ISNULL(IsPaid, 0) = 0
-      ORDER BY TxnDateTime DESC;
-    `);
-    const invoiceNo: string = invRes.recordset.length
-      ? s(invRes.recordset[0].InvoiceNo)
-      : await generateInvoiceNo(tx);
+    /* 2b) Real column sizes — every string below is clamped so a
+       long name / phone number can never raise SQL 8152. */
+    await loadColumnSizes(tx, ["Tbl_HoldUpsCloud", "Tbl_HoldUpsCloudTemp"]);
+    const fit = makeFitter();
+
+    const invoiceMax =
+      colSizeCache.get("TBL_HOLDUPSCLOUD")?.["INVOICENO"] ?? 50;
+    const cusCodeValue = fit(
+      "Tbl_HoldUpsCloud",
+      "CusCode",
+      input.customerCode || normalisePhone(input.customerPhone) || input.customerPhone
+    );
+    const cusNameValue = fit("Tbl_HoldUpsCloud", "CusName", input.customerName);
+    const orderTypeValue = fit(
+      "Tbl_HoldUpsCloud",
+      "OrderType",
+      input.takeaway ? "TA" : "DI"
+    );
+    const grpValue = fit("Tbl_HoldUpsCloud", "TabelGrpID", tableGrpId);
+    const tableValue = fit("Tbl_HoldUpsCloud", "TabelNo", input.tableNo);
+
+    /* 3) Order number
+       • dine-in → the table's open invoice, or a fresh INV number
+       • takeaway → always a NEW number from Tbl_Serials ('TA') */
+    if (input.takeaway) {
+      invoiceNo = await generateTakeawayNo(tx, invoiceMax);
+    } else {
+      const invReq = tx.request();
+      invReq.input("table", sql.VarChar(10), input.tableNo);
+      const invRes = await invReq.query(`
+        SELECT TOP 1 LTRIM(RTRIM(InvoiceNo)) AS InvoiceNo
+        FROM dbo.Tbl_HoldUpsCloud WITH (UPDLOCK, HOLDLOCK)
+        WHERE LTRIM(RTRIM(TabelNo)) = @table AND ISNULL(IsPaid, 0) = 0
+        ORDER BY TxnDateTime DESC;
+      `);
+      invoiceNo = invRes.recordset.length
+        ? s(invRes.recordset[0].InvoiceNo)
+        : await generateInvoiceNo(tx, invoiceMax);
+    }
+    const invoiceValue = fit("Tbl_HoldUpsCloud", "InvoiceNo", invoiceNo);
 
     /* 4) Additive writes: bill line = final qty, activity = delta */
     for (const line of priced) {
+      const itemValue = fit("Tbl_HoldUpsCloud", "ItemCode", line.itemId);
+      const remarkValue = fit("Tbl_HoldUpsCloud", "ItemRemarks", line.remark ?? "");
+
       const find = tx.request();
-      find.input("table", sql.VarChar(10), input.tableNo);
-      find.input("inv", sql.VarChar(50), invoiceNo);
-      find.input("item", sql.VarChar(50), line.itemId);
-      find.input("remark", sql.VarChar(200), line.remark ?? "");
+      find.input("table", sql.VarChar(10), tableValue);
+      find.input("inv", sql.VarChar(50), invoiceValue);
+      find.input("item", sql.VarChar(50), itemValue);
+      find.input("remark", sql.VarChar(200), remarkValue);
       const found = await find.query(`
         SELECT QTY FROM dbo.Tbl_HoldUpsCloud WITH (UPDLOCK, HOLDLOCK)
         WHERE LTRIM(RTRIM(TabelNo)) = @table AND InvoiceNo = @inv
@@ -436,10 +635,10 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       if (found.recordset.length) {
         const upd = tx.request();
         upd.input("qty", sql.Float, finalQty);
-        upd.input("table", sql.VarChar(10), input.tableNo);
-        upd.input("inv", sql.VarChar(50), invoiceNo);
-        upd.input("item", sql.VarChar(50), line.itemId);
-        upd.input("remark", sql.VarChar(200), line.remark ?? "");
+        upd.input("table", sql.VarChar(10), tableValue);
+        upd.input("inv", sql.VarChar(50), invoiceValue);
+        upd.input("item", sql.VarChar(50), itemValue);
+        upd.input("remark", sql.VarChar(200), remarkValue);
         await upd.query(`
           UPDATE dbo.Tbl_HoldUpsCloud SET QTY = @qty
           WHERE LTRIM(RTRIM(TabelNo)) = @table AND InvoiceNo = @inv
@@ -447,73 +646,104 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         `);
       } else {
         const ins = tx.request();
-        ins.input("table", sql.VarChar(10), input.tableNo);
-        ins.input("inv", sql.VarChar(50), invoiceNo);
-        ins.input("item", sql.VarChar(50), line.itemId);
+        ins.input("table", sql.VarChar(10), tableValue);
+        ins.input("inv", sql.VarChar(50), invoiceValue);
+        ins.input("item", sql.VarChar(50), itemValue);
         ins.input("qty", sql.Float, finalQty);
         ins.input("price", sql.Float, line.price);
-        ins.input("remark", sql.VarChar(200), line.remark ?? "");
-        ins.input("grp", sql.Char(10), tableGrpId);
-        ins.input("cusCode", sql.VarChar(30), input.customerPhone);
-        ins.input("cusName", sql.VarChar(100), input.customerName);
+        ins.input("remark", sql.VarChar(200), remarkValue);
+        ins.input("grp", sql.Char(10), grpValue);
+        // CusCode = the real Tbl_CustomerMaster code when the phone
+        // matched a customer, otherwise the 10-digit local phone.
+        ins.input("cusCode", sql.VarChar(30), cusCodeValue);
+        ins.input("cusName", sql.VarChar(100), cusNameValue);
         ins.input("lpx", sql.Int, input.localPax);
         ins.input("fpx", sql.Int, input.foreignPax);
+        ins.input("orderType", sql.Char(2), orderTypeValue);
+        ins.input("userId", sql.VarChar(20), fit("Tbl_HoldUpsCloud", "UserID", "WEB"));
         await ins.query(`
           INSERT INTO dbo.Tbl_HoldUpsCloud (
             TabelNo, ItemCode, QTY, SalesPrice, ItemRemarks, UserID,
             TabelGrpID, LPax, FPax, OrderType, InvoiceNo, IsPaid,
             CusCode, CusName, TxnDateTime
           ) VALUES (
-            @table, @item, @qty, @price, @remark, 'WEB',
-            @grp, @lpx, @fpx, 'DI', @inv, 0,
+            @table, @item, @qty, @price, @remark, @userId,
+            @grp, @lpx, @fpx, @orderType, @inv, 0,
             @cusCode, @cusName, DATEADD(MINUTE, 330, GETUTCDATE())
           );
         `);
       }
 
+      /* the activity table has its OWN column sizes */
       const act = tx.request();
-      act.input("table", sql.VarChar(10), input.tableNo);
-      act.input("inv", sql.VarChar(50), invoiceNo);
-      act.input("item", sql.VarChar(50), line.itemId);
+      act.input("table", sql.VarChar(10), fit("Tbl_HoldUpsCloudTemp", "TabelNo", tableValue));
+      act.input("inv", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "InvoiceNo", invoiceValue));
+      act.input("item", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "ItemCode", itemValue));
       act.input("qty", sql.Float, line.quantity);
       act.input("price", sql.Float, line.price);
-      act.input("remark", sql.VarChar(200), line.remark ?? "");
-      act.input("grp", sql.Char(10), tableGrpId);
-      act.input("cusCode", sql.VarChar(30), input.customerPhone);
-      act.input("cusName", sql.VarChar(100), input.customerName);
-      act.input("lpx", sql.Int, input.pax);
+      act.input("remark", sql.VarChar(200), fit("Tbl_HoldUpsCloudTemp", "ItemRemarks", remarkValue));
+      act.input("grp", sql.Char(10), fit("Tbl_HoldUpsCloudTemp", "TabelGrpID", grpValue));
+      act.input("cusCode", sql.VarChar(30), fit("Tbl_HoldUpsCloudTemp", "CusCode", cusCodeValue));
+      act.input("cusName", sql.VarChar(100), fit("Tbl_HoldUpsCloudTemp", "CusName", cusNameValue));
+      act.input("lpx", sql.Int, input.takeaway ? 0 : input.pax);
+      act.input("orderType", sql.Char(2), orderTypeValue);
+      /* the fixed literals are clamped too — some installs have
+         UserName char(10) / MgrID char(5) on the activity table */
+      act.input("userId", sql.VarChar(20), fit("Tbl_HoldUpsCloudTemp", "UserID", "WEB"));
+      act.input("voidRemark", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "VoidRemark", ""));
+      act.input("mgrId", sql.VarChar(20), fit("Tbl_HoldUpsCloudTemp", "MgrID", ""));
+      act.input("aor", sql.VarChar(5), fit("Tbl_HoldUpsCloudTemp", "AoR", "A"));
+      act.input("userName", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "UserName", "Web Menu"));
       await act.query(`
         INSERT INTO dbo.Tbl_HoldUpsCloudTemp (
           TabelNo, UserID, ItemCode, QTY, ItemRemarks, VoidRemark,
           TabelGrpID, TxnDateTime, LPax, FPax, SalesPrice, MgrID,
           OrderType, AoR, UserName, InvoiceNo, CusCode, CusName
         ) VALUES (
-          @table, 'WEB', @item, @qty, @remark, '',
-          @grp, DATEADD(MINUTE, 330, GETUTCDATE()), @lpx, 0, @price, '',
-          'DI', 'A', 'Web Menu', @inv, @cusCode, @cusName
+          @table, @userId, @item, @qty, @remark, @voidRemark,
+          @grp, DATEADD(MINUTE, 330, GETUTCDATE()), @lpx, 0, @price, @mgrId,
+          @orderType, @aor, @userName, @inv, @cusCode, @cusName
         );
       `);
     }
 
-    /* 5) Mark the dining table occupied */
-    const occ = tx.request();
-    occ.input("table", sql.VarChar(10), input.tableNo);
-    await occ.query(`
-      UPDATE dbo.Tbl_Tables SET Vaccant = 'N'
-      WHERE LTRIM(RTRIM(TableNo)) = @table;
-    `);
+    /* 5) Mark the dining table occupied (takeaway has no table) */
+    if (!input.takeaway) {
+      const occ = tx.request();
+      occ.input("table", sql.VarChar(10), tableValue);
+      await occ.query(`
+        UPDATE dbo.Tbl_Tables SET Vaccant = 'N'
+        WHERE LTRIM(RTRIM(TableNo)) = @table;
+      `);
+    }
 
     await tx.commit();
     return {
       tableNo: input.tableNo,
       tableGroup: dbTableGroup,
-      invoiceNo,
+      invoiceNo: invoiceValue,
       itemCount: priced.reduce((a, i) => a + i.quantity, 0),
       source: "database",
+      orderType: input.takeaway ? "TA" : "DI",
     };
   } catch (err) {
     try { await tx.rollback(); } catch { /* already rolled back */ }
     if (err instanceof OrderError) throw err;
+
+    /* SQL 8152 = a value did not fit its column. Print what was
+       being written so the exact column can be found in one go. */
+    const errNumber = (err as { number?: number })?.number;
+    if (errNumber === 8152) {
+      const dump: string[] = [];
+      for (const [table, cols] of colSizeCache) {
+        dump.push(`  ${table}: ${Object.entries(cols).map(([c, l]) => `${c}=${l}`).join(", ")}`);
+      }
+      console.error(
+        "Order confirm error (SQL 8152 — value too long for column):",
+        JSON.stringify(rawInput, null, 2)
+      );
+      console.error("Column sizes read from INFORMATION_SCHEMA:\n" + dump.join("\n"));
+    }
     console.error("Order confirm error:", err);
     throw new OrderError("Order could not be saved. Please try again.", 500);
   }
@@ -537,7 +767,9 @@ export interface ExistingBill {
 
 export async function getExistingBill(tableNo: string): Promise<ExistingBill> {
   const table = s(tableNo);
-  if (!table || !isDbConfigured()) return { invoiceNo: "", lines: [] };
+  /* Takeaway has no table bill — every TA order stands alone. */
+  if (!table || isTakeawayTable(table) || !isDbConfigured())
+    return { invoiceNo: "", lines: [] };
   const pool = await getPool();
   const req = pool.request();
   req.input("table", sql.VarChar(10), table);

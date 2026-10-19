@@ -4,7 +4,10 @@
 //
 // Body:
 //   { tableNo, tableGroup?, t?, pax?, customerName?, customerPhone?,
-//     items: [{ itemId, quantity, remark? }] }
+//     customerCode?, orderType?, items: [{ itemId, quantity, remark? }] }
+//
+// tableNo = "TA" → takeaway: OrderType TA, takeaway number from
+// Tbl_Serials('TA'), no table/pax needed (phone + name required).
 //
 // Guards (see web-qr-ordering-spec.md §6):
 //   1. the table token must match the table number
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
         { status: 429, headers: { "Retry-After": String(ipLimit.retryAfterSeconds) } }
       );
     }
-    const tableLimit = rateLimit(`order-table:${tableNo}`, TABLE_LIMIT, WINDOW_MS);
+    const tableLimit = rateLimit(`order-table:${tableNo}:${ip}`, TABLE_LIMIT, WINDOW_MS);
     if (!tableLimit.allowed) {
       return NextResponse.json(
         {
@@ -82,6 +85,7 @@ export async function POST(request: NextRequest) {
       items: Array.isArray(body.items) ? body.items : [],
       customerName: body.customerName ? String(body.customerName) : undefined,
       customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+      customerCode: body.customerCode ? String(body.customerCode) : undefined,
       pax: body.pax ? Number(body.pax) : undefined,
       localPax: body.localPax != null ? Number(body.localPax) : undefined,
       foreignPax: body.foreignPax != null ? Number(body.foreignPax) : undefined,

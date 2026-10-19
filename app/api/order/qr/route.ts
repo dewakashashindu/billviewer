@@ -3,68 +3,32 @@
 // POST /api/order/qr  (staff only — session required)
 //
 // Body:
-//   { baseUrl?: string,
-//     tables: [{ tableNo, tableGroup }] }
+//   { tables: [{ tableNo, tableGroup, takeaway? }] }
 //
-// Returns one signed customer URL per table:
-//   { tableNo, url }   url = <baseUrl>?table=..&group=..&t=<signed>
+// Returns one customer URL per table:
+//   { tableNo, id, url, exists }
 //
-// The signed token is what stops a guest from ordering into
-// another table's bill (see lib/orderToken.ts).
+//   url = <QR_MENU_BASE_URL>?id=<encrypted>
+//
+// The base URL is hardcoded in config/qr.config.ts — it is never
+// taken from (or shown to) the browser. The id is AES-encrypted
+// server-side from the table number + table group, so nothing
+// readable ends up in the URL and the HMAC secret never leaves
+// the server.
 //
 // Each table number is also checked against Tbl_Tables (when the
-// DB is configured) and returned as `exists` — a QR printed for a
-// table the POS doesn't know fails with "Table not found" when the
-// guest tries to order, so staff should see it here instead.
+// DB is configured) and returned as `exists` — a QR printed for
+// a table the POS doesn't know fails with "Table not found" when
+// the guest tries to order, so staff should see it here instead.
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import { requireSession } from "@/lib/actionAuth";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { signTableToken } from "@/lib/orderToken";
-import { encryptTableId } from "@/lib/tableLink";
+import { encryptTableId, encryptTakeawayId, TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
+import { QR_MENU_BASE_URL } from "@/config/qr.config";
 
 export const dynamic = "force-dynamic";
-
-function buildUrl(
-  base: string,
-  tableNo: string,
-  tableGroup: string,
-  token: string,
-  encryptedId: string | null
-): string {
-  let url = base.trim();
-
-  /* New format — the link carries ONLY the encrypted table id:
-     /menu?id=<encrypted>. When the template contains {id} and the id
-     was encrypted, nothing else is appended (no table, group or
-     token leaks into the URL). */
-  if (encryptedId) {
-    url = url.replace(/\{id\}/gi, encodeURIComponent(encryptedId));
-    if (new RegExp("[?&]id=", "i").test(url)) return url;
-  }
-
-  // Legacy format — replace the placeholders the QR screen offers.
-  url = url
-    .replace(/\{table\}/gi, encodeURIComponent(tableNo))
-    .replace(/\{group\}/gi, encodeURIComponent(tableGroup))
-    .replace(/\{token\}/gi, encodeURIComponent(token));
-
-  // Anything still missing is appended.
-  const has = (key: string) =>
-    new RegExp(`[?&]${key}=`, "i").test(url);
-
-  if (!has("table")) {
-    url += `${url.includes("?") ? "&" : "?"}table=${encodeURIComponent(tableNo)}`;
-  }
-  if (!has("group") && tableGroup) {
-    url += `${url.includes("?") ? "&" : "?"}group=${encodeURIComponent(tableGroup)}`;
-  }
-  if (!has("t") && token) {
-    url += `${url.includes("?") ? "&" : "?"}t=${encodeURIComponent(token)}`;
-  }
-  return url;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -78,34 +42,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl =
-      String(body.baseUrl ?? "").trim() ||
-      `${process.env.PUBLIC_BASE_URL ?? ""}/order`;
-
     const urls: {
       tableNo: string;
       tableGroup: string;
-      token: string;
       id: string | null;
       url: string;
+      takeaway: boolean;
     }[] = body.tables
       .filter((t: { tableNo?: string }) => t && String(t.tableNo ?? "").trim())
       .slice(0, 500)
-      .map((t: { tableNo: string; tableGroup?: string }) => {
-        const tableNo = String(t.tableNo).trim();
-        const tableGroup = String(t.tableGroup ?? "").trim();
-        const token = signTableToken(tableNo);
-        // Encrypted table id for the new link format (?id=…). Falls
-        // back to the legacy ?table=…&t=… format when ENCRYPTION_KEY
-        // is not configured (dev without a key).
-        const id = encryptTableId(tableNo);
-        return {
-          tableNo,
-          tableGroup,
-          token,
-          id,
-          url: buildUrl(baseUrl, tableNo, tableGroup, token, id),
-        };
+      .map((t: { tableNo: string; tableGroup?: string; takeaway?: boolean }) => {
+        const takeaway =
+          t.takeaway === true || String(t.tableNo ?? "").trim().toUpperCase() === TAKEAWAY_TABLE_NO;
+        const tableNo = takeaway ? TAKEAWAY_TABLE_NO : String(t.tableNo).trim();
+        const tableGroup = takeaway ? "" : String(t.tableGroup ?? "").trim();
+
+        /* Takeaway QR — one encrypted id ("TAK:TA") shared by every
+           printed TA card; the order type is decided server-side from
+           the table number, never from the browser. */
+        const id = takeaway ? encryptTakeawayId() : encryptTableId(tableNo, tableGroup);
+        const url = id
+          ? `${QR_MENU_BASE_URL}?id=${encodeURIComponent(id)}`
+          : `${QR_MENU_BASE_URL}?table=${encodeURIComponent(tableNo)}`;
+
+        return { tableNo, tableGroup, id, url, takeaway };
       });
 
     /* ── validate table numbers against the POS (Tbl_Tables) ──
@@ -141,7 +101,8 @@ export async function POST(request: NextRequest) {
       data: {
         urls: urls.map((u) => ({
           ...u,
-          exists: existsByKey[u.tableNo.trim().toUpperCase()] ?? true,
+          // Takeaway bars are not POS tables — never flag them.
+          exists: u.takeaway ? true : existsByKey[u.tableNo.trim().toUpperCase()] ?? true,
         })),
       },
     });

@@ -62,27 +62,34 @@ export async function getOrderTableInfo(
   const pool = await getPool();
   const req = pool.request();
   req.input("table", sql.VarChar(10), table);
+  /* Tbl_Tables.TableGroup holds the GROUP ID on this POS ("P/M 1"),
+     older installs store the group NAME — accept either. */
   const res = await req.query(`
     SELECT
-      LTRIM(RTRIM(t.TableNo))    AS TableNo,
-      LTRIM(RTRIM(t.TableGroup)) AS TableGroup,
-      LTRIM(RTRIM(ISNULL(t.Vaccant, 'Y'))) AS Vaccant,
-      LTRIM(RTRIM(ISNULL(g.GroupID, '')))   AS GroupID
+      LTRIM(RTRIM(t.TableNo))                      AS TableNo,
+      LTRIM(RTRIM(ISNULL(t.TableGroup, '')))        AS TableGroup,
+      LTRIM(RTRIM(ISNULL(t.Vaccant, 'Y')))          AS Vaccant,
+      LTRIM(RTRIM(ISNULL(g.GroupID, '')))           AS GroupID,
+      LTRIM(RTRIM(ISNULL(g.GroupName, '')))         AS GroupName
     FROM dbo.Tbl_Tables t WITH (NOLOCK)
     LEFT JOIN dbo.Tbl_TableGroup g WITH (NOLOCK)
-      ON LTRIM(RTRIM(g.GroupName)) = LTRIM(RTRIM(t.TableGroup))
+      ON LTRIM(RTRIM(g.GroupID))   = LTRIM(RTRIM(t.TableGroup))
+      OR LTRIM(RTRIM(g.GroupName)) = LTRIM(RTRIM(t.TableGroup))
     WHERE LTRIM(RTRIM(t.TableNo)) = @table AND t.Enable = 1;
   `);
 
   if (!res.recordset.length) return null;
   const r = res.recordset[0];
   const vacantRaw = s(r.Vaccant).toUpperCase();
+  const rawGroup = s(r.TableGroup);
+  const groupName = s(r.GroupName);
   return {
     tableNo: s(r.TableNo),
-    tableGroup: s(r.TableGroup) || "Main Dining",
-    groupId: s(r.GroupID),
+    // Show the readable group name when the POS has one.
+    tableGroup: groupName || rawGroup || "Main Dining",
+    groupId: s(r.GroupID) || rawGroup,
     vacant: vacantRaw === "Y" || vacantRaw === "1" || vacantRaw === "",
-    area: s(r.TableGroup) || "Main Dining",
+    area: groupName || rawGroup || "Main Dining",
     source: "database",
   };
 }

@@ -2,160 +2,290 @@
 
 // ============================================================
 // LOCATION: components/menu/GuestForm.tsx
-// Step 1.5 — the guest details form shown between the welcome
-// screen and the menu:
-//   • Local Pax   (Tbl_HoldUpsCloud.LPax)
-//   • Foreign Pax (Tbl_HoldUpsCloud.FPax)
-//   • Customer Name (Tbl_HoldUpsCloud.CusName)
-// Submitted once, saved per table (localStorage via the cart
-// hook) and sent with every order confirm.
+// Step 1.5 — guest details between the welcome screen and the menu.
+//
+//   DINE-IN (table QR)
+//     • Local / Foreign pax  — MANDATORY (at least one guest)
+//     • Phone number         — MANDATORY → checked against
+//                              Tbl_CustomerMaster:
+//                                found → name auto-filled + CusCode kept
+//                                not found → name typed by the guest
+//     • Customer name        — MANDATORY
+//
+//   TAKEAWAY (TA QR)
+//     • No pax (hidden / skipped)
+//     • Phone + customer name — MANDATORY
+//
+// Nothing is sent to the kitchen before this form is complete.
 // ============================================================
 
-import { useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { T } from "./theme";
 import type { GuestDetails } from "./useCustomerCart";
+
+type LookupState = "idle" | "checking" | "found" | "new" | "error";
+
+const digits = (v: string) => v.replace(/[^0-9]/g, "");
 
 export default function GuestForm({
   table,
   tableGroup,
+  takeaway = false,
   initial,
   onSubmit,
 }: {
   table: string;
   tableGroup?: string;
+  takeaway?: boolean;
   initial: GuestDetails;
   onSubmit: (guest: GuestDetails) => void;
 }) {
-  const [localPax, setLocalPax] = useState(initial.localPax > 0 ? initial.localPax : 1);
+  /* starts at 0 — pax is mandatory, so the guest must pick it */
+  const [localPax, setLocalPax] = useState(initial.localPax);
   const [foreignPax, setForeignPax] = useState(initial.foreignPax);
   const [cusName, setCusName] = useState(initial.cusName);
+  const [phone, setPhone] = useState(initial.cusPhone);
+  const [cusCode, setCusCode] = useState(initial.cusCode);
+  const [lookup, setLookup] = useState<LookupState>(
+    initial.cusCode && initial.cusName ? "found" : "idle"
+  );
+  const [touched, setTouched] = useState(false);
+  const lookupTimer = useRef<number | null>(null);
+  const lastLookup = useRef("");
 
   const total = localPax + foreignPax;
-  const canContinue = total >= 1;
+  const phoneDigits = digits(phone);
+  const phoneValid = phoneDigits.length >= 9 && phoneDigits.length <= 15;
+  const nameValid = cusName.trim().length >= 2;
+  const paxValid = takeaway || total >= 1;
+  const canContinue = phoneValid && nameValid && paxValid;
 
   const clamp = (v: number) => Math.max(0, Math.min(50, v));
+
+  /* ── phone → Tbl_CustomerMaster ────────────────────────────
+     Debounced lookup; a found customer's name + code are
+     adopted, a missing one asks for the name manually. */
+  const runLookup = useCallback(async (value: string) => {
+    const d = digits(value);
+    if (d.length < 9) {
+      setLookup("idle");
+      setCusCode("");
+      return;
+    }
+    if (lastLookup.current === d) return;
+    lastLookup.current = d;
+    setLookup("checking");
+    try {
+      const res = await fetch(`/api/customer/lookup?phone=${encodeURIComponent(d)}`, {
+        cache: "no-store",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        setLookup("error");
+        return;
+      }
+      if (json.data?.found) {
+        setCusCode(String(json.data.cusCode ?? ""));
+        setCusName(String(json.data.cusName ?? ""));
+        setLookup("found");
+      } else {
+        setCusCode("");
+        setLookup("new");
+      }
+    } catch {
+      setLookup("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
+    if (phoneDigits.length < 9) {
+      lastLookup.current = "";
+      /* defer the state reset out of the effect body */
+      void Promise.resolve().then(() => setLookup("idle"));
+      return;
+    }
+    lookupTimer.current = window.setTimeout(() => void runLookup(phone), 450);
+    return () => {
+      if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phoneDigits]);
+
+  const submit = () => {
+    setTouched(true);
+    if (!canContinue) return;
+    onSubmit({
+      localPax: takeaway ? 0 : localPax,
+      foreignPax: takeaway ? 0 : foreignPax,
+      cusName: cusName.trim(),
+      cusPhone: phoneDigits,
+      cusCode: cusCode.trim(),
+    });
+  };
+
+  const phoneError = touched && !phoneValid ? "A valid phone number is required." : null;
+  const nameError = touched && !nameValid ? "Your name is required." : null;
+  const paxError = touched && !paxValid ? "Please enter how many guests are dining." : null;
 
   return (
     <div style={s.root} className="mnu-min-dvh">
       <div style={s.col} className="mnu-anim-up">
-        {/* table context chip */}
+        {/* context chip */}
         <div style={s.tableChip}>
           <span style={s.tableDot} />
-          Table&nbsp;<b style={{ color: T.gold }}>{table}</b>
-          {tableGroup ? <>&nbsp;·&nbsp;{tableGroup}</> : null}
+          {takeaway ? (
+            <>
+              <b style={{ color: T.gold }}>Takeaway</b>&nbsp;· no table needed
+            </>
+          ) : (
+            <>
+              Table&nbsp;<b style={{ color: T.gold }}>{table}</b>
+              {tableGroup ? <>&nbsp;·&nbsp;{tableGroup}</> : null}
+            </>
+          )}
         </div>
 
         <div style={s.head}>
-          <div style={s.eyebrow}>One quick step</div>
-          <h2 style={s.title}>Tell us about your table</h2>
-          <p style={s.sub}>This helps the kitchen prepare for you.</p>
+          <div style={s.eyebrow}>{takeaway ? "Takeaway order" : "One quick step"}</div>
+          <h2 style={s.title}>
+            {takeaway ? "Who is this order for?" : "Tell us about your table"}
+          </h2>
+          <p style={s.sub}>
+            {takeaway
+              ? "We only need your name and phone number."
+              : "This helps the kitchen prepare for you."}
+          </p>
         </div>
 
         <div style={s.card}>
-          {/* Local Pax */}
+          {/* Phone (mandatory) */}
           <div style={s.field}>
             <div style={s.fieldHead}>
-              <span style={s.fieldLabel}>Local guests</span>
-              <span style={s.fieldCode}>LPax</span>
+              <span style={s.fieldLabel}>
+                Phone number <span style={{ color: T.gold }}>*</span>
+              </span>
+              <span style={s.fieldCode}>CusCode</span>
             </div>
-            <div style={s.stepperRow}>
-              <button
-                type="button"
-                style={s.stepBtn}
-                className="mnu-tap"
-                aria-label="Fewer local guests"
-                disabled={localPax <= 0}
-                onClick={() => setLocalPax(clamp(localPax - 1))}
-              >
-                −
-              </button>
-              <span style={s.stepVal}>{localPax}</span>
-              <button
-                type="button"
-                style={s.stepBtn}
-                className="mnu-tap"
-                aria-label="More local guests"
-                disabled={localPax >= 50}
-                onClick={() => setLocalPax(clamp(localPax + 1))}
-              >
-                +
-              </button>
-            </div>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+              onBlur={() => void runLookup(phone)}
+              placeholder="07X XXX XXXX"
+              inputMode="tel"
+              autoComplete="tel"
+              style={{ ...s.input, borderColor: phoneError ? "#e57373" : T.line }}
+              maxLength={20}
+            />
+            {phoneError && <div style={s.err}>{phoneError}</div>}
+            {lookup === "checking" && <div style={s.hint}>Checking…</div>}
+            {lookup === "found" && (
+              <div style={{ ...s.hint, color: T.green }}>
+                ✓ Welcome back{cusName ? `, ${cusName}` : ""} — name filled from your last visit.
+              </div>
+            )}
+            {lookup === "new" && (
+              <div style={s.hint}>New number — please enter your name below.</div>
+            )}
+            {lookup === "error" && (
+              <div style={{ ...s.hint, color: "#ffb4b4" }}>
+                Could not check the number — you can continue and enter your name.
+              </div>
+            )}
           </div>
 
           <div style={s.divider} />
 
-          {/* Foreign Pax */}
+          {/* Customer Name (mandatory) */}
           <div style={s.field}>
             <div style={s.fieldHead}>
-              <span style={s.fieldLabel}>Foreign guests</span>
-              <span style={s.fieldCode}>FPax</span>
-            </div>
-            <div style={s.stepperRow}>
-              <button
-                type="button"
-                style={s.stepBtn}
-                className="mnu-tap"
-                aria-label="Fewer foreign guests"
-                disabled={foreignPax <= 0}
-                onClick={() => setForeignPax(clamp(foreignPax - 1))}
-              >
-                −
-              </button>
-              <span style={s.stepVal}>{foreignPax}</span>
-              <button
-                type="button"
-                style={s.stepBtn}
-                className="mnu-tap"
-                aria-label="More foreign guests"
-                disabled={foreignPax >= 50}
-                onClick={() => setForeignPax(clamp(foreignPax + 1))}
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <div style={s.divider} />
-
-          {/* Customer Name */}
-          <div style={s.field}>
-            <div style={s.fieldHead}>
-              <span style={s.fieldLabel}>Customer name</span>
-              <span style={s.fieldCode}>CusName · optional</span>
+              <span style={s.fieldLabel}>
+                Customer name <span style={{ color: T.gold }}>*</span>
+              </span>
+              <span style={s.fieldCode}>CusName</span>
             </div>
             <input
               value={cusName}
               onChange={(e) => setCusName(e.target.value.slice(0, 100))}
               placeholder="e.g. Perera family"
-              style={s.input}
+              autoComplete="name"
+              style={{ ...s.input, borderColor: nameError ? "#e57373" : T.line }}
               maxLength={100}
             />
+            {nameError && <div style={s.err}>{nameError}</div>}
           </div>
+
+          {/* Pax (dine-in only) */}
+          {!takeaway && (
+            <>
+              <div style={s.divider} />
+              <div style={s.field}>
+                <div style={s.fieldHead}>
+                  <span style={s.fieldLabel}>
+                    Guests <span style={{ color: T.gold }}>*</span>
+                  </span>
+                  <span style={s.fieldCode}>LPax · FPax</span>
+                </div>
+
+                {[
+                  { label: "Local guests", value: localPax, set: setLocalPax },
+                  { label: "Foreign guests", value: foreignPax, set: setForeignPax },
+                ].map((row) => (
+                  <div key={row.label} style={s.paxRow}>
+                    <span style={s.paxLabel}>{row.label}</span>
+                    <div style={s.stepperRow}>
+                      <button
+                        type="button"
+                        style={s.stepBtn}
+                        className="mnu-tap"
+                        aria-label={`Fewer ${row.label}`}
+                        disabled={row.value <= 0}
+                        onClick={() => row.set(clamp(row.value - 1))}
+                      >
+                        −
+                      </button>
+                      <span style={s.stepVal}>{row.value}</span>
+                      <button
+                        type="button"
+                        style={s.stepBtn}
+                        className="mnu-tap"
+                        aria-label={`More ${row.label}`}
+                        disabled={row.value >= 50}
+                        onClick={() => row.set(clamp(row.value + 1))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {paxError && <div style={s.err}>{paxError}</div>}
+              </div>
+            </>
+          )}
         </div>
 
-        <div style={s.totalRow}>
-          <span>Total guests</span>
-          <b>{total}</b>
-        </div>
+        {!takeaway && (
+          <div style={s.totalRow}>
+            <span>Total guests</span>
+            <b>{total}</b>
+          </div>
+        )}
 
         <button
           type="button"
           style={{ ...s.continue, ...(canContinue ? null : s.continueOff) }}
           className="mnu-tap"
-          disabled={!canContinue}
-          onClick={() =>
-            onSubmit({
-              localPax,
-              foreignPax,
-              cusName: cusName.trim(),
-            })
-          }
+          aria-disabled={!canContinue}
+          onClick={submit}
         >
           Continue to Menu
         </button>
 
-        <p style={s.note}>Staff will confirm the details at your table.</p>
+        <p style={s.note}>
+          {takeaway
+            ? "Your takeaway number is printed on the confirmation after you order."
+            : "All three fields are required before ordering."}
+        </p>
       </div>
     </div>
   );
@@ -223,6 +353,7 @@ const s: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 11,
+    gap: 10,
   },
   fieldLabel: { color: T.w92, fontSize: 14, fontWeight: 700 },
   fieldCode: {
@@ -234,7 +365,16 @@ const s: Record<string, CSSProperties> = {
     border: `1px solid ${T.goldLine}`,
     borderRadius: 7,
     padding: "3px 8px",
+    whiteSpace: "nowrap",
   },
+  paxRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "6px 0",
+  },
+  paxLabel: { color: T.w55, fontSize: 12.5 },
   stepperRow: { display: "flex", alignItems: "center", gap: 14 },
   stepBtn: {
     width: 42,
@@ -266,6 +406,18 @@ const s: Record<string, CSSProperties> = {
     fontFamily: "inherit",
     outline: "none",
     boxSizing: "border-box",
+  },
+  hint: {
+    marginTop: 8,
+    fontSize: 11.5,
+    lineHeight: 1.5,
+    color: T.w55,
+  },
+  err: {
+    marginTop: 8,
+    fontSize: 11.5,
+    fontWeight: 600,
+    color: "#ffb4b4",
   },
   divider: { height: 1, background: T.line },
   totalRow: {
