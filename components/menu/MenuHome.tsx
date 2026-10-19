@@ -7,47 +7,12 @@
 // Works on mobile and desktop; the parent decides the grid width.
 // ============================================================
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { categoryLabel, itemEmoji, T } from "./theme";
 import { groupCircleImage } from "./groupImages";
+
+const HOUSEPHOTO = "/menu-food-bg.jpg";
 import type { GroupCard, MenuTab } from "./types";
-
-export interface Promo {
-  id: string;
-  title: string;
-  accent: string;
-  subtitle: string;
-  note: string;
-  emoji: string;
-  link?: string;
-}
-
-export const PROMOS: Promo[] = [
-  {
-    id: "1",
-    title: "Enjoy",
-    accent: "20% OFF",
-    subtitle: "on your favourite dishes every Wednesday!",
-    note: "(T&C Apply)",
-    emoji: "🍛",
-  },
-  {
-    id: "2",
-    title: "Get",
-    accent: "15% OFF",
-    subtitle: "on all rice & noodle bowls today!",
-    note: "(T&C Apply)",
-    emoji: "🍜",
-  },
-  {
-    id: "3",
-    title: "THE BITE,",
-    accent: "DOUBLE",
-    subtitle: "Buy any Signature Large platter, get one FREE!",
-    note: "",
-    emoji: "🦐",
-  },
-];
 
 /** Photo with a graceful emoji fallback if the image 404s. */
 function GroupPhoto({ src, name, style }: { src: string; name: string; style: CSSProperties }) {
@@ -71,48 +36,57 @@ function GroupPhoto({ src, name, style }: { src: string; name: string; style: CS
   );
 }
 
-function PromoCarousel({ compact = false }: { compact?: boolean }) {
-  const [i, setI] = useState(0);
+/** Home hero — brand line + a real photo from the menu + live
+    counts. Replaces the old fake "20% OFF" carousel: no invented
+    offers ever reach a paying guest, and nothing auto-rotates. */
+function MenuHero({
+  groups,
+  totalItems,
+  categories,
+  compact = false,
+}: {
+  groups: GroupCard[];
+  totalItems: number;
+  categories: number;
+  compact?: boolean;
+}) {
+  const [ready, setReady] = useState(false);
+  const lead = groups.find((g) => Boolean(g.imageUrl)) ?? groups[0];
+  const photo = lead ? groupCircleImage(lead.imageUrl, lead.name) : HOUSEPHOTO;
 
-  useEffect(() => {
-    const t = setInterval(() => setI((v) => (v + 1) % PROMOS.length), 4000);
-    return () => clearInterval(t);
-  }, []);
-
-  const promo = PROMOS[i];
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div
-        key={promo.id}
-        className="mnu-anim-fade"
-        style={{ ...s.promo, height: compact ? 132 : 168 }}
-      >
-        {/* decorative glow blobs */}
-        <span style={s.promoGlowA} aria-hidden />
-        <span style={s.promoGlowB} aria-hidden />
-        <div style={s.promoText}>
-          <span style={s.promoKicker}>LIMITED TIME</span>
-          <div style={s.promoTitleRow}>
-            <span style={s.promoTitle}>{promo.title}</span>
-            <span style={s.promoAccent}>{promo.accent}</span>
-          </div>
-          <div style={s.promoSub}>{promo.subtitle}</div>
-          {promo.note ? <div style={s.promoNote}>{promo.note}</div> : null}
+    <div className="mnu-anim-fade" style={{ ...s.hero, height: compact ? 178 : 220 }}>
+      {/* the house platter paints instantly; the real photo fades over it */}
+      <span style={{ ...s.heroImg, backgroundImage: `url(${HOUSEPHOTO})`, backgroundSize: "cover", backgroundPosition: "center" }} aria-hidden />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo}
+        alt=""
+        onLoad={() => setReady(true)}
+        style={{ ...s.heroImg, opacity: ready ? 1 : 0, transition: "opacity .45s ease" }}
+      />
+      <span style={s.heroScrim} aria-hidden />
+
+      <div style={s.heroBody}>
+        <span style={s.heroKicker}>MILA MIRISSA · À LA CARTE</span>
+        <h2 style={{ ...s.heroTitle, fontSize: compact ? 24 : 28 }}>
+          Good food,
+          <br />
+          made fresh.
+        </h2>
+        <p style={s.heroSub}>Tap a category, then ADD — your order goes straight to the kitchen.</p>
+
+        <div style={s.heroStats}>
+          <span style={s.heroStat}>
+            <b style={s.heroStatNum}>{totalItems}</b>
+            <span style={s.heroStatLbl}>dishes</span>
+          </span>
+          <span style={s.heroStatRule} aria-hidden />
+          <span style={s.heroStat}>
+            <b style={s.heroStatNum}>{categories}</b>
+            <span style={s.heroStatLbl}>categories</span>
+          </span>
         </div>
-        <div style={s.promoArt} aria-hidden>
-          <span style={s.promoArtCircle}>{promo.emoji}</span>
-        </div>
-      </div>
-      <div style={s.dots}>
-        {PROMOS.map((p, idx) => (
-          <button
-            key={p.id}
-            type="button"
-            aria-label={`Promo ${idx + 1}`}
-            onClick={() => setI(idx)}
-            style={{ ...s.dot, ...(idx === i ? s.dotOn : null) }}
-          />
-        ))}
       </div>
     </div>
   );
@@ -143,7 +117,12 @@ export default function MenuHome({
 
   return (
     <div className="mnu-anim-up">
-      {!desktop && <PromoCarousel />}
+      <MenuHero
+        groups={visible.length ? visible : groups}
+        totalItems={tabs.reduce((sum, t) => sum + t.count, 0)}
+        categories={groups.length}
+        compact={desktop}
+      />
 
       {/* category pills with counts */}
       <div style={s.tabRow} className="mnu-scroll mnu-no-bar">
@@ -163,9 +142,6 @@ export default function MenuHome({
         ))}
       </div>
 
-      {/* Desktop gets a slim promo strip too, so the page isn't bare */}
-      {desktop && <PromoCarousel compact />}
-
       <div
         style={{
           ...s.grid,
@@ -182,7 +158,7 @@ export default function MenuHome({
               key={g.key}
               type="button"
               onClick={() => onOpenGroup(g)}
-              className="mnu-tap"
+              className="mnu-tap mnu-card"
               style={{ ...s.card, height: desktop ? 208 : 190 }}
             >
               <GroupPhoto
@@ -210,104 +186,95 @@ export default function MenuHome({
           );
         })}
       </div>
+
+      <div style={s.homeFoot}>
+        All prices are in LKR and include taxes · Please tell your steward about any allergies.
+      </div>
     </div>
   );
 }
 
 const s: Record<string, CSSProperties> = {
-  /* ── promo hero ─────────────────────────────────────────── */
-  promo: {
-    margin: "0 0 6px",
+  /* ── home hero ──────────────────────────────────────────── */
+  hero: {
+    margin: "0 0 20px",
     borderRadius: 22,
-    background:
-      "linear-gradient(135deg, #3A2A17 0%, #2A1F12 55%, #1F1810 100%)",
-    border: `1px solid ${T.goldLine}`,
-    display: "flex",
     overflow: "hidden",
     position: "relative",
-    boxShadow: "0 14px 34px rgba(0,0,0,0.35)",
+    background: T.card,
+    border: `1px solid ${T.line}`,
+    boxShadow: "0 14px 34px rgba(0,0,0,0.34)",
+    isolation: "isolate",
   },
-  promoGlowA: {
+  heroImg: {
     position: "absolute",
-    width: 180,
-    height: 180,
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(171,119,60,0.4), transparent 70%)",
-    top: -70,
-    left: -50,
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
   },
-  promoGlowB: {
+  heroFallback: {
     position: "absolute",
-    width: 150,
-    height: 150,
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(171,119,60,0.22), transparent 70%)",
-    bottom: -60,
-    right: 90,
+    right: -10,
+    bottom: -14,
+    fontSize: 132,
+    opacity: 0.85,
+    transform: "rotate(-8deg)",
   },
-  promoText: {
-    flex: 1,
-    padding: "16px 8px 16px 20px",
+  heroScrim: {
+    position: "absolute",
+    inset: 0,
+    background: T.heroScrim,
+  },
+  heroBody: {
+    position: "relative",
+    zIndex: 1,
+    height: "100%",
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    position: "relative",
-    zIndex: 1,
-    minWidth: 0,
+    padding: "0 20px",
+    maxWidth: 340,
   },
-  promoKicker: {
-    color: "rgba(255,255,255,0.45)",
-    fontSize: 8.5,
-    fontWeight: 700,
-    letterSpacing: 2.2,
-  },
-  promoTitleRow: { display: "flex", alignItems: "baseline", gap: 8, marginTop: 4, flexWrap: "wrap" },
-  promoTitle: { color: T.white, fontSize: 17, fontWeight: 500 },
-  promoAccent: {
+  heroKicker: {
     color: T.gold,
-    fontSize: 30,
+    fontSize: 8.5,
     fontWeight: 800,
-    lineHeight: 1.1,
-    letterSpacing: 0.3,
-    textShadow: "0 2px 14px rgba(171,119,60,0.5)",
+    letterSpacing: 2.4,
   },
-  promoSub: { color: "rgba(255,255,255,0.82)", fontSize: 11.5, lineHeight: 1.5, marginTop: 7 },
-  promoNote: { color: T.w40, fontSize: 9.5, marginTop: 8, alignSelf: "flex-start" },
-  promoArt: {
-    width: 128,
-    flex: "0 0 128px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    zIndex: 1,
-    background: "linear-gradient(160deg, rgba(171,119,60,0.28) 0%, rgba(171,119,60,0.05) 100%)",
-    borderLeft: `1px solid rgba(171,119,60,0.25)`,
+  heroTitle: {
+    margin: "7px 0 0",
+    color: "#FFF8EE",
+    fontWeight: 700,
+    lineHeight: 1.12,
+    letterSpacing: -0.6,
+    textShadow: "0 2px 18px rgba(0,0,0,0.45)",
   },
-  promoArtCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: "50%",
-    background: "radial-gradient(circle at 32% 28%, #6b5230, #33261a)",
-    border: `1px solid ${T.goldLine}`,
+  heroSub: {
+    color: "rgba(255,246,234,0.78)",
+    fontSize: 11.5,
+    lineHeight: 1.55,
+    marginTop: 9,
+    maxWidth: 250,
+  },
+  heroStats: {
+    alignSelf: "flex-start",
+    marginTop: 13,
     display: "inline-flex",
     alignItems: "center",
-    justifyContent: "center",
-    fontSize: 42,
-    boxShadow: "0 10px 24px rgba(0,0,0,0.4)",
+    gap: 10,
+    background: "rgba(20,16,13,0.72)",
+    border: `1px solid ${T.goldLine}`,
+    borderRadius: 14,
+    padding: "7px 12px",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
   },
-  dots: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 14, marginTop: 10 },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    background: "rgba(255,255,255,0.22)",
-    border: "none",
-    padding: 0,
-    cursor: "pointer",
-    transition: "all 0.25s ease",
-  },
-  dotOn: { width: 20, background: T.gold },
+  heroStat: { display: "inline-flex", alignItems: "baseline", gap: 4 },
+  heroStatNum: { color: T.gold, fontSize: 14, fontWeight: 800, fontVariantNumeric: "tabular-nums" },
+  heroStatLbl: { color: T.w55, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" },
+  heroStatRule: { width: 1, height: 14, background: T.lineStrong },
 
   /* ── category pills ─────────────────────────────────────── */
   tabRow: { display: "flex", gap: 9, paddingBottom: 16, overflowX: "auto" },
@@ -332,9 +299,9 @@ const s: Record<string, CSSProperties> = {
     flex: "0 0 auto",
   },
   tabOn: {
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    borderColor: "rgba(255,255,255,0.2)",
-    color: T.white,
+    background: T.goldGrad,
+    borderColor: "rgba(255,255,255,0.22)",
+    color: T.goldInk,
     boxShadow: T.shadowGold,
   },
   tabCount: {
@@ -345,10 +312,17 @@ const s: Record<string, CSSProperties> = {
     background: "rgba(255,255,255,0.09)",
     color: T.w55,
   },
-  tabCountOn: { background: "rgba(255,255,255,0.22)", color: T.white },
+  tabCountOn: { background: "rgba(29,21,13,0.20)", color: T.goldInk },
 
   /* ── group cards ────────────────────────────────────────── */
   grid: { display: "grid", gap: 14, paddingBottom: 10 },
+  homeFoot: {
+    color: T.w25,
+    fontSize: 11,
+    lineHeight: 1.7,
+    textAlign: "center",
+    padding: "22px 10px 8px",
+  },
   card: {
     position: "relative",
     borderRadius: 20,
@@ -368,7 +342,7 @@ const s: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "radial-gradient(circle at 30% 25%, #4a3a22, #241b11 75%)",
+    background: "radial-gradient(circle at 30% 25%, #4a3a22, #1B1712 75%)",
   },
   cardScrim: {
     position: "absolute",
@@ -397,7 +371,7 @@ const s: Record<string, CSSProperties> = {
     height: 6,
     borderRadius: "50%",
     background: T.gold,
-    boxShadow: "0 0 8px rgba(171,119,60,0.9)",
+    boxShadow: "0 0 8px rgba(217,164,99,0.9)",
   },
   cardMeta: {
     position: "absolute",
@@ -418,8 +392,8 @@ const s: Record<string, CSSProperties> = {
     width: 26,
     height: 26,
     borderRadius: "50%",
-    background: "rgba(171,119,60,0.9)",
-    color: T.white,
+    background: T.goldGrad,
+    color: T.goldInk,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",

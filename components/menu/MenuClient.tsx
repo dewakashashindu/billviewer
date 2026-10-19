@@ -342,7 +342,7 @@ export default function MenuClient({
     >
       {tree.error && (
         <div style={s.errorBox}>
-          <div style={{ color: "#ffb4b4", fontSize: 13.5 }}>{tree.error}</div>
+          <div style={{ color: T.red, fontSize: 13.5 }}>{tree.error}</div>
           <button type="button" style={s.retry} onClick={tree.reload}>
             Try again
           </button>
@@ -408,7 +408,7 @@ export default function MenuClient({
 
   if (desktop) {
     return (
-      <div className="mnu-min-dvh" style={s.root}>
+      <div className="mnu-min-dvh" style={{ ...s.root, ...s.dRoot }}>
         <header style={s.dHeader} className="mnu-glass">
           <div style={s.dBrand}>
             <span style={s.dLogoRing}>
@@ -574,7 +574,8 @@ export default function MenuClient({
         </button>
       </header>
 
-      <main style={{ flex: 1 }}>{main}</main>
+      {/* the floating bottom bar overlays the last ~92px — keep content clear of it */}
+      <main style={{ flex: 1, paddingBottom: 92 }}>{main}</main>
 
       <BottomBar
         cartCount={cart.newCount}
@@ -713,7 +714,7 @@ function LeaveDialog({
 
 const s: Record<string, CSSProperties> = {
   root: {
-    background: `radial-gradient(1100px 520px at 85% -10%, rgba(171,119,60,0.09), transparent 60%), ${T.bg}`,
+    background: `radial-gradient(1100px 520px at 85% -10%, rgba(217,164,99,0.10), transparent 62%), ${T.bg}`,
     color: T.white,
     fontFamily: T.font,
     display: "flex",
@@ -735,7 +736,7 @@ const s: Record<string, CSSProperties> = {
     width: 104,
     height: 104,
     borderRadius: "50%",
-    background: "radial-gradient(circle at 32% 28%, #4a3a22, #241b11 75%)",
+    background: "radial-gradient(circle at 32% 28%, #4a3a22, #1B1712 75%)",
     border: `1px solid ${T.goldLine}`,
     display: "inline-flex",
     alignItems: "center",
@@ -760,7 +761,7 @@ const s: Record<string, CSSProperties> = {
     minWidth: 230,
     padding: "28px 26px",
     borderRadius: 22,
-    background: "#252320",
+    background: T.card,
     border: `1px solid ${T.goldLine}`,
     textAlign: "center",
     boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
@@ -815,8 +816,8 @@ const s: Record<string, CSSProperties> = {
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    background: "#FF3B30",
-    border: "2px solid #1B1B1B",
+    background: "#E5484D",
+    border: "2px solid #14100D",
     color: "#fff",
     fontSize: 10,
     fontWeight: 800,
@@ -849,11 +850,11 @@ const s: Record<string, CSSProperties> = {
     height: 44,
     borderRadius: "50%",
     padding: 2.5,
-    background: "conic-gradient(from 210deg, rgba(171,119,60,0.9), rgba(171,119,60,0.15), rgba(171,119,60,0.9))",
+    background: "conic-gradient(from 210deg, rgba(217,164,99,0.9), rgba(217,164,99,0.15), rgba(217,164,99,0.9))",
     display: "inline-flex",
     flex: "0 0 auto",
   },
-  dLogo: { width: "100%", height: "100%", display: "block", borderRadius: "50%", border: "2px solid #171614" },
+  dLogo: { width: "100%", height: "100%", display: "block", borderRadius: "50%", border: `2px solid ${T.surface}` },
   dBrandText: { display: "flex", flexDirection: "column", gap: 3 },
   dBrandMain: { fontSize: 15, fontWeight: 800, letterSpacing: 3 },
   dBrandSub: { fontSize: 8.5, letterSpacing: 3.2, color: T.gold, fontWeight: 700 },
@@ -902,12 +903,15 @@ const s: Record<string, CSSProperties> = {
   },
   dTableK: { color: "rgba(255,255,255,0.6)", fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", fontWeight: 700 },
   dTableV: { color: T.gold, fontSize: 15, fontWeight: 800 },
+  /** desktop shell is a fixed-height app frame: header + three
+      independently scrolling columns, cart footer always visible */
+  dRoot: { height: "100dvh", maxHeight: "100dvh", overflow: "hidden" },
   dRow: { flex: 1, display: "flex", minHeight: 0 },
   sidebar: {
     width: 262,
     flex: "0 0 262px",
-    background: "#171614",
-    borderRight: "1px solid #232323",
+    background: T.surface,
+    borderRight: "1px solid rgba(255,246,234,0.08)",
     padding: "18px 14px",
     overflowY: "auto",
     minHeight: 0,
@@ -956,7 +960,7 @@ const s: Record<string, CSSProperties> = {
     fontSize: 11,
     lineHeight: 1.7,
     padding: "14px 8px 0",
-    borderTop: "1px solid #232323",
+    borderTop: "1px solid rgba(255,246,234,0.08)",
   },
   dMain: { flex: 1, overflowY: "auto", minHeight: 0, paddingTop: 20 },
   dMainHead: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, padding: "0 26px 16px" },
@@ -980,8 +984,8 @@ const s: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    background: "rgba(224,82,82,0.12)",
-    border: "1px solid rgba(224,82,82,0.35)",
+    background: T.redSoft,
+    border: "1px solid rgba(255,143,143,0.35)",
     borderRadius: 14,
     padding: "14px 16px",
     margin: "16px 0",
@@ -1012,7 +1016,7 @@ const s: Record<string, CSSProperties> = {
   dlg: {
     width: "100%",
     maxWidth: 380,
-    background: "#252320",
+    background: T.card,
     border: `1px solid ${T.goldLine}`,
     borderRadius: 24,
     padding: "26px 24px 22px",
@@ -1049,9 +1053,9 @@ const s: Record<string, CSSProperties> = {
     flex: 1,
     height: 46,
     borderRadius: 13,
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    color: T.white,
+    background: T.goldGrad,
+    border: "1px solid rgba(255,255,255,0.22)",
+    color: T.goldInk,
     fontSize: 14,
     fontWeight: 800,
     cursor: "pointer",

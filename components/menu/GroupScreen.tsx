@@ -13,7 +13,7 @@ import { itemEmoji, T } from "./theme";
 import { groupCircleImage } from "./groupImages";
 import MenuItemCard from "./MenuItemCard";
 import type { CartRow } from "./useCustomerCart";
-import type { GroupCard, SubGroup } from "./types";
+import type { GroupCard, MenuItem, SubGroup } from "./types";
 
 /** Hero photo with an emoji fallback if the image fails. */
 function HeroPhoto({ src, name }: { src: string; name: string }) {
@@ -36,12 +36,90 @@ function HeroPhoto({ src, name }: { src: string; name: string }) {
   );
 }
 
+/** One titled grid of dishes. */
+function ItemSection({
+  items,
+  label,
+  cart,
+  onAdd,
+  onInc,
+  onDec,
+  onOpenItem,
+  desktop,
+}: {
+  items: MenuItem[];
+  label: string;
+  cart: { qtyOf: (id: string) => number; existingOf: (id: string) => number };
+  onAdd: (id: string) => void;
+  onInc: (id: string) => void;
+  onDec: (id: string) => void;
+  onOpenItem: (id: string) => void;
+  desktop?: boolean;
+}) {
+  return (
+    <>
+      <div style={s.gridLabel}>
+        <span>{label}</span>
+        <span style={s.gridLabelCount}>{items.length}</span>
+      </div>
+      <ItemGrid
+        items={items}
+        cart={cart}
+        onAdd={onAdd}
+        onInc={onInc}
+        onDec={onDec}
+        onOpenItem={onOpenItem}
+        desktop={desktop}
+      />
+    </>
+  );
+}
+
+function ItemGrid({
+  items,
+  cart,
+  onAdd,
+  onInc,
+  onDec,
+  onOpenItem,
+  desktop,
+}: {
+  items: MenuItem[];
+  cart: { qtyOf: (id: string) => number; existingOf: (id: string) => number };
+  onAdd: (id: string) => void;
+  onInc: (id: string) => void;
+  onDec: (id: string) => void;
+  onOpenItem: (id: string) => void;
+  desktop?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        ...s.itemGrid,
+        gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))",
+      }}
+    >
+      {items.map((item) => (
+        <MenuItemCard
+          key={item.id}
+          item={item}
+          qty={cart.qtyOf(item.id)}
+          alreadyOrdered={cart.existingOf(item.id)}
+          onAdd={() => onAdd(item.id)}
+          onInc={() => onInc(item.id)}
+          onDec={() => onDec(item.id)}
+          onOpen={() => onOpenItem(item.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function GroupScreen({
   group,
   subGroup,
   cart,
   onBack,
-  onOpenSub,
   onAdd,
   onInc,
   onDec,
@@ -58,7 +136,8 @@ export default function GroupScreen({
     dec: (itemId: string) => void;
   };
   onBack: () => void;
-  onOpenSub: (sub: SubGroup) => void;
+  /** kept for call-site compatibility — chips scroll instead of navigating */
+  onOpenSub?: (sub: SubGroup) => void;
   onAdd: (itemId: string) => void;
   onInc: (itemId: string) => void;
   onDec: (itemId: string) => void;
@@ -66,8 +145,11 @@ export default function GroupScreen({
   desktop?: boolean;
 }) {
   const items = subGroup ? subGroup.items : group.items;
+  const subGroups = group.subGroups.filter((sg) => sg.items.length > 0);
   const title = subGroup ? subGroup.name : group.name;
-  const count = subGroup ? subGroup.items.length : group.count;
+  const count = subGroup
+    ? subGroup.items.length
+    : group.items.length + group.subGroups.reduce((sum, sg) => sum + sg.items.length, 0);
   const heroSource = groupCircleImage(
     subGroup ? subGroup.items.find((i) => i.imageUrl)?.imageUrl : group.imageUrl,
     subGroup ? subGroup.name : group.name,
@@ -107,16 +189,20 @@ export default function GroupScreen({
           : `Browse ${group.name} items from the current Dining menu.`}
       </p>
 
-      {/* sub-categories as a chip scroller */}
-      {!subGroup && group.subGroups.length > 0 && (
+      {/* sub-categories as a quick-jump chip scroller */}
+      {!subGroup && subGroups.length > 0 && (
         <div style={s.chipRow} className="mnu-scroll mnu-no-bar">
-          {group.subGroups.map((sub) => (
+          {subGroups.map((sub) => (
             <button
               key={sub.key}
               type="button"
               style={s.chip}
               className="mnu-tap"
-              onClick={() => onOpenSub(sub)}
+              onClick={() =>
+                document
+                  .getElementById(`mnu-sg-${sub.key}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
             >
               <span>{sub.name}</span>
               <span style={s.chipCount}>{sub.items.length}</span>
@@ -125,34 +211,22 @@ export default function GroupScreen({
         </div>
       )}
 
-      {/* items */}
+      {/* items — every sub-group is laid out inline so a guest never
+          lands on an "empty" category that actually has dishes */}
       {items.length > 0 && (
-        <>
-          <div style={s.gridLabel}>
-            <span>All Items</span>
-            <span style={s.gridLabelCount}>{items.length}</span>
-          </div>
-          <div
-            style={{
-              ...s.itemGrid,
-              gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))",
-            }}
-          >
-            {items.map((item) => (
-              <MenuItemCard
-                key={item.id}
-                item={item}
-                qty={cart.qtyOf(item.id)}
-                alreadyOrdered={cart.existingOf(item.id)}
-                onAdd={() => onAdd(item.id)}
-                onInc={() => onInc(item.id)}
-                onDec={() => onDec(item.id)}
-                onOpen={() => onOpenItem(item.id)}
-              />
-            ))}
-          </div>
-        </>
+        <ItemSection items={items} label="All items" cart={cart} onAdd={onAdd} onInc={onInc} onDec={onDec} onOpenItem={onOpenItem} desktop={desktop} />
       )}
+
+      {!subGroup &&
+        subGroups.map((sub) => (
+          <div key={sub.key} id={`mnu-sg-${sub.key}`} style={s.sectionAnchor}>
+            <div style={s.gridLabel}>
+              <span>{sub.name}</span>
+              <span style={s.gridLabelCount}>{sub.items.length}</span>
+            </div>
+            <ItemGrid items={sub.items} cart={cart} onAdd={onAdd} onInc={onInc} onDec={onDec} onOpenItem={onOpenItem} desktop={desktop} />
+          </div>
+        ))}
 
       {items.length === 0 && !subGroup && group.subGroups.length === 0 && (
         <div style={s.empty}>
@@ -278,6 +352,7 @@ const s: Record<string, CSSProperties> = {
     background: T.goldSoft,
     color: T.gold,
   },
+  sectionAnchor: { scrollMarginTop: 88 },
   gridLabel: {
     display: "flex",
     alignItems: "center",
@@ -298,12 +373,12 @@ const s: Record<string, CSSProperties> = {
     padding: "2px 8px",
     letterSpacing: 0.5,
   },
-  itemGrid: { display: "grid", gap: 14, paddingBottom: 14 },
+  itemGrid: { display: "grid", gap: 14, paddingBottom: 18 },
   empty: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    padding: "64px 0 90px",
+    padding: "64px 0 110px",
     textAlign: "center",
   },
 };

@@ -47,7 +47,7 @@ export default function BottomBar({
     <div style={s.wrap} className="mnu-safe-bottom">
       <div style={s.bar} className="mnu-glass">
         <button type="button" style={s.fab} className="mnu-tap" onClick={onHome} aria-label="Home">
-          <HomeGlyph />
+          <HomeGlyph color={T.goldInk} />
         </button>
 
         <button type="button" style={s.search} className="mnu-tap-soft" onClick={onSearch}>
@@ -66,7 +66,7 @@ export default function BottomBar({
           onClick={onCart}
           aria-label="Cart"
         >
-          <CartGlyph color={cartCount > 0 ? T.white : T.w72} />
+          <CartGlyph color={cartCount > 0 ? T.goldInk : T.w72} />
           {cartCount > 0 && <span style={s.badge}>{cartCount}</span>}
         </button>
       </div>
@@ -80,7 +80,7 @@ const s: Record<string, CSSProperties> = {
     bottom: 0,
     zIndex: 40,
     padding: "10px 14px 14px",
-    background: "linear-gradient(180deg, rgba(27,27,27,0) 0%, rgba(27,27,27,0.9) 55%, #1B1B1B 100%)",
+    background: "linear-gradient(180deg, rgba(33,27,21,0) 0%, rgba(33,27,21,0.9) 55%, #14100D 100%)",
   },
   bar: {
     display: "flex",
@@ -95,8 +95,8 @@ const s: Record<string, CSSProperties> = {
     width: 48,
     height: 48,
     borderRadius: "50%",
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.16)",
+    background: T.goldGrad,
+    border: "1px solid rgba(255,255,255,0.22)",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -140,8 +140,8 @@ const s: Record<string, CSSProperties> = {
     transition: "transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease",
   },
   cartFabOn: {
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.16)",
+    background: T.goldGrad,
+    border: "1px solid rgba(255,255,255,0.22)",
     boxShadow: T.shadowGold,
   },
   badge: {
@@ -151,8 +151,8 @@ const s: Record<string, CSSProperties> = {
     minWidth: 19,
     height: 19,
     borderRadius: 10,
-    background: "#FF3B30",
-    border: "2px solid #1B1B1B",
+    background: "#E5484D",
+    border: "2px solid #14100D",
     color: "#fff",
     fontSize: 10,
     fontWeight: 800,

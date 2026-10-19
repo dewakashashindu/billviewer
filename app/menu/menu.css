@@ -24,11 +24,11 @@
 /* ── scrollbars ─────────────────────────────────────────────── */
 .mnu-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
 .mnu-scroll::-webkit-scrollbar-thumb {
-  background: rgba(171, 119, 60, 0.35);
+  background: rgba(217, 164, 99, 0.35);
   border-radius: 3px;
 }
 .mnu-scroll::-webkit-scrollbar-track { background: transparent; }
-.mnu-scroll { scrollbar-width: thin; scrollbar-color: rgba(171,119,60,0.35) transparent; }
+.mnu-scroll { scrollbar-width: thin; scrollbar-color: rgba(217,164,99,0.35) transparent; }
 
 /* hide the horizontal scrollbar on pill strips (tabs / chips) ─ */
 .mnu-no-bar { scrollbar-width: none; -ms-overflow-style: none; }
@@ -55,8 +55,8 @@
   100% { background-position: 240px 0; }
 }
 @keyframes mnuPulseGold {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(171, 119, 60, 0.45); }
-  50%      { box-shadow: 0 0 0 9px rgba(171, 119, 60, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 164, 99, 0.45); }
+  50%      { box-shadow: 0 0 0 9px rgba(217, 164, 99, 0); }
 }
 @keyframes mnuSuccessPing {
   0%   { transform: scale(0.9);  opacity: 0.7; }
@@ -73,6 +73,8 @@
 @media (prefers-reduced-motion: reduce) {
   .mnu-anim-fade, .mnu-anim-up, .mnu-anim-pop, .mnu-spinner,
   .mnu-bg-drift, .mnu-skel, .mnu-pulse-gold { animation: none !important; }
+  .mnu-tap, .mnu-tap-soft, .mnu-card, .mnu-card-photo img { transition: none !important; }
+  .mnu-card:hover .mnu-card-photo img { transform: none !important; }
   [style*="mnuSuccessPing"] { animation: none !important; }
 }
 
@@ -107,9 +109,28 @@
 
 /* ── glass surface (sticky headers / bars) ──────────────────── */
 .mnu-glass {
-  background: rgba(23, 22, 20, 0.82);
+  background: rgba(24, 19, 14, 0.80);
   -webkit-backdrop-filter: saturate(160%) blur(14px);
   backdrop-filter: saturate(160%) blur(14px);
+}
+
+/* ── dish card hover (pointer devices only) ─────────────────── */
+.mnu-card {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.mnu-card-photo img,
+.mnu-card-photo > span {
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .mnu-card:hover {
+    border-color: rgba(217, 164, 99, 0.34) !important;
+    box-shadow: 0 1px 0 rgba(255, 246, 234, 0.05) inset, 0 14px 30px rgba(0, 0, 0, 0.32) !important;
+  }
+  .mnu-card:hover .mnu-card-photo img,
+  .mnu-card:hover .mnu-card-photo > span {
+    transform: scale(1.045);
+  }
 }
 
 /* ── text helpers ───────────────────────────────────────────── */
@@ -118,7 +139,13 @@
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(171, 119, 60, 0.95);
+  color: rgba(217, 164, 99, 0.95);
+}
+.mnu-clamp1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .mnu-clamp2 {
   display: -webkit-box;

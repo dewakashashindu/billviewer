@@ -1,37 +1,53 @@
 // ============================================================
 // LOCATION: components/menu/theme.ts
-// Customer menu theme tokens — the SAME dark + gold palette the
-// Expo app uses (#1B1B1B / #AB773C) so the web menu looks like
-// the app the guests already know.
+// Customer menu theme tokens — "Midnight": warm near-black
+// surfaces stepping up to a bone-white ink and a single brand
+// gold. Every menu component reads from this file, so changing
+// these values restyles the whole flow at once.
 //
-// Want the cream/brown site theme instead? Change these values —
-// every menu component reads from here.
+// Want the cream/brown site theme instead? Swap the surface + ink
+// values below (bg #FBF6EF, surface #FFFFFF, card #F7EFE4,
+// ink #2B2117, gold #A46F38) — no component changes needed.
 // ============================================================
 
 export const T = {
-  bg: "#1B1B1B",
-  surface: "#242424",
-  card: "#2A2A2A",
-  card2: "#333333",
-  cardDeep: "#1E1E1E",
-  line: "rgba(255,255,255,0.08)",
+  /* ── surfaces (Midnight) ────────────────────────────────────
+     Depth = steps, not shadows: bg → surface → card → card2 */
+  bg: "#14100D",
+  surface: "#211B15",
+  card: "#2A231B",
+  card2: "#332A21",
+  cardDeep: "#1B1712",
+  line: "rgba(255,246,234,0.10)",
+  lineStrong: "rgba(255,246,234,0.18)",
 
-  gold: "#AB773C",
-  gold90: "rgba(171,119,60,0.9)",
-  goldSoft: "rgba(171,119,60,0.15)",
-  goldLine: "rgba(171,119,60,0.40)",
+  /* ── brand gold ──────────────────────────────────────────── */
+  gold: "#D9A463",
+  gold2: "#F2CB95",
+  gold90: "rgba(217,164,99,0.90)",
+  goldSoft: "rgba(217,164,99,0.14)",
+  goldLine: "rgba(217,164,99,0.40)",
+  goldGrad: "linear-gradient(160deg, #F2CB95 0%, #D9A463 100%)",
+  goldInk: "#1D150D",
 
+  /* ── ink (warm white, not pure #FFF) ─────────────────────── */
   white: "#FFFFFF",
-  w92: "rgba(255,255,255,0.92)",
-  w72: "rgba(255,255,255,0.72)",
-  w55: "rgba(255,255,255,0.55)",
-  w40: "rgba(255,255,255,0.40)",
-  w25: "rgba(255,255,255,0.25)",
+  ink: "#F7EEE3",
+  w92: "rgba(247,238,227,0.92)",
+  w72: "rgba(247,238,227,0.72)",
+  w55: "rgba(247,238,227,0.55)",
+  w40: "rgba(247,238,227,0.40)",
+  w25: "rgba(247,238,227,0.25)",
 
-  green: "#3D8C5E",
-  greenSoft: "rgba(61,140,94,0.18)",
-  red: "#E05252",
-  redSoft: "rgba(224,82,82,0.12)",
+  /* ── states ──────────────────────────────────────────────── */
+  green: "#6FD39A",
+  greenSoft: "rgba(111,211,154,0.14)",
+  red: "#FF8F8F",
+  redSoft: "rgba(255,143,143,0.12)",
+
+  /* ── hero image scrim ────────────────────────────────────── */
+  heroScrim:
+    "linear-gradient(90deg, rgba(14,11,8,0.94) 6%, rgba(14,11,8,0.68) 46%, rgba(14,11,8,0.14) 88%), linear-gradient(180deg, rgba(14,11,8,0.25), rgba(14,11,8,0.55))",
 
   font: 'var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
 
@@ -40,8 +56,9 @@ export const T = {
   rLg: 18,
   rXl: 24,
 
-  shadowGold: "0 6px 18px rgba(171,119,60,0.45)",
-  shadowGreen: "0 6px 18px rgba(61,140,94,0.35)",
+  shadowGold: "0 10px 26px rgba(217,164,99,0.30)",
+  shadowGreen: "0 6px 18px rgba(111,211,154,0.28)",
+  shadowLift: "0 2px 6px rgba(0,0,0,0.18), 0 14px 34px rgba(0,0,0,0.30)",
 } as const;
 
 /** Category code → tab label (raw POS categories are codes like "F"). */

@@ -87,13 +87,23 @@ export default function SearchOverlay({
       <div style={s.body} className="mnu-scroll">
         {q.trim().length === 0 ? (
           <div style={s.empty}>
-            <span style={s.emptyArt} aria-hidden>🍽️</span>
+            <span style={s.emptyArt} aria-hidden>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={T.goldLine} strokeWidth="1.6" strokeLinecap="round">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="M15.4 15.4 21 21" />
+              </svg>
+            </span>
             <div style={s.emptyTitle}>Find Your Favorite</div>
             <div style={s.emptySub}>Search by dish name, cuisine, or category</div>
           </div>
         ) : results.length === 0 ? (
           <div style={s.empty}>
-            <span style={s.emptyArt} aria-hidden>😔</span>
+            <span style={s.emptyArt} aria-hidden>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={T.w40} strokeWidth="1.6" strokeLinecap="round">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="M15.4 15.4 21 21M8.3 8.3l4.4 4.4M12.7 8.3l-4.4 4.4" />
+              </svg>
+            </span>
             <div style={s.emptyTitle}>No Results Found</div>
             <div style={s.emptySub}>Try searching with a different keyword</div>
           </div>

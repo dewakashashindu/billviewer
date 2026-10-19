@@ -29,7 +29,11 @@ export interface CartRow {
   name: string;
   unitPrice: number;
   remark: string;
+  /** TOTAL quantity for this line (already-ordered + newly added). */
   qty: number;
+  /** How many of `qty` are already on the bill (read-only part). */
+  baseQty: number;
+  /** true = nothing new on this line, the guest cannot change it. */
   readOnly: boolean;
 }
 
@@ -353,35 +357,28 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
   }, [baselineQtyOf]);
 
   /* ── 4. derived rows + totals ───────────────────────────── */
+  /* ONE row per line — the already-ordered quantity and the newly
+     added quantity are merged, so a guest never sees the same dish
+     twice ("Pepsi ×1 on bill" + "Pepsi ×2 new" confused everyone).
+     `baseQty` keeps the read-only part; the stepper can only move
+     the difference above it. */
   const rows = useMemo<CartRow[]>(() => {
     const out: CartRow[] = [];
     for (const l of lines) {
       const base = baselineQtyOf(l.key);
-      if (base > 0) {
-        out.push({
-          rowId: `${l.key}|existing`,
-          lineKey: l.key,
-          itemId: l.itemId,
-          name: baseline[l.key]?.name || l.name,
-          unitPrice: baseline[l.key]?.price ?? l.unitPrice,
-          remark: baseline[l.key]?.remark ?? "",
-          qty: base,
-          readOnly: true,
-        });
-      }
       const added = l.qty - base;
-      if (added > 0) {
-        out.push({
-          rowId: `${l.key}|new`,
-          lineKey: l.key,
-          itemId: l.itemId,
-          name: l.name,
-          unitPrice: l.unitPrice,
-          remark: l.remark,
-          qty: added,
-          readOnly: false,
-        });
-      }
+      if (l.qty <= 0) continue;
+      out.push({
+        rowId: l.key,
+        lineKey: l.key,
+        itemId: l.itemId,
+        name: (base > 0 ? baseline[l.key]?.name : "") || l.name,
+        unitPrice: base > 0 ? baseline[l.key]?.price ?? l.unitPrice : l.unitPrice,
+        remark: base > 0 ? baseline[l.key]?.remark ?? "" : l.remark,
+        qty: l.qty,
+        baseQty: base,
+        readOnly: base > 0 && added <= 0,
+      });
     }
     return out;
   }, [lines, baseline, baselineQtyOf]);

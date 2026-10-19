@@ -9,6 +9,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { formatPriceShort, itemEmoji, T } from "./theme";
+import { dishPhoto } from "./groupImages";
 import type { MenuItem } from "./types";
 
 export function AddQtyButton({
@@ -82,12 +83,13 @@ export function ItemPhoto({
     overflow: "hidden",
     flex: "0 0 auto",
   };
-  if (item.imageUrl && !failed) {
+  const src = item.imageUrl || dishPhoto(item.name);
+  if (!failed) {
     return (
       <span style={box}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={item.imageUrl}
+          src={src}
           alt={item.name}
           loading="lazy"
           onError={() => setFailed(true)}
@@ -106,11 +108,12 @@ export function ItemPhoto({
 /** Photo that fills its parent (used for the card header). */
 function CardPhoto({ item }: { item: Pick<MenuItem, "name" | "imageUrl"> }) {
   const [failed, setFailed] = useState(false);
-  if (item.imageUrl && !failed) {
+  const src = item.imageUrl || dishPhoto(item.name);
+  if (!failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={item.imageUrl}
+        src={src}
         alt={item.name}
         loading="lazy"
         onError={() => setFailed(true)}
@@ -143,9 +146,9 @@ export default function MenuItemCard({
   alreadyOrdered?: number;
 }) {
   return (
-    <div style={s.card} className="mnu-anim-up">
+    <div style={s.card} className="mnu-anim-up mnu-card">
       {/* photo header */}
-      <button type="button" onClick={onOpen} style={s.photoBtn} aria-label={`View ${item.name}`}>
+      <button type="button" onClick={onOpen} style={s.photoBtn} className="mnu-card-photo" aria-label={`View ${item.name}`}>
         <CardPhoto item={item} />
         <span style={s.photoScrim} aria-hidden />
         {alreadyOrdered > 0 && (
@@ -174,13 +177,13 @@ export default function MenuItemCard({
 
 const s: Record<string, CSSProperties> = {
   card: {
-    background: T.cardDeep,
+    background: T.card,
     border: `1px solid ${T.line}`,
     borderRadius: 18,
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+    boxShadow: "0 1px 0 rgba(255,246,234,0.04) inset, 0 8px 22px rgba(0,0,0,0.22)",
   },
   photoBtn: {
     position: "relative",
@@ -189,7 +192,7 @@ const s: Record<string, CSSProperties> = {
     aspectRatio: "16 / 11",
     padding: 0,
     border: "none",
-    background: "radial-gradient(circle at 32% 28%, #4a3a22, #241b11 75%)",
+    background: "radial-gradient(circle at 32% 28%, #4a3a22, #1B1712 75%)",
     cursor: "pointer",
     overflow: "hidden",
   },
@@ -212,7 +215,7 @@ const s: Record<string, CSSProperties> = {
   photoScrim: {
     position: "absolute",
     inset: 0,
-    background: "linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(20,17,14,0.55) 100%)",
+    background: "linear-gradient(180deg, rgba(0,0,0,0) 52%, rgba(20,17,14,0.26) 78%, rgba(20,17,14,0.62) 100%)",
     pointerEvents: "none",
   },
   badge: {
@@ -220,14 +223,15 @@ const s: Record<string, CSSProperties> = {
     top: 9,
     left: 9,
     fontSize: 8.5,
-    fontWeight: 800,
-    letterSpacing: 0.5,
-    color: T.w72,
-    background: "rgba(20,17,14,0.72)",
-    border: "1px solid rgba(255,255,255,0.14)",
+    fontWeight: 900,
+    letterSpacing: 0.6,
+    color: T.gold,
+    background: "rgba(20,17,14,0.82)",
+    border: `1px solid ${T.goldLine}`,
     padding: "3px 8px",
-    borderRadius: 8,
-    backdropFilter: "blur(4px)",
+    borderRadius: 7,
+    backdropFilter: "blur(6px)",
+    WebkitBackdropFilter: "blur(6px)",
   },
   soldOut: {
     position: "absolute",
@@ -236,12 +240,12 @@ const s: Record<string, CSSProperties> = {
     fontSize: 8.5,
     fontWeight: 800,
     letterSpacing: 0.5,
-    color: "#ffd7d7",
-    background: "rgba(224,82,82,0.85)",
+    color: "#FFE3E3",
+    background: "rgba(214,69,69,0.92)",
     padding: "3px 8px",
     borderRadius: 8,
   },
-  body: { padding: "11px 12px 12px", display: "flex", flexDirection: "column", gap: 9, flex: 1 },
+  body: { padding: "12px 12px 13px", display: "flex", flexDirection: "column", gap: 9, flex: 1, minWidth: 0 },
   nameBtn: {
     background: "none",
     border: "none",
@@ -251,7 +255,7 @@ const s: Record<string, CSSProperties> = {
     color: "inherit",
     font: "inherit",
   },
-  name: { color: T.w92, fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 },
+  name: { color: T.ink, fontSize: 13.5, fontWeight: 600, lineHeight: 1.38, letterSpacing: -0.1 },
   priceRow: {
     marginTop: "auto",
     display: "flex",
@@ -259,25 +263,25 @@ const s: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: 8,
   },
-  price: { color: T.gold, fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap" },
+  price: { color: T.gold, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap", letterSpacing: -0.2, fontVariantNumeric: "tabular-nums" },
   addBtn: {
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    color: T.white,
-    fontWeight: 800,
-    letterSpacing: 1.4,
-    border: "1px solid rgba(255,255,255,0.16)",
-    borderRadius: 11,
+    background: T.goldGrad,
+    color: T.goldInk,
+    fontWeight: 900,
+    letterSpacing: 1.1,
+    border: "1px solid rgba(255,255,255,0.22)",
+    borderRadius: 10,
     cursor: "pointer",
-    boxShadow: "0 4px 12px rgba(171,119,60,0.35)",
+    boxShadow: "0 4px 12px rgba(217,164,99,0.28)",
   },
   stepper: {
     display: "inline-flex",
     alignItems: "center",
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.16)",
-    borderRadius: 11,
+    background: T.goldGrad,
+    border: "1px solid rgba(255,255,255,0.22)",
+    borderRadius: 10,
     overflow: "hidden",
-    boxShadow: "0 4px 12px rgba(171,119,60,0.35)",
+    boxShadow: "0 4px 12px rgba(217,164,99,0.28)",
   },
   stepBtn: {
     width: 30,
@@ -287,9 +291,9 @@ const s: Record<string, CSSProperties> = {
     justifyContent: "center",
     background: "none",
     border: "none",
-    color: T.white,
+    color: T.goldInk,
     fontSize: 16,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: "pointer",
   },
   stepBtnLg: {
@@ -300,11 +304,11 @@ const s: Record<string, CSSProperties> = {
     justifyContent: "center",
     background: "none",
     border: "none",
-    color: T.white,
+    color: T.goldInk,
     fontSize: 18,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: "pointer",
   },
-  qtyNum: { color: T.white, fontSize: 13, fontWeight: 800, minWidth: 22, textAlign: "center" },
-  qtyNumLg: { color: T.white, fontSize: 14.5, fontWeight: 800, minWidth: 26, textAlign: "center" },
+  qtyNum: { color: T.goldInk, fontSize: 13, fontWeight: 900, minWidth: 22, textAlign: "center", fontVariantNumeric: "tabular-nums" },
+  qtyNumLg: { color: T.goldInk, fontSize: 14.5, fontWeight: 900, minWidth: 26, textAlign: "center", fontVariantNumeric: "tabular-nums" },
 };

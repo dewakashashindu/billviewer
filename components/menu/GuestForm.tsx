@@ -165,7 +165,6 @@ export default function GuestForm({
               <span style={s.fieldLabel}>
                 Phone number <span style={{ color: T.gold }}>*</span>
               </span>
-              <span style={s.fieldCode}>CusCode</span>
             </div>
             <input
               value={phone}
@@ -174,7 +173,7 @@ export default function GuestForm({
               placeholder="07X XXX XXXX"
               inputMode="tel"
               autoComplete="tel"
-              style={{ ...s.input, borderColor: phoneError ? "#e57373" : T.line }}
+              style={{ ...s.input, borderColor: phoneError ? T.red : T.line }}
               maxLength={20}
             />
             {phoneError && <div style={s.err}>{phoneError}</div>}
@@ -188,7 +187,7 @@ export default function GuestForm({
               <div style={s.hint}>New number — please enter your name below.</div>
             )}
             {lookup === "error" && (
-              <div style={{ ...s.hint, color: "#ffb4b4" }}>
+              <div style={{ ...s.hint, color: T.red }}>
                 Could not check the number — you can continue and enter your name.
               </div>
             )}
@@ -202,14 +201,13 @@ export default function GuestForm({
               <span style={s.fieldLabel}>
                 Customer name <span style={{ color: T.gold }}>*</span>
               </span>
-              <span style={s.fieldCode}>CusName</span>
             </div>
             <input
               value={cusName}
               onChange={(e) => setCusName(e.target.value.slice(0, 100))}
               placeholder="e.g. Perera family"
               autoComplete="name"
-              style={{ ...s.input, borderColor: nameError ? "#e57373" : T.line }}
+              style={{ ...s.input, borderColor: nameError ? T.red : T.line }}
               maxLength={100}
             />
             {nameError && <div style={s.err}>{nameError}</div>}
@@ -224,7 +222,6 @@ export default function GuestForm({
                   <span style={s.fieldLabel}>
                     Guests <span style={{ color: T.gold }}>*</span>
                   </span>
-                  <span style={s.fieldCode}>LPax · FPax</span>
                 </div>
 
                 {[
@@ -236,7 +233,7 @@ export default function GuestForm({
                     <div style={s.stepperRow}>
                       <button
                         type="button"
-                        style={s.stepBtn}
+                        style={{ ...s.stepBtn, ...(row.value <= 0 ? s.stepOff : null) }}
                         className="mnu-tap"
                         aria-label={`Fewer ${row.label}`}
                         disabled={row.value <= 0}
@@ -247,7 +244,7 @@ export default function GuestForm({
                       <span style={s.stepVal}>{row.value}</span>
                       <button
                         type="button"
-                        style={s.stepBtn}
+                        style={{ ...s.stepBtn, ...(row.value >= 50 ? s.stepOff : null) }}
                         className="mnu-tap"
                         aria-label={`More ${row.label}`}
                         disabled={row.value >= 50}
@@ -293,7 +290,7 @@ export default function GuestForm({
 
 const s: Record<string, CSSProperties> = {
   root: {
-    background: `radial-gradient(900px 480px at 85% -10%, rgba(171,119,60,0.12), transparent 60%), ${T.bg}`,
+    background: `radial-gradient(900px 480px at 85% -10%, rgba(217,164,99,0.12), transparent 60%), ${T.bg}`,
     color: T.white,
     fontFamily: T.font,
     display: "flex",
@@ -327,11 +324,11 @@ const s: Record<string, CSSProperties> = {
     height: 7,
     borderRadius: "50%",
     background: T.green,
-    boxShadow: "0 0 8px rgba(61,140,94,0.9)",
+    boxShadow: "0 0 8px rgba(111,211,154,0.9)",
   },
   head: { textAlign: "center", marginTop: 26 },
   eyebrow: {
-    color: "rgba(171,119,60,0.95)",
+    color: "#D9A463",
     fontSize: 10.5,
     fontWeight: 800,
     letterSpacing: 2.2,
@@ -387,6 +384,7 @@ const s: Record<string, CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
   },
+  stepOff: { opacity: 0.32, cursor: "not-allowed" },
   stepVal: {
     minWidth: 40,
     textAlign: "center",
@@ -400,7 +398,7 @@ const s: Record<string, CSSProperties> = {
     borderRadius: 13,
     background: T.cardDeep,
     border: `1px solid ${T.line}`,
-    color: T.white,
+    color: T.ink,
     padding: "0 14px",
     fontSize: 14,
     fontFamily: "inherit",
@@ -417,7 +415,7 @@ const s: Record<string, CSSProperties> = {
     marginTop: 8,
     fontSize: 11.5,
     fontWeight: 600,
-    color: "#ffb4b4",
+    color: T.red,
   },
   divider: { height: 1, background: T.line },
   totalRow: {
@@ -434,9 +432,9 @@ const s: Record<string, CSSProperties> = {
     width: "100%",
     height: 54,
     borderRadius: 16,
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.16)",
-    color: T.white,
+    background: T.goldGrad,
+    border: "1px solid rgba(255,255,255,0.22)",
+    color: T.goldInk,
     fontSize: 16,
     fontWeight: 800,
     letterSpacing: 0.2,

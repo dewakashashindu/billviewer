@@ -35,30 +35,26 @@ export default function OrderSuccess({
 
       <div style={s.card}>
         <div style={s.cardRow}>
-          <div>
-            <div style={s.k}>Invoice No</div>
-            <div style={s.v}>{result.invoiceNo || "—"}</div>
-          </div>
-          <div style={s.cardDivider} />
-          <div>
-            <div style={s.k}>{result.orderType === "TA" ? "Takeaway No" : "Table"}</div>
-            <div style={{ ...s.v, fontSize: 16 }}>
-              {result.orderType === "TA" ? "Takeaway" : result.tableNo}
-              {result.orderType !== "TA" && result.tableGroup
-                ? ` · ${result.tableGroup}`
-                : ""}
-            </div>
-          </div>
-          {result.itemCount > 0 && (
-            <>
-              <div style={s.cardDivider} />
-              <div>
-                <div style={s.k}>Items added</div>
-                <div style={{ ...s.v, fontSize: 16 }}>{result.itemCount}</div>
-              </div>
-            </>
-          )}
+          <span style={s.k}>Invoice no</span>
+          <span style={s.v}>{result.invoiceNo || "—"}</span>
         </div>
+        <div style={s.rowLine} />
+        <div style={s.cardRow}>
+          <span style={s.k}>{result.orderType === "TA" ? "Takeaway no" : "Table"}</span>
+          <span style={s.v}>
+            {result.orderType === "TA" ? "Takeaway" : result.tableNo}
+            {result.orderType !== "TA" && result.tableGroup ? ` · ${result.tableGroup}` : ""}
+          </span>
+        </div>
+        {result.itemCount > 0 && (
+          <>
+            <div style={s.rowLine} />
+            <div style={s.cardRow}>
+              <span style={s.k}>Items added</span>
+              <span style={s.v}>{result.itemCount}</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div style={s.actions}>
@@ -101,47 +97,62 @@ const s: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
-    boxShadow: "0 0 0 10px rgba(61,140,94,0.08), 0 16px 40px rgba(61,140,94,0.25)",
+    boxShadow: `0 0 0 10px rgba(111,211,154,0.08), 0 16px 40px rgba(111,211,154,0.20)`,
   },
   tickGlow: {
     position: "absolute",
     inset: -2,
     borderRadius: "50%",
-    border: "2px solid rgba(111,207,151,0.5)",
+    border: `2px solid ${T.green}`,
     animation: "mnuSuccessPing 1.6s ease-out 1",
   },
   tick: {
     width: 36,
     height: 19,
-    borderLeft: "4.5px solid #6FCF97",
-    borderBottom: "4.5px solid #6FCF97",
+    borderLeft: `4.5px solid ${T.green}`,
+    borderBottom: `4.5px solid ${T.green}`,
     transform: "rotate(-45deg) translateY(-3px)",
     display: "block",
   },
-  title: { margin: 0, color: T.white, fontSize: 25, fontWeight: 800, letterSpacing: 0.2 },
+  title: { margin: 0, color: T.ink, fontSize: 25, fontWeight: 800, letterSpacing: -0.2 },
   sub: { color: T.w55, fontSize: 13.5, lineHeight: 1.75, margin: "10px 0 0" },
   card: {
     background: T.surface,
     border: `1px solid ${T.line}`,
     borderRadius: 18,
-    padding: "18px 10px",
+    padding: "6px 16px",
     margin: "24px 0 26px",
     width: "100%",
     maxWidth: 420,
     boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
   },
-  cardRow: { display: "flex", alignItems: "stretch", justifyContent: "space-around", gap: 6 },
-  cardDivider: { width: 1, background: T.line, alignSelf: "stretch" },
-  k: { color: T.w40, fontSize: 10, letterSpacing: 1.4, textTransform: "uppercase", fontWeight: 700 },
-  v: { color: T.gold, fontSize: 19, fontWeight: 800, marginTop: 6, letterSpacing: 0.6 },
+  cardRow: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "11px 0",
+    textAlign: "left",
+  },
+  rowLine: { height: 1, background: T.line },
+  k: { color: T.w40, fontSize: 10, letterSpacing: 1.3, textTransform: "uppercase", fontWeight: 700, flex: "0 0 auto" },
+  v: {
+    color: T.gold,
+    fontSize: 14,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+    textAlign: "right",
+    wordBreak: "break-word",
+    fontVariantNumeric: "tabular-nums",
+  },
   actions: { display: "flex", gap: 12, width: "100%", maxWidth: 420 },
   primary: {
     flex: 1,
     height: 52,
     borderRadius: 15,
-    background: "linear-gradient(180deg, rgba(186,131,66,0.98), rgba(171,119,60,0.95))",
-    border: "1px solid rgba(255,255,255,0.14)",
-    color: T.white,
+    background: T.goldGrad,
+    border: "1px solid rgba(255,255,255,0.22)",
+    color: T.goldInk,
     fontSize: 14,
     fontWeight: 800,
     cursor: "pointer",

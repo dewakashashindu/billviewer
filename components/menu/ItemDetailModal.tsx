@@ -9,6 +9,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { formatPrice, itemEmoji, T } from "./theme";
+import { dishPhoto } from "./groupImages";
 import { AddQtyButton } from "./MenuItemCard";
 import type { MenuItem } from "./types";
 
@@ -16,12 +17,13 @@ import type { MenuItem } from "./types";
 function DetailPhoto({ item, desktop }: { item: MenuItem; desktop: boolean }) {
   const [failed, setFailed] = useState(false);
   const size = desktop ? 170 : 200;
-  if (item.imageUrl && !failed) {
+  const src = item.imageUrl || dishPhoto(item.name);
+  if (!failed) {
     return (
       <span style={{ ...s.photoRing, width: size, height: size }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={item.imageUrl}
+          src={src}
           alt={item.name}
           onError={() => setFailed(true)}
           style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: desktop ? 20 : "50%" }}
@@ -140,7 +142,7 @@ const s: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "radial-gradient(circle at 50% 0%, #4c3820, #241b11 80%)",
+    background: "radial-gradient(circle at 50% 0%, #4c3820, #1B1712 80%)",
     flex: "0 0 auto",
   },
   photoRing: {
@@ -171,7 +173,7 @@ const s: Record<string, CSSProperties> = {
   },
   body: { padding: "22px 20px 30px" },
   nameRow: { display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" },
-  name: { margin: 0, color: T.white, fontSize: 24, fontWeight: 800, lineHeight: 1.25, flex: 1 },
+  name: { margin: 0, color: T.ink, fontSize: 24, fontWeight: 800, lineHeight: 1.25, flex: 1, letterSpacing: -0.3 },
   priceTag: {
     background: T.goldSoft,
     border: `1px solid ${T.goldLine}`,
@@ -193,12 +195,12 @@ const s: Record<string, CSSProperties> = {
     borderRadius: 14,
     padding: "5px 11px",
   },
-  divider: { height: 1, background: "rgba(255,255,255,0.12)", margin: "18px 0" },
+  divider: { height: 1, background: T.line, margin: "18px 0" },
   label: { color: T.w40, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 },
-  desc: { color: "rgba(255,255,255,0.62)", fontSize: 13.5, lineHeight: 1.75, margin: 0 },
+  desc: { color: T.w72, fontSize: 13.5, lineHeight: 1.75, margin: 0 },
   foot: {
     marginTop: 26,
-    borderTop: "1px solid rgba(255,255,255,0.12)",
+    borderTop: `1px solid ${T.line}`,
     paddingTop: 18,
     display: "flex",
     alignItems: "center",
@@ -212,9 +214,9 @@ const s: Record<string, CSSProperties> = {
     height: 52,
     width: "100%",
     borderRadius: 15,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "linear-gradient(180deg, rgba(186,131,66,0.92), rgba(171,119,60,0.88))",
-    color: T.white,
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: T.goldGrad,
+    color: T.goldInk,
     fontWeight: 800,
     fontSize: 15,
     cursor: "pointer",
