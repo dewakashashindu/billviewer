@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
       customerName: body.customerName ? String(body.customerName) : undefined,
       customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
       pax: body.pax ? Number(body.pax) : undefined,
+      localPax: body.localPax != null ? Number(body.localPax) : undefined,
+      foreignPax: body.foreignPax != null ? Number(body.foreignPax) : undefined,
     });
 
     return NextResponse.json({ ok: true, data: result });

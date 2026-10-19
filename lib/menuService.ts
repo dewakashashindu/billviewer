@@ -229,6 +229,10 @@ export interface ConfirmInput {
   customerPhone?: string;
   /** Number of guests for this order (Tbl_HoldUpsCloud.LPax). */
   pax?: number;
+  /** Local guests (Tbl_HoldUpsCloud.LPax) — preferred over `pax`. */
+  localPax?: number;
+  /** Foreign guests (Tbl_HoldUpsCloud.FPax). */
+  foreignPax?: number;
   requestId?: string;
 }
 export interface ConfirmResult {
@@ -292,7 +296,14 @@ async function generateInvoiceNo(tx: sql.Transaction): Promise<string> {
   return `INV-${ymd.replaceAll("-", "")}-${String(seq).padStart(3, "0")}`;
 }
 
-function validateInput(input: ConfirmInput): Required<Omit<ConfirmInput, "requestId" | "pax">> & { requestId: string; pax: number } {
+function validateInput(
+  input: ConfirmInput
+): Required<Omit<ConfirmInput, "requestId" | "pax" | "localPax" | "foreignPax">> & {
+  requestId: string;
+  pax: number;
+  localPax: number;
+  foreignPax: number;
+} {
   const tableNo = s(input.tableNo);
   if (!tableNo) throw new OrderError("Table number is required. Scan the table QR code.");
   if (!Array.isArray(input.items) || input.items.length === 0)
@@ -307,6 +318,13 @@ function validateInput(input: ConfirmInput): Required<Omit<ConfirmInput, "reques
   });
   const paxRaw = Number(input.pax);
   const pax = Number.isFinite(paxRaw) && paxRaw >= 1 ? Math.min(50, Math.round(paxRaw)) : 1;
+  const clampPax = (v: unknown, fallback: number) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) && n >= 0 ? Math.min(50, n) : fallback;
+  };
+  // localPax wins over the legacy single `pax` (backward compatible).
+  const localPax = clampPax(input.localPax, pax);
+  const foreignPax = clampPax(input.foreignPax, 0);
   return {
     tableNo,
     tableGroup: s(input.tableGroup),
@@ -314,6 +332,8 @@ function validateInput(input: ConfirmInput): Required<Omit<ConfirmInput, "reques
     customerName: s(input.customerName).slice(0, 100),
     customerPhone: s(input.customerPhone).slice(0, 30),
     pax,
+    localPax,
+    foreignPax,
     requestId: s(input.requestId),
   };
 }
@@ -436,7 +456,8 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         ins.input("grp", sql.Char(10), tableGrpId);
         ins.input("cusCode", sql.VarChar(30), input.customerPhone);
         ins.input("cusName", sql.VarChar(100), input.customerName);
-        ins.input("lpx", sql.Int, input.pax);
+        ins.input("lpx", sql.Int, input.localPax);
+        ins.input("fpx", sql.Int, input.foreignPax);
         await ins.query(`
           INSERT INTO dbo.Tbl_HoldUpsCloud (
             TabelNo, ItemCode, QTY, SalesPrice, ItemRemarks, UserID,
@@ -444,7 +465,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
             CusCode, CusName, TxnDateTime
           ) VALUES (
             @table, @item, @qty, @price, @remark, 'WEB',
-            @grp, @lpx, 0, 'DI', @inv, 0,
+            @grp, @lpx, @fpx, 'DI', @inv, 0,
             @cusCode, @cusName, DATEADD(MINUTE, 330, GETUTCDATE())
           );
         `);

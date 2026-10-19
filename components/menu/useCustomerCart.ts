@@ -33,6 +33,18 @@ export interface CartRow {
   readOnly: boolean;
 }
 
+/** Guest details collected on the form between welcome and menu. */
+export interface GuestDetails {
+  /** Local guests (Tbl_HoldUpsCloud.LPax). */
+  localPax: number;
+  /** Foreign guests (Tbl_HoldUpsCloud.FPax). */
+  foreignPax: number;
+  /** Customer name (Tbl_HoldUpsCloud.CusName). */
+  cusName: string;
+}
+
+const guestStorageKey = (table: string) => `mnu-guest:v1:${table}`;
+
 interface Options {
   table: string;
   tableGroup?: string;
@@ -76,6 +88,65 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ConfirmResult | null>(null);
   const inFlightRef = useRef(false); // double-tap guard (like confirmInFlightRef)
+
+  /* ── 0. guest details (pax + customer name), persisted per table ── */
+  const [guest, setGuest] = useState<GuestDetails>({
+    localPax: 0,
+    foreignPax: 0,
+    cusName: "",
+  });
+  const [guestHydrated, setGuestHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!table) return;
+    let alive = true;
+    (async () => {
+      try {
+        const raw = localStorage.getItem(guestStorageKey(table));
+        if (raw && alive) {
+          const g = JSON.parse(raw) as Partial<GuestDetails>;
+          setGuest({
+            localPax: Math.max(0, Number(g.localPax) || 0),
+            foreignPax: Math.max(0, Number(g.foreignPax) || 0),
+            cusName: String(g.cusName ?? "").slice(0, 100),
+          });
+        }
+      } catch {
+        /* corrupted save — start fresh */
+      }
+      if (alive) setGuestHydrated(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [table]);
+
+  useEffect(() => {
+    if (!table || !guestHydrated) return;
+    try {
+      localStorage.setItem(guestStorageKey(table), JSON.stringify(guest));
+    } catch {
+      /* storage full / private mode — guest details still work in memory */
+    }
+  }, [table, guest, guestHydrated]);
+
+  const setGuestDetails = useCallback((patch: Partial<GuestDetails>) => {
+    setGuest((prev) => ({
+      localPax:
+        patch.localPax === undefined
+          ? prev.localPax
+          : Math.max(0, Math.min(50, Math.floor(Number(patch.localPax) || 0))),
+      foreignPax:
+        patch.foreignPax === undefined
+          ? prev.foreignPax
+          : Math.max(0, Math.min(50, Math.floor(Number(patch.foreignPax) || 0))),
+      cusName:
+        patch.cusName === undefined ? prev.cusName : String(patch.cusName).slice(0, 100),
+    }));
+  }, []);
+
+  /** Form already filled in (at least one guest) → skip it next time. */
+  const hasGuest = guestHydrated && guest.localPax + guest.foreignPax >= 1;
 
   /* ── 1. load the table's current unpaid bill ─────────────── */
   useEffect(() => {
@@ -337,6 +408,9 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
           tableNo: table,
           tableGroup: tableGroup || undefined,
           t: token || undefined,
+          localPax: guest.localPax || undefined,
+          foreignPax: guest.foreignPax || undefined,
+          customerName: guest.cusName || undefined,
           items: payloadItems,
         }),
       });
@@ -374,7 +448,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
       inFlightRef.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, lines, newLines, table, tableGroup, token]);
+  }, [baseline, confirming, guest, lines, newLines, table, tableGroup, token]);
 
   const resetAll = useCallback(() => {
     setLines([]);
@@ -388,6 +462,10 @@ export function useCustomerCart({ table, tableGroup, token, itemsById }: Options
     // not hydrated yet (and we do have a table) → the cart is still loading
     loadingBaseline: Boolean(table) && !hydrated,
     hydrated,
+    guest,
+    guestHydrated,
+    hasGuest,
+    setGuestDetails,
     invoiceNo,
     rows,
     lines,

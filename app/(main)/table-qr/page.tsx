@@ -384,7 +384,7 @@ export default function TableQrPage() {
           <div>
             <label style={lbl}>Table Group</label>
             <select style={input} value={group} onChange={(e) => setGroup(e.target.value)}>
-              <option value="ALL">All Groups ({tables.length} tables)</option>
+              <option value="ALL">All Groups ({allTables.length} tables)</option>
               {groups.map((g) => (
                 <option key={g.groupName} value={g.groupName}>
                   {g.groupName} ({g.tableCount})

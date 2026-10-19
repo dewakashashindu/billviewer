@@ -24,6 +24,7 @@ import { useIsDesktop } from "./useMedia";
 import { useMenuTree } from "./useMenuTree";
 import BottomBar, { CartGlyph, HomeGlyph, SearchGlyph } from "./BottomBar";
 import CartView from "./CartView";
+import GuestForm from "./GuestForm";
 import GroupScreen from "./GroupScreen";
 import ItemDetailModal from "./ItemDetailModal";
 import MenuHome from "./MenuHome";
@@ -33,7 +34,7 @@ import SearchOverlay from "./SearchOverlay";
 import WelcomeScreen from "./WelcomeScreen";
 import type { GroupCard, SubGroup } from "./types";
 
-type View = "welcome" | "home" | "group" | "cart" | "success";
+type View = "welcome" | "guest" | "home" | "group" | "cart" | "success";
 
 export default function MenuClient({
   table,
@@ -194,8 +195,8 @@ export default function MenuClient({
     const remaining = Math.max(0, 800 - (Date.now() - started));
     if (remaining) await new Promise((r) => setTimeout(r, remaining));
     setOpening(false);
-    setView("home");
-  }, [opening, tree.loading]);
+    setView(cart.hasGuest ? "home" : "guest");
+  }, [opening, tree.loading, cart.hasGuest]);
 
   /* ── desktop ⌘K / Ctrl+K → search ────────────────────────── */
   useEffect(() => {
@@ -328,6 +329,24 @@ export default function MenuClient({
           </div>
         )}
         {leaveOpen && <LeaveDialog onClose={() => setLeaveOpen(false)} />}
+      </div>
+    );
+  }
+
+  /* ══════════════════ guest form (pax + customer name) ══════ */
+  if (view === "guest") {
+    return (
+      <div className="mnu-min-dvh" style={s.root}>
+        <GuestForm
+          table={table}
+          tableGroup={resolvedGroup || tableGroup}
+          initial={cart.guest}
+          onSubmit={(g) => {
+            cart.setGuestDetails(g);
+            setView("home");
+            window.scrollTo({ top: 0 });
+          }}
+        />
       </div>
     );
   }
