@@ -154,7 +154,7 @@ export default function MenuItemCard({
         {alreadyOrdered > 0 && (
           <span style={s.badge}>ON BILL ×{alreadyOrdered}</span>
         )}
-        {!item.available && <span style={s.soldOut}>Sold out</span>}
+        {!item.available && <span style={s.soldOut}>Unavailable</span>}
       </button>
 
       {/* body */}
@@ -237,6 +237,7 @@ const s: Record<string, CSSProperties> = {
     position: "absolute",
     top: 9,
     right: 9,
+    whiteSpace: "nowrap",
     fontSize: 8.5,
     fontWeight: 800,
     letterSpacing: 0.5,

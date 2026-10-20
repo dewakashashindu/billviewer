@@ -68,13 +68,15 @@ function MenuHero({
       <span style={s.heroScrim} aria-hidden />
 
       <div style={s.heroBody}>
-        <span style={s.heroKicker}>MILA MIRISSA · À LA CARTE</span>
-        <h2 style={{ ...s.heroTitle, fontSize: compact ? 24 : 28 }}>
-          Good food,
+        <span style={s.heroKicker}>MILA MIRISSA · KITCHEN OPEN</span>
+        <h2 style={{ ...s.heroTitle, fontSize: compact ? 20 : 28 }}>
+          Every dish,
           <br />
-          made fresh.
+          made to order.
         </h2>
-        <p style={s.heroSub}>Tap a category, then ADD — your order goes straight to the kitchen.</p>
+        <p style={s.heroSub}>
+          Add from the menu below and we start cooking the moment you confirm.
+        </p>
 
         <div style={s.heroStats}>
           <span style={s.heroStat}>
@@ -100,6 +102,8 @@ export default function MenuHome({
   onOpenGroup,
   alreadyOrderedByItem,
   desktop = false,
+  columns,
+  heroCompact,
 }: {
   tabs: MenuTab[];
   groups: GroupCard[];
@@ -108,6 +112,10 @@ export default function MenuHome({
   onOpenGroup: (group: GroupCard) => void;
   alreadyOrderedByItem: Map<string, number>;
   desktop?: boolean;
+  /** cards per row — defaults to 3 on desktop, 2 on phones */
+  columns?: number;
+  /** shorter hero on laptop heights; full-size on big screens */
+  heroCompact?: boolean;
 }) {
   const visible = useMemo(
     // compare against the SAME derived label the tab keys use
@@ -121,7 +129,7 @@ export default function MenuHome({
         groups={visible.length ? visible : groups}
         totalItems={tabs.reduce((sum, t) => sum + t.count, 0)}
         categories={groups.length}
-        compact={desktop}
+        compact={heroCompact ?? desktop}
       />
 
       {/* category pills with counts */}
@@ -145,7 +153,7 @@ export default function MenuHome({
       <div
         style={{
           ...s.grid,
-          gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))",
+          gridTemplateColumns: `repeat(${columns ?? (desktop ? 3 : 2)}, minmax(0,1fr))`,
         }}
       >
         {visible.map((g) => {

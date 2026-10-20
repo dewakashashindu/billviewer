@@ -18,6 +18,8 @@ export default function OrderSuccess({
   onAddMore: () => void;
   onDone: () => void;
 }) {
+  const takeaway = result.orderType === "TA";
+
   return (
     <div style={s.wrap} className="mnu-anim-up">
       <div style={s.tickCircle}>
@@ -26,26 +28,37 @@ export default function OrderSuccess({
       </div>
       <h2 style={s.title}>Order Confirmed</h2>
       <p style={s.sub}>
-        {result.orderType === "TA"
+        {takeaway
           ? "Your takeaway order has been sent to the kitchen. Please collect it at the counter when your number is called."
           : "Your items have been sent to the kitchen."}
         <br />
-        {result.orderType === "TA" ? "Thank you!" : "Please wait — we'll serve it fresh."}
+        {takeaway ? "Thank you!" : "Please wait — we'll serve it fresh."}
       </p>
 
       <div style={s.card}>
-        <div style={s.cardRow}>
-          <span style={s.k}>Invoice no</span>
-          <span style={s.v}>{result.invoiceNo || "—"}</span>
-        </div>
-        <div style={s.rowLine} />
-        <div style={s.cardRow}>
-          <span style={s.k}>{result.orderType === "TA" ? "Takeaway no" : "Table"}</span>
-          <span style={s.v}>
-            {result.orderType === "TA" ? "Takeaway" : result.tableNo}
-            {result.orderType !== "TA" && result.tableGroup ? ` · ${result.tableGroup}` : ""}
-          </span>
-        </div>
+        {takeaway ? (
+          /* TA has no table: the serial IS the order number — showing
+             "Takeaway no → Takeaway" told the guest nothing. */
+          <div style={s.cardRow}>
+            <span style={s.k}>Takeaway no</span>
+            <span style={{ ...s.v, fontSize: 20 }}>{result.invoiceNo || "—"}</span>
+          </div>
+        ) : (
+          <>
+            <div style={s.cardRow}>
+              <span style={s.k}>Invoice no</span>
+              <span style={s.v}>{result.invoiceNo || "—"}</span>
+            </div>
+            <div style={s.rowLine} />
+            <div style={s.cardRow}>
+              <span style={s.k}>Table</span>
+              <span style={s.v}>
+                {result.tableNo}
+                {result.tableGroup ? ` · ${result.tableGroup}` : ""}
+              </span>
+            </div>
+          </>
+        )}
         {result.itemCount > 0 && (
           <>
             <div style={s.rowLine} />

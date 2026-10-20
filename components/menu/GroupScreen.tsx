@@ -46,6 +46,7 @@ function ItemSection({
   onDec,
   onOpenItem,
   desktop,
+  columns,
 }: {
   items: MenuItem[];
   label: string;
@@ -55,6 +56,7 @@ function ItemSection({
   onDec: (id: string) => void;
   onOpenItem: (id: string) => void;
   desktop?: boolean;
+  columns?: number;
 }) {
   return (
     <>
@@ -70,6 +72,7 @@ function ItemSection({
         onDec={onDec}
         onOpenItem={onOpenItem}
         desktop={desktop}
+        columns={columns}
       />
     </>
   );
@@ -83,6 +86,7 @@ function ItemGrid({
   onDec,
   onOpenItem,
   desktop,
+  columns,
 }: {
   items: MenuItem[];
   cart: { qtyOf: (id: string) => number; existingOf: (id: string) => number };
@@ -91,12 +95,13 @@ function ItemGrid({
   onDec: (id: string) => void;
   onOpenItem: (id: string) => void;
   desktop?: boolean;
+  columns?: number;
 }) {
   return (
     <div
       style={{
         ...s.itemGrid,
-        gridTemplateColumns: desktop ? "repeat(3, minmax(0,1fr))" : "repeat(2, minmax(0,1fr))",
+        gridTemplateColumns: `repeat(${columns ?? (desktop ? 3 : 2)}, minmax(0,1fr))`,
       }}
     >
       {items.map((item) => (
@@ -125,6 +130,7 @@ export default function GroupScreen({
   onDec,
   onOpenItem,
   desktop = false,
+  columns,
 }: {
   group: GroupCard;
   subGroup?: SubGroup | null;
@@ -143,6 +149,8 @@ export default function GroupScreen({
   onDec: (itemId: string) => void;
   onOpenItem: (itemId: string) => void;
   desktop?: boolean;
+  /** cards per row — defaults to 3 on desktop, 2 on phones */
+  columns?: number;
 }) {
   const items = subGroup ? subGroup.items : group.items;
   const subGroups = group.subGroups.filter((sg) => sg.items.length > 0);
@@ -166,7 +174,8 @@ export default function GroupScreen({
         </button>
         <div style={s.heroMeta}>
           <span style={s.heroKicker}>
-            {(subGroup ? group.name : title).toUpperCase()} · {count} ITEMS
+            {(subGroup ? group.name : title).toUpperCase()} · {count}{" "}
+            {count === 1 ? "ITEM" : "ITEMS"}
           </span>
           <h2 style={s.heroTitle}>{title.toUpperCase()}</h2>
         </div>
@@ -185,8 +194,8 @@ export default function GroupScreen({
 
       <p style={s.desc}>
         {subGroup
-          ? `Browse ${subGroup.name} items from the current Dining menu.`
-          : `Browse ${group.name} items from the current Dining menu.`}
+          ? `Everything in ${subGroup.name} — prices include taxes.`
+          : `Everything in ${group.name} — prices include taxes.`}
       </p>
 
       {/* sub-categories as a quick-jump chip scroller */}
@@ -214,7 +223,17 @@ export default function GroupScreen({
       {/* items — every sub-group is laid out inline so a guest never
           lands on an "empty" category that actually has dishes */}
       {items.length > 0 && (
-        <ItemSection items={items} label="All items" cart={cart} onAdd={onAdd} onInc={onInc} onDec={onDec} onOpenItem={onOpenItem} desktop={desktop} />
+        <ItemSection
+          items={items}
+          label="All items"
+          cart={cart}
+          onAdd={onAdd}
+          onInc={onInc}
+          onDec={onDec}
+          onOpenItem={onOpenItem}
+          desktop={desktop}
+          columns={columns}
+        />
       )}
 
       {!subGroup &&
@@ -224,7 +243,16 @@ export default function GroupScreen({
               <span>{sub.name}</span>
               <span style={s.gridLabelCount}>{sub.items.length}</span>
             </div>
-            <ItemGrid items={sub.items} cart={cart} onAdd={onAdd} onInc={onInc} onDec={onDec} onOpenItem={onOpenItem} desktop={desktop} />
+            <ItemGrid
+              items={sub.items}
+              cart={cart}
+              onAdd={onAdd}
+              onInc={onInc}
+              onDec={onDec}
+              onOpenItem={onOpenItem}
+              desktop={desktop}
+              columns={columns}
+            />
           </div>
         ))}
 

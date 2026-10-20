@@ -32,6 +32,9 @@ export default function SearchOverlay({
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  /* ready-made starting points — real menu names, nothing invented */
+  const suggest = useMemo(() => items.slice(0, 5).map((i) => i.name), [items]);
+
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 60);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -93,8 +96,23 @@ export default function SearchOverlay({
                 <path d="M15.4 15.4 21 21" />
               </svg>
             </span>
-            <div style={s.emptyTitle}>Find Your Favorite</div>
+            <div style={s.emptyTitle}>Find your favorite</div>
             <div style={s.emptySub}>Search by dish name, cuisine, or category</div>
+            {suggest.length > 0 && (
+              <div style={s.chips}>
+                {suggest.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    style={s.chip}
+                    className="mnu-tap"
+                    onClick={() => setQ(name)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : results.length === 0 ? (
           <div style={s.empty}>
@@ -104,8 +122,8 @@ export default function SearchOverlay({
                 <path d="M15.4 15.4 21 21M8.3 8.3l4.4 4.4M12.7 8.3l-4.4 4.4" />
               </svg>
             </span>
-            <div style={s.emptyTitle}>No Results Found</div>
-            <div style={s.emptySub}>Try searching with a different keyword</div>
+            <div style={s.emptyTitle}>No results found</div>
+            <div style={s.emptySub}>Try a different keyword — “kottu”, “rice”, “juice”…</div>
           </div>
         ) : (
           <>
@@ -225,6 +243,25 @@ const s: Record<string, CSSProperties> = {
   name: { color: T.white, fontSize: 13.5, fontWeight: 700 },
   meta: { color: T.w40, fontSize: 11 },
   price: { color: T.gold, fontSize: 12, fontWeight: 800 },
+  chips: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 18,
+    maxWidth: 460,
+    padding: "0 10px",
+  },
+  chip: {
+    background: T.card,
+    border: `1px solid ${T.line}`,
+    color: T.w72,
+    fontSize: 12,
+    fontWeight: 600,
+    borderRadius: 18,
+    padding: "8px 14px",
+    cursor: "pointer",
+  },
   empty: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: 110, gap: 8 },
   emptyArt: {
     width: 96,

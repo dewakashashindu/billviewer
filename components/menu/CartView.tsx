@@ -12,9 +12,10 @@
 // part above the already-ordered quantity. Nothing ever appears twice.
 // ============================================================
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { formatPrice, T } from "./theme";
 import { ItemPhoto } from "./MenuItemCard";
+import { useMediaQuery } from "./useMedia";
 import type { CartRow } from "./useCustomerCart";
 import type { MenuItem } from "./types";
 
@@ -80,7 +81,7 @@ function Row({
           radius={12}
         />
         <div style={s.panelDet}>
-          <div style={s.panelName} className="mnu-clamp1">
+          <div style={s.panelName} className="mnu-clamp2">
             {row.name}
           </div>
           <div style={s.panelMetaRow}>
@@ -238,7 +239,6 @@ export default function CartView({
   error,
   invoiceNo,
   onBack,
-  onHome,
   onConfirm,
   onInc,
   onDec,
@@ -257,7 +257,6 @@ export default function CartView({
   error: string | null;
   invoiceNo?: string;
   onBack: () => void;
-  onHome: () => void;
   onConfirm: () => void;
   onInc: (key: string) => void;
   onDec: (key: string) => void;
@@ -267,6 +266,30 @@ export default function CartView({
   onSearch?: () => void;
 }) {
   const panel = variant === "panel";
+  const wide = useMediaQuery("(min-width: 1280px)");
+
+  /* "Clear all" drops every new line in one tap — on a phone that is a
+     thumb-slip away from losing a five-item order, so it arms first and
+     only clears on a second press within three seconds. */
+  const [armed, setArmed] = useState(false);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (armTimer.current) clearTimeout(armTimer.current);
+    },
+    []
+  );
+  const handleClear = () => {
+    if (!armed) {
+      setArmed(true);
+      if (armTimer.current) clearTimeout(armTimer.current);
+      armTimer.current = setTimeout(() => setArmed(false), 3000);
+      return;
+    }
+    if (armTimer.current) clearTimeout(armTimer.current);
+    setArmed(false);
+    onClear();
+  };
   const empty = rows.length === 0;
   const newItems = rows.filter((r) => r.qty > r.baseQty).length;
 
@@ -351,7 +374,7 @@ export default function CartView({
   /* ── desktop panel ── */
   if (panel) {
     return (
-      <aside style={s.panel}>
+      <aside style={{ ...s.panel, ...(wide ? null : s.panelNarrow) }}>
         <div style={s.panelHead}>
           <div>
             <div style={s.panelTitle}>Ready to Eat?</div>
@@ -361,8 +384,12 @@ export default function CartView({
             </div>
           </div>
           {!empty && (
-            <button type="button" style={s.clear} onClick={onClear}>
-              Clear all
+            <button
+              type="button"
+              style={{ ...s.clear, ...(armed ? s.clearArmed : null) }}
+              onClick={handleClear}
+            >
+              {armed ? "Tap again to clear" : "Clear all"}
             </button>
           )}
         </div>
@@ -393,8 +420,12 @@ export default function CartView({
           {newCount > 0 && <span style={{ ...s.countBadge, ...NUM }}>{newCount}</span>}
         </div>
         {!empty ? (
-          <button type="button" style={s.clear} onClick={onClear}>
-            Clear all
+          <button
+            type="button"
+            style={{ ...s.clear, ...(armed ? s.clearArmed : null) }}
+            onClick={handleClear}
+          >
+            {armed ? "Tap again" : "Clear all"}
           </button>
         ) : (
           <span style={{ width: 62 }} />
@@ -409,14 +440,7 @@ export default function CartView({
         <div style={s.sheetFooter} className="mnu-safe-bottom">
           {errorBox}
           <Totals existingTotal={existingTotal} newTotal={newTotal} newCount={newItems} />
-          <div style={s.footerRow}>
-            <button type="button" style={s.homeBtn} className="mnu-tap" onClick={onHome} aria-label="Home">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.gold} strokeWidth="1.9" aria-hidden>
-                <path d="M4 11.2 12 4.6l8 6.6V20h-5.6v-5.4H9.6V20H4z" />
-              </svg>
-            </button>
-            {cta(true)}
-          </div>
+          {cta(true)}
           {onSearch ? (
             <button type="button" style={s.moreLink} onClick={onSearch}>
               + Add more items
@@ -501,6 +525,14 @@ const s: Record<string, CSSProperties> = {
     cursor: "pointer",
     padding: 4,
     flex: "0 0 auto",
+    whiteSpace: "nowrap",
+  },
+  clearArmed: {
+    color: T.goldInk,
+    background: T.goldGrad,
+    borderRadius: 9,
+    padding: "5px 10px",
+    fontSize: 11.5,
   },
   sheetBody: { flex: 1, overflowY: "auto", paddingBottom: 12 },
   sectionRow: {
@@ -689,19 +721,6 @@ const s: Record<string, CSSProperties> = {
   totRowGrand: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
   grandLabel: { color: T.w92, fontSize: 12.5, fontWeight: 700, letterSpacing: 0.2 },
   grandAmt: { color: T.gold, fontSize: 20, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.2 },
-  footerRow: { display: "flex", gap: 10, alignItems: "stretch", marginTop: 12 },
-  homeBtn: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    background: T.card2,
-    border: `1px solid ${T.line}`,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    flex: "0 0 auto",
-  },
   confirm: {
     flex: 1,
     minHeight: 54,
@@ -720,7 +739,7 @@ const s: Record<string, CSSProperties> = {
     cursor: "pointer",
     padding: "0 14px",
   },
-  confirmCompact: { flex: 1 },
+  confirmCompact: { flex: 1, width: "100%" },
   confirmDisabled: {
     background: T.card2,
     color: T.w55,
@@ -787,6 +806,7 @@ const s: Record<string, CSSProperties> = {
   note: { color: T.w40, fontSize: 11, textAlign: "center", marginTop: 11, lineHeight: 1.6 },
 
   /* ── desktop panel ────────────────────────────────────────── */
+  panelNarrow: { width: 322, flex: "0 0 322px", padding: "16px 13px" },
   panel: {
     width: 380,
     flex: "0 0 380px",
@@ -835,6 +855,7 @@ const s: Record<string, CSSProperties> = {
   stepperSm: {
     display: "inline-flex",
     alignItems: "center",
+    flexShrink: 0,
     background: T.surface,
     borderRadius: 20,
     border: `1px solid ${T.goldLine}`,
@@ -854,6 +875,8 @@ const s: Record<string, CSSProperties> = {
     background: "none",
     border: "none",
     padding: 0,
+    whiteSpace: "nowrap",
+    flexShrink: 0,
     color: T.gold,
     fontSize: 11,
     fontWeight: 700,

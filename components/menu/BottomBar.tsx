@@ -2,19 +2,14 @@
 
 // ============================================================
 // LOCATION: components/menu/BottomBar.tsx
-// Mobile floating bar (redesigned): a glass pill holding the gold
-// home FAB · search field · cart FAB. (Desktop uses the sidebar +
-// sticky cart panel instead.)
+// Mobile floating bar: a glass pill holding the search field and the
+// cart FAB. (Desktop uses the sidebar + sticky cart panel instead.)
+// The home FAB was removed — guests move with the header logo and the
+// "‹" back control, so no button is needed here.
 // ============================================================
 
 import type { CSSProperties } from "react";
 import { T } from "./theme";
-
-export const HomeGlyph = ({ size = 22, color = T.white }: { size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden>
-    <path d="M12 3.2 2.6 11.4h2.6V20h5v-5.2h3.6V20h5v-8.6h2.6z" />
-  </svg>
-);
 
 export const SearchGlyph = ({ size = 18, color = "rgba(255,255,255,0.6)" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" aria-hidden>
@@ -32,13 +27,11 @@ export const CartGlyph = ({ size = 24, color = T.white }: { size?: number; color
 
 export default function BottomBar({
   cartCount,
-  onHome,
   onSearch,
   onCart,
   pulse,
 }: {
   cartCount: number;
-  onHome: () => void;
   onSearch: () => void;
   onCart: () => void;
   pulse?: boolean;
@@ -46,10 +39,6 @@ export default function BottomBar({
   return (
     <div style={s.wrap} className="mnu-safe-bottom">
       <div style={s.bar} className="mnu-glass">
-        <button type="button" style={s.fab} className="mnu-tap" onClick={onHome} aria-label="Home">
-          <HomeGlyph color={T.goldInk} />
-        </button>
-
         <button type="button" style={s.search} className="mnu-tap-soft" onClick={onSearch}>
           <SearchGlyph />
           <span style={s.searchText}>Search your favorite…</span>
@@ -90,19 +79,6 @@ const s: Record<string, CSSProperties> = {
     borderRadius: 27,
     border: `1px solid ${T.line}`,
     boxShadow: "0 14px 34px rgba(0,0,0,0.5)",
-  },
-  fab: {
-    width: 48,
-    height: 48,
-    borderRadius: "50%",
-    background: T.goldGrad,
-    border: "1px solid rgba(255,255,255,0.22)",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: T.shadowGold,
-    cursor: "pointer",
-    flex: "0 0 auto",
   },
   search: {
     flex: 1,

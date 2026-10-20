@@ -23,3 +23,8 @@ export const useIsDesktop = () => useMediaQuery("(min-width: 1024px)");
 
 /** ≥640px → wider grids / centred modals. */
 export const useIsTabletUp = () => useMediaQuery("(min-width: 640px)");
+
+/** ≥1280px → the three-column desktop shell has room to breathe.
+ *  Below this the sidebar + cart rails are narrowed and the dish
+ *  grid drops to two columns, otherwise cards get ~100px wide. */
+export const useIsWide = () => useMediaQuery("(min-width: 1280px)");

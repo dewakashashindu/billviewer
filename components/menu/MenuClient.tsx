@@ -19,9 +19,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { categoryLabel, T } from "./theme";
 import { useCustomerCart, type CartRow } from "./useCustomerCart";
-import { useIsDesktop } from "./useMedia";
+import { useIsDesktop, useIsWide } from "./useMedia";
+import { useMediaQuery } from "./useMedia";
 import { useMenuTree } from "./useMenuTree";
-import BottomBar, { CartGlyph, HomeGlyph, SearchGlyph } from "./BottomBar";
+import BottomBar, { CartGlyph, SearchGlyph } from "./BottomBar";
 import CartView from "./CartView";
 import GuestForm from "./GuestForm";
 import GroupScreen from "./GroupScreen";
@@ -52,6 +53,13 @@ export default function MenuClient({
   isTakeaway?: boolean;
 }) {
   const desktop = useIsDesktop();
+  const wide = useIsWide();
+  /* 1024–1279px still gets the desktop shell, but only two cards per
+     row and slimmer rails — three columns there left ~100px cards.
+     3-up only once the content area can give every card ~240px. */
+  const fourUp = useMediaQuery("(min-width: 1700px)");
+  const threeUp = useMediaQuery("(min-width: 1440px)");
+  const columns = fourUp ? 4 : threeUp ? 3 : 2;
   const tree = useMenuTree();
 
   const itemsById = useMemo(
@@ -136,7 +144,6 @@ export default function MenuClient({
   const [detailId, setDetailId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remarkRow, setRemarkRow] = useState<CartRow | null>(null);
-  const [leaveOpen, setLeaveOpen] = useState(false);
   const [opening, setOpening] = useState(false);
   const [pulse, setPulse] = useState(false);
   const pulseTimer = useRef<number | null>(null);
@@ -304,7 +311,6 @@ export default function MenuClient({
             </div>
           </div>
         )}
-        {leaveOpen && <LeaveDialog onClose={() => setLeaveOpen(false)} />}
       </div>
     );
   }
@@ -375,6 +381,8 @@ export default function MenuClient({
               .map((l) => [l.itemId, cart.baseline[l.key]?.qty ?? 0])
           )}
           desktop={desktop}
+          columns={columns}
+          heroCompact={!fourUp}
         />
       )}
 
@@ -383,6 +391,7 @@ export default function MenuClient({
           group={group}
           subGroup={sub}
           desktop={desktop}
+          columns={columns}
           cart={{ qtyOf, existingOf, add: addItem, inc: addItem, dec: decItem }}
           onBack={() => (sub ? setSub(null) : setView("home"))}
           onOpenSub={(sg) => {
@@ -409,7 +418,7 @@ export default function MenuClient({
   if (desktop) {
     return (
       <div className="mnu-min-dvh" style={{ ...s.root, ...s.dRoot }}>
-        <header style={s.dHeader} className="mnu-glass">
+        <header style={s.dHeader} className="mnu-glass mnu-safe-top">
           <div style={s.dBrand}>
             <span style={s.dLogoRing}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -437,7 +446,7 @@ export default function MenuClient({
         </header>
 
         <div style={s.dRow}>
-          <aside style={s.sidebar} className="mnu-scroll">
+          <aside style={{ ...s.sidebar, ...(wide ? null : s.sidebarNarrow) }} className="mnu-scroll">
             <div style={s.sideSection}>Categories</div>
             {tree.tabs.map((tab) => (
               <button
@@ -522,7 +531,6 @@ export default function MenuClient({
             error={cart.confirmError}
             invoiceNo={cart.invoiceNo}
             onBack={() => setView("home")}
-            onHome={() => setLeaveOpen(true)}
             onConfirm={() => void handleConfirm()}
             onInc={cart.inc}
             onDec={cart.dec}
@@ -552,9 +560,8 @@ export default function MenuClient({
   return (
     <div className="mnu-min-dvh" style={s.root}>
       <header style={s.mHeader} className="mnu-glass mnu-safe-top">
-        <button type="button" style={s.mHeadBtn} className="mnu-tap" onClick={() => setLeaveOpen(true)} aria-label="Home">
-          <HomeGlyph size={18} />
-        </button>
+        {/* no home button here — keeps the logo dead-centre (spacer only) */}
+        <span style={s.mHeadSpacer} aria-hidden />
         <div style={s.mBrand}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/millamirissa.png" alt="Mila Mirissa" style={s.mLogo} />
@@ -580,7 +587,6 @@ export default function MenuClient({
       <BottomBar
         cartCount={cart.newCount}
         pulse={pulse}
-        onHome={() => setLeaveOpen(true)}
         onSearch={() => setSearchOpen(true)}
         onCart={() => setView("cart")}
       />
@@ -597,7 +603,6 @@ export default function MenuClient({
           error={cart.confirmError}
           invoiceNo={cart.invoiceNo}
           onBack={() => setView(group ? "group" : "home")}
-          onHome={() => setLeaveOpen(true)}
           onConfirm={() => void handleConfirm()}
           onInc={cart.inc}
           onDec={cart.dec}
@@ -655,61 +660,9 @@ export default function MenuClient({
           }}
         />
 
-        {leaveOpen && (
-          <LeaveDialog
-            onClose={() => setLeaveOpen(false)}
-            onLeave={() => {
-              setLeaveOpen(false);
-              setView("welcome");
-            }}
-            hasCart={cart.newCount > 0}
-          />
-        )}
       </>
     );
   }
-}
-
-/* ── small dialogs ─────────────────────────────────────────── */
-
-function LeaveDialog({
-  onClose,
-  onLeave,
-  hasCart,
-}: {
-  onClose: () => void;
-  onLeave?: () => void;
-  hasCart?: boolean;
-}) {
-  return (
-    <div style={s.dlgOverlay} className="mnu-anim-fade" onClick={onClose}>
-      <div style={s.dlg} className="mnu-anim-pop" onClick={(e) => e.stopPropagation()}>
-        <span style={s.dlgIcon} aria-hidden>{onLeave ? "🏠" : "🛎️"}</span>
-        <h3 style={s.dlgTitle}>{onLeave ? "Leave the menu?" : "Need help?"}</h3>
-        <p style={s.dlgText}>
-          {onLeave ? (
-            hasCart ? (
-              <>Your cart is saved on this device — you can come back any time.</>
-            ) : (
-              <>You can reopen the menu from your table QR at any time.</>
-            )
-          ) : (
-            <>Please ask your steward for assistance. Your cart is saved.</>
-          )}
-        </p>
-        <div style={s.dlgActions}>
-          <button type="button" style={s.dlgGhost} className="mnu-tap" onClick={onClose}>
-            {onLeave ? "Keep browsing" : "Close"}
-          </button>
-          {onLeave && (
-            <button type="button" style={s.dlgPrimary} className="mnu-tap" onClick={onLeave}>
-              Go to welcome
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 const s: Record<string, CSSProperties> = {
@@ -797,6 +750,7 @@ const s: Record<string, CSSProperties> = {
     zIndex: 30,
     borderBottom: `1px solid ${T.line}`,
   },
+  mHeadSpacer: { width: 40, height: 40, flex: "0 0 auto" },
   mHeadBtn: {
     width: 40,
     height: 40,
@@ -907,6 +861,7 @@ const s: Record<string, CSSProperties> = {
       independently scrolling columns, cart footer always visible */
   dRoot: { height: "100dvh", maxHeight: "100dvh", overflow: "hidden" },
   dRow: { flex: 1, display: "flex", minHeight: 0 },
+  sidebarNarrow: { width: 214, flex: "0 0 214px", padding: "16px 10px" },
   sidebar: {
     width: 262,
     flex: "0 0 262px",

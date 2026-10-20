@@ -441,7 +441,15 @@ const s: Record<string, CSSProperties> = {
     cursor: "pointer",
     boxShadow: T.shadowGold,
   },
-  continueOff: { opacity: 0.45, boxShadow: "none", cursor: "not-allowed" },
+  /* a dimmed gold gradient looked like wet cardboard — use a flat
+     surface with readable text instead of 45% opacity */
+  continueOff: {
+    background: T.card2,
+    border: "1px solid rgba(255,246,234,0.07)",
+    color: T.w40,
+    boxShadow: "none",
+    cursor: "not-allowed",
+  },
   note: {
     color: T.w40,
     fontSize: 11.5,
