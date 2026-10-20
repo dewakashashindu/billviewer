@@ -2,8 +2,9 @@
 // LOCATION: lib/rateLimit.ts
 // Tiny in-memory sliding-window rate limiter (server only).
 //
-// Used by the public ordering endpoints so a single table /
-// a single IP cannot spam orders.
+// Used by the public ordering endpoints (a single table / a single
+// IP cannot spam orders) and by the auth endpoints (login attempts,
+// OTP SMS requests, OTP guesses).
 //
 // NOTE: on Netlify (serverless) the instance is reused between
 // warm calls but resets on a cold start — good enough to stop
@@ -66,6 +67,45 @@ export function rateLimit(
     remaining: Math.max(0, limit - bucket.hits.length),
     retryAfterSeconds: 0,
   };
+}
+
+/**
+ * Check a bucket WITHOUT registering a hit.
+ * Used for failure counters — only failed attempts should count,
+ * so the caller registers the hit itself (registerHit) on failure.
+ */
+export function tooMany(
+  key: string,
+  limit: number,
+  windowMs: number
+): RateLimitResult {
+  const now = Date.now();
+  sweep(windowMs);
+  const bucket = buckets.get(key);
+  const hits = (bucket?.hits ?? []).filter((t) => now - t < windowMs);
+  if (hits.length >= limit) {
+    const oldest = hits[0] ?? now;
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSeconds: Math.max(1, Math.ceil((oldest + windowMs - now) / 1000)),
+    };
+  }
+  return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
+}
+
+/** Register a hit without checking the limit (see `tooMany`). */
+export function registerHit(key: string, windowMs: number): void {
+  sweep(windowMs);
+  const bucket = buckets.get(key) ?? { hits: [] };
+  const now = Date.now();
+  bucket.hits = [...bucket.hits.filter((t) => now - t < windowMs), now];
+  buckets.set(key, bucket);
+}
+
+/** Clear a bucket — e.g. failed-login counter after a successful login. */
+export function resetKey(key: string): void {
+  buckets.delete(key);
 }
 
 /** Best-effort client IP from the request headers. */

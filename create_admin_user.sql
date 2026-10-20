@@ -2,17 +2,41 @@
 -- MicroEChef Bill Viewer — FIRST ADMIN USER (run once)
 -- Database: POS MSSQL (smarterasp.net)
 --
--- Creates login  : admin
--- with password  : Admin@123
+-- ⚠️ STEP 1 — generate YOUR OWN password hash first:
+--
+--      node scripts/hash-password.mjs "YourStrongPassword"
+--      → scrypt$<salt>$<hash>
+--
+--    STEP 2 — paste that string into @hash below, then run this.
 --
 -- The password is stored as a SCRYPT HASH in the Password column
 -- (never plain text). Sign in and change it any time from
 -- Settings > Reset Password.
+--
+-- 🔒 WHY NO READY-MADE HASH HERE?
+-- An earlier version of this file shipped a pre-computed hash for
+-- "Admin@123". Because the repo is public, that pair was effectively
+-- published — anyone who found the deployment could sign in to the
+-- back office (36 reports, settings, table-QR, user management).
+-- The hash is now generated per-install, so no two deployments share
+-- a known password. If you already ran the old script, change the
+-- admin password NOW.
 -- ============================================================
+
+DECLARE @loginName varchar(50) = 'admin';
+DECLARE @hash      varchar(400) = 'PASTE_YOUR_SCRYPT_HASH_HERE';
+
+IF @hash = 'PASTE_YOUR_SCRYPT_HASH_HERE' OR @hash NOT LIKE 'scrypt$%$%'
+BEGIN
+    RAISERROR(
+      'Generate a password hash first:  node scripts/hash-password.mjs "YourStrongPassword"  — then paste it into @hash.',
+      16, 1);
+    RETURN;
+END
 
 IF NOT EXISTS (
     SELECT 1 FROM dbo.Tbl_UserDetails
-    WHERE LTRIM(RTRIM(LoginName)) = 'admin'
+    WHERE LTRIM(RTRIM(LoginName)) = @loginName
 )
 BEGIN
     INSERT INTO dbo.Tbl_UserDetails
@@ -22,14 +46,24 @@ BEGIN
     VALUES
         ('UADMIN',
          'N/A',
-         'admin',
+         @loginName,
          '',              -- legacy POS "PSW" column left empty
-         'admin',
-         'scrypt$93eb20288574fa286e5acf6c49b954c0$c395a893d8c2ffcf1872994719094935952f0f1cbb9a1265a1fdbbdeeebdedc2a4b901eddcdef3169d4d92dc2a63f880857ac9f36ff5e2f5f829d7f27ea149e0',
+         @loginName,
+         @hash,           -- scrypt$<salt>$<hash>  (your own password)
          'ADMIN',
          'Administrator',
-         '', '', '', '', '', '0771096131', '',
+         '', '', '', '', '',
+         '0771096131',    -- ← ContNo: forgot-password OTP SMS yanawa. CHANGE THIS.
+         '',
          '1980-01-01', GETDATE(), '1900-01-01',
          'SYSTEM', NULL, 1, '');
+
+    PRINT 'Admin user created. Login name: ' + @loginName;
+END
+ELSE
+BEGIN
+    PRINT 'Login "' + @loginName + '" already exists — nothing inserted.';
+    PRINT 'To reset its password from SQL, run the UPDATE below with a fresh hash:';
+    PRINT '  UPDATE dbo.Tbl_UserDetails SET Password = ''scrypt$...'' WHERE LTRIM(RTRIM(LoginName)) = ''admin'';';
 END
 GO

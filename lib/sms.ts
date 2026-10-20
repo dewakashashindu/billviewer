@@ -34,6 +34,14 @@ function isTextLkConfigured(): boolean {
   return Boolean(process.env.TEXTLK_API_TOKEN && process.env.TEXTLK_SENDER_ID);
 }
 
+/**
+ * Exported for the forgot-password route: the HTTP response must be
+ * IDENTICAL whether or not the account exists, so the only thing this
+ * may reveal is "is the SMS gateway configured at all" (a global fact,
+ * not per-account). Never return the real per-request send result.
+ */
+export const isSmsConfigured = isTextLkConfigured;
+
 /** Text.lk v3 API — POST + Bearer auth */
 export async function sendTextLkSMS(
   recipient: string,

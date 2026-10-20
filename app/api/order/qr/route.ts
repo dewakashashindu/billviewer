@@ -23,7 +23,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
-import { requireSession } from "@/lib/actionAuth";
+import { requireSession, UnauthorizedError } from "@/lib/actionAuth";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { encryptTableId, encryptTakeawayId, TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
 import { QR_MENU_BASE_URL } from "@/config/qr.config";
@@ -107,6 +107,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    /* requireSession() throws FIRST — report it as 401, not 500.
+       (500 hid the fact that this endpoint was being called without
+       a session, and made the auth failure look like a server bug.) */
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
+    }
     console.error("QR url route error:", error);
     return NextResponse.json(
       { ok: false, error: "Could not build the QR links." },
