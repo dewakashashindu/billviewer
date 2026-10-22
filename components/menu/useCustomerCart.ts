@@ -178,12 +178,12 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
 
     /* Takeaway has no table bill — every confirm is its own TA order. */
     if (takeaway) {
-      const saved = readStore(table);
       void Promise.resolve().then(() => {
         if (!alive) return;
         setLines([]);
-        setBaseline(saved?.baseline ?? {});
+        setBaseline({});
         setInvoiceNo("");
+        writeStore(table, null);
         setHydrated(true);
       });
       return () => {
@@ -462,18 +462,27 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
         orderType: data.orderType ?? (takeaway ? "TA" : "DI"),
       };
 
-      // Confirmed → the whole cart becomes the new read-only baseline.
-      const nextBaseline: CartStore["baseline"] = { ...baseline };
-      for (const l of lines) {
-        nextBaseline[l.key] = {
-          qty: l.qty,
-          name: l.name,
-          price: l.unitPrice,
-          remark: l.remark,
-        };
+      if (takeaway) {
+        // Takeaway creates a standalone TA serial each time — clear cart
+        // & baseline immediately so previous items never linger.
+        setLines([]);
+        setBaseline({});
+        setInvoiceNo("");
+        writeStore(table, null);
+      } else {
+        // Dine-in → confirmed cart becomes the table's read-only baseline.
+        const nextBaseline: CartStore["baseline"] = { ...baseline };
+        for (const l of lines) {
+          nextBaseline[l.key] = {
+            qty: l.qty,
+            name: l.name,
+            price: l.unitPrice,
+            remark: l.remark,
+          };
+        }
+        setBaseline(nextBaseline);
+        if (result.invoiceNo) setInvoiceNo(result.invoiceNo);
       }
-      setBaseline(nextBaseline);
-      if (result.invoiceNo) setInvoiceNo(result.invoiceNo);
       setLastResult(result);
       return result;
     } catch (e) {
@@ -485,13 +494,31 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
     }
   }, [baseline, confirming, guest, lines, newLines, table, tableGroup, token, takeaway]);
 
-  const resetAll = useCallback(() => {
-    setLines([]);
-    setBaseline({});
-    setInvoiceNo("");
-    setLastResult(null);
-    writeStore(table, null);
-  }, [table]);
+  const resetAll = useCallback(
+    (clearGuest = false) => {
+      setLines([]);
+      setBaseline({});
+      setInvoiceNo("");
+      setLastResult(null);
+      setConfirmError(null);
+      writeStore(table, null);
+      if (clearGuest) {
+        setGuest({
+          localPax: 0,
+          foreignPax: 0,
+          cusName: "",
+          cusPhone: "",
+          cusCode: "",
+        });
+        try {
+          if (table) localStorage.removeItem(guestStorageKey(table));
+        } catch {
+          /* ignore storage errors */
+        }
+      }
+    },
+    [table]
+  );
 
   return {
     // not hydrated yet (and we do have a table) → the cart is still loading

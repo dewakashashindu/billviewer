@@ -408,8 +408,21 @@ export default function MenuClient({
       {view === "success" && cart.lastResult && (
         <OrderSuccess
           result={cart.lastResult}
-          onAddMore={() => setView("home")}
-          onDone={() => setView("welcome")}
+          onAddMore={() => {
+            setGroup(null);
+            setSub(null);
+            setView("home");
+          }}
+          onDone={() => {
+            if (isTakeaway) {
+              cart.resetAll(true);
+            }
+            setGroup(null);
+            setSub(null);
+            setDetailId(null);
+            setView("welcome");
+            window.scrollTo({ top: 0 });
+          }}
         />
       )}
     </div>

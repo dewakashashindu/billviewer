@@ -15,6 +15,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Mila Mirissa — Bill Viewer",
   description: "Mila Mirissa restaurant bill viewer and reports",
+  icons: {
+    icon: [
+      { url: "/favicon-mila.png?v=2", type: "image/png", sizes: "64x64" },
+      { url: "/favicon.ico?v=2" },
+    ],
+    shortcut: "/favicon-mila.png?v=2",
+    apple: "/favicon-mila.png?v=2",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
