@@ -42,6 +42,16 @@ function IQr() {
     </svg>
   );
 }
+function IUserPlus() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  );
+}
 function IChevRight() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -74,6 +84,15 @@ interface NavItem {
   icon: React.ReactElement;
   path?: string;
   children?: Category[];
+  adminOnly?: boolean;
+}
+
+export interface ShellUserInfo {
+  userId: string;
+  loginName: string;
+  userName: string;
+  groupId?: string;
+  isAdmin: boolean;
 }
 
 const NAV: NavItem[] = [
@@ -251,6 +270,14 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    // Right below Reports — Admin User Creation page
+    key: "user-creation",
+    label: "User Creation",
+    icon: <IUserPlus />,
+    path: "/user-creation",
+    adminOnly: true,
+  },
+  {
     // Last sidebar item — Table QR generator page
     key: "table-qr",
     label: "Table QR Codes",
@@ -353,22 +380,13 @@ const SHELL_CSS = `
 `;
 
 /* ── UserBar — content area top-right: logged-in user + sign-out ── */
-function UserBar() {
+function UserBar({
+  user,
+}: {
+  user: ShellUserInfo | null;
+}) {
   const router = useRouter();
-  const [name, setName] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        if (alive && d.success) setName(d.data.userName || d.data.loginName || "");
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const name = user?.userName || user?.loginName || "";
 
   async function logout() {
     try {
@@ -412,6 +430,23 @@ function UserBar() {
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "#684830" }}>
             {name}
           </span>
+          {user && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "2px 7px",
+                borderRadius: 999,
+                background: user.isAdmin ? "#F0E8D8" : "#F8F4EE",
+                border: "1px solid #E4D6BF",
+                color: user.isAdmin ? "#45301D" : "#6B543E",
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+              }}
+            >
+              {user.isAdmin ? "Admin" : "User"}
+            </span>
+          )}
         </span>
       )}
       <button
@@ -440,9 +475,18 @@ function UserBar() {
   );
 }
 
-export default function AppShell({ children }: { children: ReactNode }) {
+export default function AppShell({
+  children,
+  currentUser,
+}: {
+  children: ReactNode;
+  currentUser?: ShellUserInfo;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const [userInfo, setUserInfo] = useState<ShellUserInfo | null>(
+    currentUser ?? null
+  );
   const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     reports: true,
@@ -452,6 +496,36 @@ export default function AppShell({ children }: { children: ReactNode }) {
     reportId?: string;
     filter?: DateRangeFilterSpec;
   } | null>(null);
+
+  useEffect(() => {
+    if (currentUser) {
+      setUserInfo(currentUser);
+      return;
+    }
+    let alive = true;
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        const u = d.user || d.data;
+        if (alive && d.success && u) {
+          setUserInfo({
+            userId: String(u.userId ?? ""),
+            loginName: String(u.loginName ?? ""),
+            userName: String(u.userName ?? u.loginName ?? ""),
+            groupId: String(u.groupId ?? ""),
+            isAdmin: Boolean(u.isAdmin),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [currentUser]);
+
+  const visibleNav = NAV.filter(
+    (item) => !item.adminOnly || Boolean(userInfo?.isAdmin)
+  );
 
   function toggle(key: string) {
     setExpanded((p) => ({ ...p, [key]: !p[key] }));
@@ -528,7 +602,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           gap: 1,
         }}
       >
-        {NAV.map((item) => {
+        {visibleNav.map((item) => {
           const isDirect = !item.children;
           const activeItem = isDirect && pathname.startsWith(item.path ?? "#");
           const isExpanded = !!expanded[item.key];
@@ -732,7 +806,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   /* ─────────── MOBILE BOTTOM NAV ─────────── */
   const mobileNav = (
     <nav className="sh-mob-nav">
-      {NAV.map((item) => {
+      {visibleNav.map((item) => {
         const active = item.path
           ? pathname.startsWith(item.path)
           : pathname.startsWith("/reports");
@@ -773,7 +847,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           flexDirection: "column",
         }}
       >
-        <UserBar />
+        <UserBar user={userInfo} />
         {children}
       </main>
 

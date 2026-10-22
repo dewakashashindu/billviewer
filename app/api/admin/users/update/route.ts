@@ -1,22 +1,52 @@
 // ============================================================
 // LOCATION: app/api/admin/users/update/route.ts
-// ALUTH FILE — mekamama create karanna
 // POST { userId, action: "toggle" | "reset", password? }
-//   toggle — Enable 0/1 (thawa user kenekta witharak)
+//   toggle — Enable 0/1 (Admin only, cannot disable own account)
 //   reset  — Password column ekata aluth scrypt hash
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { verifySessionValue, hashPassword, SESSION_COOKIE } from "@/lib/auth";
+import {
+  verifySessionValue,
+  hashPassword,
+  isAdminSession,
+  SESSION_COOKIE,
+} from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  const session = (() => {
-    const token = req.cookies.get(SESSION_COOKIE)?.value;
-    return token ? verifySessionValue(token) : null;
-  })();
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  const session = token ? verifySessionValue(token) : null;
   if (!session) {
-    return NextResponse.json({ success: false, error: "Not logged in" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, error: "Not logged in" },
+      { status: 401 }
+    );
+  }
+
+  let groupId = session.groupId ?? "";
+  if (!groupId && isDbConfigured()) {
+    try {
+      const pool = await getPool();
+      const r = await pool
+        .request()
+        .input("uid", sql.Char(10), String(session.userId))
+        .query(`
+          SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId, ''))) AS GroupId
+          FROM Tbl_UserDetails WITH (NOLOCK)
+          WHERE LTRIM(RTRIM(UserId)) = LTRIM(RTRIM(@uid))
+        `);
+      if (r.recordset[0]) groupId = String(r.recordset[0].GroupId ?? "");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!isAdminSession({ ...session, groupId })) {
+    return NextResponse.json(
+      { success: false, error: "Admin access required" },
+      { status: 403 }
+    );
   }
 
   try {
@@ -38,36 +68,39 @@ export async function POST(req: NextRequest) {
     const pool = await getPool();
 
     if (action === "toggle") {
-      if (String(userId).toUpperCase() === String(session.userId).toUpperCase()) {
+      if (
+        String(userId).trim().toUpperCase() ===
+        String(session.userId).trim().toUpperCase()
+      ) {
         return NextResponse.json(
           { success: false, error: "You cannot disable your own account" },
           { status: 400 }
         );
       }
       const req2 = pool.request();
-      req2.input("userId", sql.Char(10), String(userId));
+      req2.input("userId", sql.Char(10), String(userId).trim());
       await req2.query(`
         UPDATE Tbl_UserDetails
         SET Enable = CASE WHEN Enable = 1 THEN 0 ELSE 1 END
-        WHERE UserId = @userId
+        WHERE LTRIM(RTRIM(UserId)) = LTRIM(RTRIM(@userId))
       `);
       return NextResponse.json({ success: true });
     }
 
     if (action === "reset") {
-      if (!password || String(password).length < 6) {
+      if (!password || String(password).length < 4) {
         return NextResponse.json(
-          { success: false, error: "Password must be at least 6 characters" },
+          { success: false, error: "Password must be at least 4 characters" },
           { status: 400 }
         );
       }
       const req2 = pool.request();
-      req2.input("userId", sql.Char(10), String(userId));
+      req2.input("userId", sql.Char(10), String(userId).trim());
       req2.input("psw", sql.VarChar(400), hashPassword(String(password)));
       await req2.query(`
         UPDATE Tbl_UserDetails
         SET Password = @psw
-        WHERE UserId = @userId
+        WHERE LTRIM(RTRIM(UserId)) = LTRIM(RTRIM(@userId))
       `);
       return NextResponse.json({ success: true });
     }

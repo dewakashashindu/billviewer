@@ -1,24 +1,17 @@
 // ============================================================
 // LOCATION: app/api/auth/login/route.ts
-// ALUTH FILE — mekamama create karanna
-// POST { loginName, password } → session cookie set karanawa
-// Verify: Tbl_UserDetails.LoginName + Password (scrypt hash), Enable=1
-//
-// BRUTE-FORCE PROTECTION (2 layers, lib/rateLimit.ts):
-//   1. per-IP       — 30 attempts / 15 min  → 429
-//   2. per-account  — 5 FAILED attempts / 15 min → account locked 429
-//      (successful login eken counter eka reset wenawa)
-// Layer 2 eka failures witharak count karanne — horu attempt 5k
-// passe login name eka hari unath 15 min lock. Message eka
-// "invalid login name or password" ekama — account ekak thiyenawada
-// kiyala penwanne naha.
+// POST { loginName (or username), password } → session cookie set karanawa
+// Verify: Tbl_UserDetails.LoginName + Password, Enable=1
+// (Legacy LogName column eka use karanne naha — aluth LoginName witharai)
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
+import { ensureLoginNameColumn } from "@/lib/userSchema";
 import {
   verifyPassword,
   createSessionValue,
+  isAdminSession,
   SESSION_COOKIE,
 } from "@/lib/auth";
 import {
@@ -36,11 +29,11 @@ const FAIL_LIMIT = 5;
 /** Both windows — 15 minutes. */
 const WINDOW_MS = 15 * 60_000;
 
-const INVALID = { success: false, error: "Invalid login name or password" };
+const INVALID = { success: false, error: "Invalid username or password" };
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const loginName = String(body?.loginName ?? "").trim();
+  const loginName = String(body?.loginName ?? body?.username ?? "").trim();
   const password = String(body?.password ?? "");
 
   const ip = clientIp(req.headers);
@@ -55,13 +48,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  /* Per-source lock — checked before any DB work so a locked
-     source cannot hammer the database either.
-
-     Keyed by IP **and** login name on purpose: a global per-account
-     lock would let anyone lock a real manager out by typing 5 wrong
-     passwords for their login name. The per-IP bucket above caps the
-     total guessing one source can do across all accounts. */
   const failKey = `login-fail:${ip}:${loginName.toLowerCase()}`;
   const locked = tooMany(failKey, FAIL_LIMIT, WINDOW_MS);
   if (!locked.allowed) {
@@ -83,7 +69,7 @@ export async function POST(req: NextRequest) {
   try {
     if (!loginName || !password) {
       return NextResponse.json(
-        { success: false, error: "Login name and password are required" },
+        { success: false, error: "Username and password are required" },
         { status: 400 }
       );
     }
@@ -96,17 +82,20 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = await getPool();
+    await ensureLoginNameColumn(pool);
     const request = pool.request();
     request.input("loginName", sql.VarChar(50), loginName);
     const res = await request.query(`
       SELECT TOP 1
-        LTRIM(RTRIM(u.UserId))   AS UserId,
+        LTRIM(RTRIM(u.UserId))    AS UserId,
         LTRIM(RTRIM(u.LoginName)) AS LoginName,
         ISNULL(NULLIF(LTRIM(RTRIM(u.UserName)), ''), LTRIM(RTRIM(u.LoginName))) AS UserName,
+        LTRIM(RTRIM(ISNULL(u.GroupId, ''))) AS GroupId,
         u.Password,
         u.Enable
       FROM Tbl_UserDetails u WITH (NOLOCK)
-      WHERE LTRIM(RTRIM(u.LoginName)) = @loginName
+      WHERE NULLIF(LTRIM(RTRIM(u.LoginName)), '') IS NOT NULL
+        AND LTRIM(RTRIM(u.LoginName)) = @loginName
     `);
 
     const user = res.recordset[0];
@@ -116,15 +105,24 @@ export async function POST(req: NextRequest) {
     /* Success — clear the failure counter for this account. */
     resetKey(failKey);
 
-    const token = createSessionValue({
+    const sessionPayload = {
       userId: String(user.UserId),
       loginName: String(user.LoginName),
       userName: String(user.UserName),
-    });
+      groupId: String(user.GroupId ?? ""),
+    };
+
+    const token = createSessionValue(sessionPayload);
 
     const out = NextResponse.json({
       success: true,
-      user: { userName: String(user.UserName), loginName: String(user.LoginName) },
+      user: {
+        userId: sessionPayload.userId,
+        userName: sessionPayload.userName,
+        loginName: sessionPayload.loginName,
+        groupId: sessionPayload.groupId,
+        isAdmin: isAdminSession(sessionPayload),
+      },
     });
     out.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,

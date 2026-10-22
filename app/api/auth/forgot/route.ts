@@ -1,23 +1,8 @@
 // ============================================================
 // LOCATION: app/api/auth/forgot/route.ts
-// ALUTH FILE — mekamama create karanna
 // POST { loginName } → OTP generate → SMS eken ContNo ta →
 // stateless OTP token httpOnly cookie ekata (10 min)
-//
-// HARDENING
-// 1) Rate limited (lib/rateLimit.ts) — Text.lk SMS ekak mudu,
-//    nisa endpoint eka free SMS-bombing ekakata use karanna ba:
-//      • per IP        → 3 requests / hour
-//      • per loginName → 2 requests / hour
-// 2) NO USER ENUMERATION — account thiyedad, phone number ekak
-//    thiyedad, SMS eka giyedad → HTTP response eka **ekama**.
-//    (kalin: 404 "No active account found", 400 "No mobile number
-//     on file", 200 + maskedPhone "077****13" — staff login names +
-//     phone digits enumerate karanna puluwan unaa.)
-//    `smsSent` dan reflect karanne gateway eka CONFIGURED da kiyala
-//    witharak (global fact ekak) — per-request result eka nemei.
-// 3) Real outcome eka server log ekata witharak (admin ta debug
-//    karanna), browser ekata nemei.
+// Lookup strictly uses Tbl_UserDetails.LoginName (never LogName).
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
@@ -34,10 +19,9 @@ const USER_LIMIT = 2; // per login name, per hour
 const uniformResponse = () =>
   NextResponse.json({
     success: true,
-    // Gateway configured? (global — says nothing about this account.)
     smsSent: isSmsConfigured(),
     message:
-      "If an active account exists for that login name, a verification code has been sent by SMS. It is valid for 10 minutes.",
+      "If an active account exists for that username, a verification code has been sent by SMS. It is valid for 10 minutes.",
   });
 
 export async function POST(req: NextRequest) {
@@ -55,10 +39,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const loginName = String(body?.loginName ?? "").trim();
+  const loginName = String(body?.loginName ?? body?.username ?? "").trim();
   if (!loginName) {
     return NextResponse.json(
-      { success: false, error: "Login name is required" },
+      { success: false, error: "Username is required" },
       { status: 400 }
     );
   }
@@ -72,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Too many requests for this login name. Please try again later.",
+        error: "Too many requests for this username. Please try again later.",
       },
       { status: 429, headers: { "Retry-After": String(userLimit.retryAfterSeconds) } }
     );
@@ -92,7 +76,9 @@ export async function POST(req: NextRequest) {
         LTRIM(RTRIM(LoginName)) AS LoginName,
         LTRIM(RTRIM(ContNo))    AS ContNo
       FROM Tbl_UserDetails WITH (NOLOCK)
-      WHERE LTRIM(RTRIM(LoginName)) = @loginName AND Enable = 1
+      WHERE NULLIF(LTRIM(RTRIM(LoginName)), '') IS NOT NULL
+        AND LTRIM(RTRIM(LoginName)) = @loginName
+        AND Enable = 1
     `);
 
     const user = res.recordset[0];
@@ -111,8 +97,6 @@ export async function POST(req: NextRequest) {
       `Mila Mirissa password reset code: ${code} (valid 10 minutes)`
     );
     if (!sent) {
-      /* Gateway down / not configured — the browser still gets the
-         same 200, so this is only visible in the server log. */
       console.error(`Forgot password: SMS send FAILED for "${loginName}"`);
       return uniformResponse();
     }
@@ -128,8 +112,6 @@ export async function POST(req: NextRequest) {
     return out;
   } catch (e) {
     console.error("Forgot password error:", e);
-    /* 500 ekath enumeration ekakata use karanna puluwan nisa
-       (DB down = account thiyenawa) — same 200 shape eka. */
     return uniformResponse();
   }
 }

@@ -25,7 +25,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 echo "BASE=$BASE"
 echo
 echo "── 1) back office pages (cookie nathuwa) ──────────────────"
-for p in /dashboard /reports /reports/sales-summary /orders /table-qr /settings; do
+for p in /dashboard /reports /reports/sales-summary /orders /table-qr /settings /user-creation; do
   check "$p → /login" "307" "$(code "$BASE$p")"
 done
 

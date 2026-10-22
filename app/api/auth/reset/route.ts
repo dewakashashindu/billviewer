@@ -1,21 +1,6 @@
 // ============================================================
 // LOCATION: app/api/auth/reset/route.ts
-// ALUTH FILE — mekamama create karanna
 // POST { loginName, code, password } → OTP verify → Password column hash update
-//
-// HARDENING — OTP brute force / account takeover block
-// The OTP is a 6-digit code with a 10-minute life, and the cookie
-// is handed to WHOEVER called /api/auth/forgot (the SMS goes to the
-// real user's phone). So without an attempt limit an attacker could
-// simply guess the code: 10^6 combos inside 10 minutes.
-//
-//   1. per IP+loginName → 5 WRONG codes / 10 min, then 429
-//      ("request a new code")
-//   2. an OTP that verified successfully is CONSUMED server-side —
-//      replaying the same cookie value again fails, even though the
-//      cookie is only cleared on the client.
-//   3. counters reset when a code verifies, so a real user who
-//      mistypes once is not punished.
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
@@ -39,7 +24,7 @@ const tokenFingerprint = (token: string) =>
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const loginName = String(body?.loginName ?? "").trim();
+  const loginName = String(body?.loginName ?? body?.username ?? "").trim();
   const code = String(body?.code ?? "").trim();
   const password = String(body?.password ?? "");
 
@@ -68,7 +53,6 @@ export async function POST(req: NextRequest) {
   const guessKey = `otp-guess:${ip}:${loginName.toLowerCase()}`;
   const usedKey = `otp-used:${tokenFingerprint(otpToken)}`;
 
-  /* 2) already-consumed OTP → reject before doing any work. */
   if (!tooMany(usedKey, 1, WINDOW_MS).allowed) {
     return NextResponse.json(
       {
@@ -79,7 +63,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  /* 1) too many wrong guesses for this code → 429, ask for a new one. */
   const guesses = tooMany(guessKey, GUESS_LIMIT, WINDOW_MS);
   if (!guesses.allowed) {
     return NextResponse.json(
@@ -93,14 +76,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (!verifyOtpToken(otpToken, loginName, code)) {
-    registerHit(guessKey, WINDOW_MS); // count the wrong guess
+    registerHit(guessKey, WINDOW_MS);
     return NextResponse.json(
       { success: false, error: "Invalid or expired verification code" },
       { status: 401 }
     );
   }
 
-  /* Code is correct — clear the guess counter and consume the OTP. */
   resetKey(guessKey);
   registerHit(usedKey, WINDOW_MS);
 
@@ -119,11 +101,11 @@ export async function POST(req: NextRequest) {
     const res = await request.query(`
       UPDATE Tbl_UserDetails
       SET Password = @psw
-      WHERE LTRIM(RTRIM(LoginName)) = @loginName AND Enable = 1
+      WHERE NULLIF(LTRIM(RTRIM(LoginName)), '') IS NOT NULL
+        AND LTRIM(RTRIM(LoginName)) = @loginName
+        AND Enable = 1
     `);
 
-    /* No row updated = unknown/disabled login name. The OTP was still
-       consumed above, so it cannot be replayed against another name. */
     if ((res.rowsAffected?.[0] ?? 0) === 0) {
       console.warn(`Password reset: no active account "${loginName}"`);
       return NextResponse.json(
@@ -133,7 +115,6 @@ export async function POST(req: NextRequest) {
     }
 
     const out = NextResponse.json({ success: true });
-    // otp cookie clear — session cookie witharak (reset wela session ekuth clear)
     out.cookies.set(OTP_COOKIE, "", { path: "/", maxAge: 0 });
     out.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
     return out;

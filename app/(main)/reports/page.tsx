@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import UserCreationPanel from "@/components/UserCreationPanel";
 
 /* ── inline SVG icons (emoji naha — professional icons) ── */
 const iconWrap = { width: 34, height: 34, borderRadius: 9, background: "#F0E8D8", border: "1px solid #E4D6BF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } as const;
@@ -151,6 +152,9 @@ export default function ReportsLandingPage() {
           </button>
         ))}
       </div>
+
+      {/* User Creation section below Reports (visible for Admins) */}
+      <UserCreationPanel embedded />
     </div>
   );
 }

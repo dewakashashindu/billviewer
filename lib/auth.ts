@@ -1,26 +1,13 @@
 // ============================================================
 // LOCATION: lib/auth.ts
-// ALUTH FILE — mekamama create karanna
-//
 // Auth helpers (SERVER ONLY — node:crypto):
-//   • Password hashing  — scrypt + random salt (DB Password column)
+//   • Login verification — Tbl_UserDetails.LoginName + Password
+//   • Password hashing   — scrypt + random salt (DB Password column)
 //     format: "scrypt$<salthex>$<hashhex>"
-//   • Session cookie    — HMAC-SHA256 signed
+//   • Session cookie     — HMAC-SHA256 signed
 //     format: base64url(payload).hmac
-// POS eke legacy "PSW" column eka KEWAT TOUCH KARANNE NAHA —
-// report auth eka "Password" column eka witharak use karanawa
-// (see create_admin_user.sql).
-//
-// ⚠️ SECRETS — set these separately in production:
-//   SESSION_SECRET  signs the login session cookie
-//   OTP_SECRET      signs the password-reset OTP token
-// Both FALL BACK to ENCRYPTION_KEY when unset, so an existing
-// deployment keeps working unchanged. But ENCRYPTION_KEY is the
-// same key that encrypts bill links and table QR ids (and it is
-// shared with the POS Windows service), so if it ever leaks an
-// attacker could forge sessions and password-reset codes too.
-// Setting the two vars above closes that path.
-// (lib/orderToken.ts already reads ORDER_TOKEN_SECRET the same way.)
+// POS eke legacy "LogName" / "PSW" columns KEWAT TOUCH KARANNE NAHA —
+// web auth eka "LoginName" saha "Password" columns witharak use karanawa.
 // ============================================================
 import crypto from "crypto";
 
@@ -46,7 +33,7 @@ const b64url = (buf: Buffer | string) =>
 const hmac = (data: string, secret: string) =>
   crypto.createHmac("sha256", secret).update(data).digest("base64url");
 
-// ── Password hashing (scrypt) ──
+// ── Password hashing & verification ──
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16);
   const hash = crypto.scryptSync(password, salt, 64);
@@ -54,19 +41,30 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, stored: string): boolean {
-  const parts = String(stored || "").split("$");
-  if (parts.length !== 3 || parts[0] !== "scrypt") return false; // POS-era value — report login not set yet
-  try {
-    const salt = Buffer.from(parts[1], "hex");
-    const expected = Buffer.from(parts[2], "hex");
-    const actual = crypto.scryptSync(password, salt, 64);
-    return (
-      actual.length === expected.length &&
-      crypto.timingSafeEqual(actual, expected)
-    );
-  } catch {
-    return false;
+  const raw = String(stored ?? "").trim();
+  if (!password || !raw) return false;
+
+  // Standard web format: scrypt$<saltHex>$<hashHex>
+  if (raw.startsWith("scrypt$")) {
+    const parts = raw.split("$");
+    if (parts.length !== 3) return false;
+    try {
+      const salt = Buffer.from(parts[1], "hex");
+      const expected = Buffer.from(parts[2], "hex");
+      const actual = crypto.scryptSync(password, salt, 64);
+      return (
+        actual.length === expected.length &&
+        crypto.timingSafeEqual(actual, expected)
+      );
+    } catch {
+      return false;
+    }
   }
+
+  // Fallback for accounts whose Password column was populated directly in SQL
+  const a = Buffer.from(password, "utf8");
+  const b = Buffer.from(raw, "utf8");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // ── Session cookie (signed) ──
@@ -74,12 +72,30 @@ export interface SessionUser {
   userId: string;
   loginName: string;
   userName: string;
+  groupId?: string;
   exp: number; // epoch seconds
 }
 
-export function createSessionValue(
-  u: Omit<SessionUser, "exp">
-): string {
+/** Check whether a session user has Admin privileges. */
+export function isAdminSession(
+  u:
+    | Pick<SessionUser, "userId" | "loginName" | "groupId">
+    | null
+    | undefined
+): boolean {
+  if (!u) return false;
+  const grp = String(u.groupId ?? "").trim().toUpperCase();
+  const uid = String(u.userId ?? "").trim().toUpperCase();
+  const login = String(u.loginName ?? "").trim().toLowerCase();
+  return (
+    grp === "ADMIN" ||
+    grp === "ADMINISTRATOR" ||
+    uid === "UADMIN" ||
+    login === "admin"
+  );
+}
+
+export function createSessionValue(u: Omit<SessionUser, "exp">): string {
   const payload: SessionUser = {
     ...u,
     exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 24 * 3600,
@@ -110,10 +126,7 @@ export function verifySessionValue(value: string): SessionUser | null {
 }
 
 // ── OTP token (stateless — cookie eke HMAC witharai) ──
-export function createOtpToken(
-  loginName: string,
-  code: string
-): string {
+export function createOtpToken(loginName: string, code: string): string {
   const exp = Math.floor(Date.now() / 1000) + OTP_MINUTES * 60;
   const sig = hmac(`otp|${loginName}|${code}|${exp}`, OTP_SECRET());
   return `${exp}.${sig}`;

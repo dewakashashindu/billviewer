@@ -9,21 +9,18 @@
 --
 --    STEP 2 — paste that string into @hash below, then run this.
 --
--- The password is stored as a SCRYPT HASH in the Password column
--- (never plain text). Sign in and change it any time from
--- Settings > Reset Password.
---
--- 🔒 WHY NO READY-MADE HASH HERE?
--- An earlier version of this file shipped a pre-computed hash for
--- "Admin@123". Because the repo is public, that pair was effectively
--- published — anyone who found the deployment could sign in to the
--- back office (36 reports, settings, table-QR, user management).
--- The hash is now generated per-install, so no two deployments share
--- a known password. If you already ran the old script, change the
--- admin password NOW.
+-- Username saves ONLY into the new [LoginName] column (legacy POS
+-- [LogName] and [PSW] columns are left empty '').
+-- Password saves into the [Password] column as a scrypt hash.
 -- ============================================================
 
-DECLARE @loginName varchar(50) = 'admin';
+IF COL_LENGTH('dbo.Tbl_UserDetails', 'LoginName') IS NULL
+BEGIN
+    ALTER TABLE dbo.Tbl_UserDetails ADD LoginName VARCHAR(50) NULL;
+END
+GO
+
+DECLARE @loginName varchar(50)  = 'admin';
 DECLARE @hash      varchar(400) = 'PASTE_YOUR_SCRYPT_HASH_HERE';
 
 IF @hash = 'PASTE_YOUR_SCRYPT_HASH_HERE' OR @hash NOT LIKE 'scrypt$%$%'
@@ -46,10 +43,10 @@ BEGIN
     VALUES
         ('UADMIN',
          'N/A',
-         @loginName,
+         '',              -- legacy POS "LogName" column left empty
          '',              -- legacy POS "PSW" column left empty
-         @loginName,
-         @hash,           -- scrypt$<salt>$<hash>  (your own password)
+         @loginName,      -- new "LoginName" column
+         @hash,           -- scrypt$<salt>$<hash> in "Password" column
          'ADMIN',
          'Administrator',
          '', '', '', '', '',
@@ -58,11 +55,11 @@ BEGIN
          '1980-01-01', GETDATE(), '1900-01-01',
          'SYSTEM', NULL, 1, '');
 
-    PRINT 'Admin user created. Login name: ' + @loginName;
+    PRINT 'Admin user created. LoginName: ' + @loginName;
 END
 ELSE
 BEGIN
-    PRINT 'Login "' + @loginName + '" already exists — nothing inserted.';
+    PRINT 'LoginName "' + @loginName + '" already exists — nothing inserted.';
     PRINT 'To reset its password from SQL, run the UPDATE below with a fresh hash:';
     PRINT '  UPDATE dbo.Tbl_UserDetails SET Password = ''scrypt$...'' WHERE LTRIM(RTRIM(LoginName)) = ''admin'';';
 END
