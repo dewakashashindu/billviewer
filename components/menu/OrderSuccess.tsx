@@ -37,12 +37,17 @@ export default function OrderSuccess({
 
       <div style={s.card}>
         {takeaway ? (
-          /* TA has no table: the serial IS the order number — showing
-             "Takeaway no → Takeaway" told the guest nothing. */
-          <div style={s.cardRow}>
-            <span style={s.k}>Takeaway no</span>
-            <span style={{ ...s.v, fontSize: 20 }}>{result.invoiceNo || "—"}</span>
-          </div>
+          <>
+            <div style={s.cardRow}>
+              <span style={s.k}>Invoice no</span>
+              <span style={s.v}>{result.invoiceNo || "—"}</span>
+            </div>
+            <div style={s.rowLine} />
+            <div style={s.cardRow}>
+              <span style={s.k}>Takeaway no</span>
+              <span style={s.v}>{result.tableNo || "—"}</span>
+            </div>
+          </>
         ) : (
           <>
             <div style={s.cardRow}>

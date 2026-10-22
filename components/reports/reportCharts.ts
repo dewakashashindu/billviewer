@@ -638,6 +638,17 @@ function rowsCharts(rows: Array<Record<string, unknown>>): ChartModel[] {
 
 function perfCharts(d: PerformanceReportData): ChartModel[] {
   if (!d || !Array.isArray(d.sections)) return [];
+  const locSalesPts: ChartPoint[] = [];
+  if (Array.isArray(d.locationReports) && d.locationReports.length >= 2) {
+    const locM: Agg = new Map();
+    for (const lr of d.locationReports) {
+      const svSec = (lr.sections ?? []).find((s) => s.heading === "SALES VOLUME");
+      const raw = svSec?.rows?.[0]?.amt ?? "0";
+      const val = Number(String(raw).replace(/,/g, ""));
+      if (Number.isFinite(val)) bump(locM, lr.locName || lr.locCode, 0, val, 1);
+    }
+    locSalesPts.push(...toPoints(locM, false));
+  }
   const secPts = (heading: string, skipLabel?: string): ChartPoint[] => {
     const sec = d.sections.find((s) => s.heading === heading);
     if (!sec || !Array.isArray(sec.rows)) return [];
@@ -650,6 +661,7 @@ function perfCharts(d: PerformanceReportData): ChartModel[] {
     return toPoints(m, false);
   };
   return [
+    ...only(hbars("perf-loc", "Location-wise Sales Volume", locSalesPts, "currency")),
     ...only(pie("perf-sm", "Service Mode Collection", secPts("SERVICE MODE COLLECTION"), "currency")),
     ...only(pie("perf-pm", "Pay Mode Wise Collection", secPts("PAY MODE WISE COLLECTION"), "currency")),
     ...only(hbars("perf-mg", "Main Group Sales", secPts("MAIN GROUP SALES", "MAIN GROUP TOTAL"), "currency")),

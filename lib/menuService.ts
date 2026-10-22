@@ -16,9 +16,9 @@
 //   availability are re-read from the database — the price the
 //   browser shows is never trusted.
 //   Invoice: Tbl_Serials (SeriCode 'INV') -> INV-YYYYMMDD-NNN
-//   Takeaway: Tbl_Serials (SeriCode 'TA') -> next serial (SeriNo+1)
-//             saved as the new takeaway number, OrderType = 'TA'
-//             (TabelNo = 'TA', no table is marked occupied)
+//   Takeaway: Tbl_Serials (SeriCode 'TA') -> next serial (TA-0001)
+//             written to TabelNo, plus INV-YYYYMMDD-NNN written to
+//             InvoiceNo, OrderType = 'TA' (no table marked occupied)
 //
 // If the DB_* env vars are not set, mock menu data is served
 // and confirms return a mock invoice (dev/demo mode).
@@ -506,9 +506,9 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     }
     const { ymd } = slDateParts();
     return {
-      tableNo: input.tableNo,
+      tableNo: input.takeaway ? "TA-0001" : input.tableNo,
       tableGroup: input.takeaway ? "Takeaway" : input.tableGroup,
-      invoiceNo: input.takeaway ? "TA-0001" : `INV-${ymd.replaceAll("-", "")}-001`,
+      invoiceNo: `INV-${ymd.replaceAll("-", "")}-001`,
       itemCount: input.items.reduce((a, i) => a + i.quantity, 0),
       source: "mock",
       orderType: input.takeaway ? "TA" : "DI",
@@ -578,8 +578,18 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     await loadColumnSizes(tx, ["Tbl_HoldUpsCloud", "Tbl_HoldUpsCloudTemp"]);
     const fit = makeFitter();
 
-    const invoiceMax =
-      colSizeCache.get("TBL_HOLDUPSCLOUD")?.["INVOICENO"] ?? 50;
+    const cloudInvoiceMax = colSizeCache.get("TBL_HOLDUPSCLOUD")?.["INVOICENO"];
+    const tempInvoiceMax = colSizeCache.get("TBL_HOLDUPSCLOUDTEMP")?.["INVOICENO"];
+    const invoiceMax = Math.min(
+      cloudInvoiceMax && cloudInvoiceMax > 0 ? cloudInvoiceMax : 50,
+      tempInvoiceMax && tempInvoiceMax > 0 ? tempInvoiceMax : 50
+    );
+    const cloudTableMax = colSizeCache.get("TBL_HOLDUPSCLOUD")?.["TABELNO"];
+    const tempTableMax = colSizeCache.get("TBL_HOLDUPSCLOUDTEMP")?.["TABELNO"];
+    const tableMax = Math.min(
+      cloudTableMax && cloudTableMax > 0 ? cloudTableMax : 20,
+      tempTableMax && tempTableMax > 0 ? tempTableMax : 20
+    );
     const cusCodeValue = fit(
       "Tbl_HoldUpsCloud",
       "CusCode",
@@ -592,16 +602,18 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       input.takeaway ? "TA" : "DI"
     );
     const grpValue = fit("Tbl_HoldUpsCloud", "TabelGrpID", tableGrpId);
-    const tableValue = fit("Tbl_HoldUpsCloud", "TabelNo", input.tableNo);
 
-    /* 3) Order number
-       • dine-in → the table's open invoice, or a fresh INV number
-       • takeaway → always a NEW number from Tbl_Serials ('TA') */
+    /* 3) Table / Takeaway serial + Invoice number
+       • dine-in (DI) → TabelNo = table number; InvoiceNo = table's open invoice or fresh INV
+       • takeaway (TA) → TabelNo = new TA-0001 from Tbl_Serials ('TA');
+                         InvoiceNo = new INV-YYYYMMDD-NNN from Tbl_Serials ('INV'), same as DI */
+    let resolvedTableNo = input.tableNo;
     if (input.takeaway) {
-      invoiceNo = await generateTakeawayNo(tx, invoiceMax);
+      resolvedTableNo = await generateTakeawayNo(tx, tableMax);
+      invoiceNo = await generateInvoiceNo(tx, invoiceMax);
     } else {
       const invReq = tx.request();
-      invReq.input("table", sql.VarChar(10), input.tableNo);
+      invReq.input("table", sql.VarChar(20), input.tableNo);
       const invRes = await invReq.query(`
         SELECT TOP 1 LTRIM(RTRIM(InvoiceNo)) AS InvoiceNo
         FROM dbo.Tbl_HoldUpsCloud WITH (UPDLOCK, HOLDLOCK)
@@ -612,6 +624,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         ? s(invRes.recordset[0].InvoiceNo)
         : await generateInvoiceNo(tx, invoiceMax);
     }
+    const tableValue = fit("Tbl_HoldUpsCloud", "TabelNo", resolvedTableNo);
     const invoiceValue = fit("Tbl_HoldUpsCloud", "InvoiceNo", invoiceNo);
 
     /* 4) Additive writes: bill line = final qty, activity = delta */
@@ -620,7 +633,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       const remarkValue = fit("Tbl_HoldUpsCloud", "ItemRemarks", line.remark ?? "");
 
       const find = tx.request();
-      find.input("table", sql.VarChar(10), tableValue);
+      find.input("table", sql.VarChar(20), tableValue);
       find.input("inv", sql.VarChar(50), invoiceValue);
       find.input("item", sql.VarChar(50), itemValue);
       find.input("remark", sql.VarChar(200), remarkValue);
@@ -635,7 +648,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       if (found.recordset.length) {
         const upd = tx.request();
         upd.input("qty", sql.Float, finalQty);
-        upd.input("table", sql.VarChar(10), tableValue);
+        upd.input("table", sql.VarChar(20), tableValue);
         upd.input("inv", sql.VarChar(50), invoiceValue);
         upd.input("item", sql.VarChar(50), itemValue);
         upd.input("remark", sql.VarChar(200), remarkValue);
@@ -646,7 +659,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         `);
       } else {
         const ins = tx.request();
-        ins.input("table", sql.VarChar(10), tableValue);
+        ins.input("table", sql.VarChar(20), tableValue);
         ins.input("inv", sql.VarChar(50), invoiceValue);
         ins.input("item", sql.VarChar(50), itemValue);
         ins.input("qty", sql.Float, finalQty);
@@ -676,7 +689,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
 
       /* the activity table has its OWN column sizes */
       const act = tx.request();
-      act.input("table", sql.VarChar(10), fit("Tbl_HoldUpsCloudTemp", "TabelNo", tableValue));
+      act.input("table", sql.VarChar(20), fit("Tbl_HoldUpsCloudTemp", "TabelNo", tableValue));
       act.input("inv", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "InvoiceNo", invoiceValue));
       act.input("item", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "ItemCode", itemValue));
       act.input("qty", sql.Float, line.quantity);
@@ -719,7 +732,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
 
     await tx.commit();
     return {
-      tableNo: input.tableNo,
+      tableNo: tableValue,
       tableGroup: dbTableGroup,
       invoiceNo: invoiceValue,
       itemCount: priced.reduce((a, i) => a + i.quantity, 0),

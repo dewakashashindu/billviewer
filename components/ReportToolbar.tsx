@@ -111,6 +111,10 @@ export interface ReportToolbarProps {
 
   /** Search box eka pennanawada? (default: true) */
   searchable?: boolean;
+
+  /** Single date mode (e.g. Performance Report Business Date — no From/To range) */
+  singleDate?: boolean;
+  singleDateLabel?: string;
 }
 
 // ── shared control styles ──
@@ -159,6 +163,8 @@ export default function ReportToolbar({
   chartMode = false,
   onChartToggle,
   searchable = true,
+  singleDate = false,
+  singleDateLabel = "Business Date",
 }: ReportToolbarProps) {
   const [zoom, setZoom] = useState(100);
   const [shareOpen, setShareOpen] = useState(false);
@@ -566,35 +572,71 @@ export default function ReportToolbar({
           </div>
         )}
 
-        {/* From / To */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            border: "1px solid #E4D6BF",
-            borderRadius: 9,
-            padding: "0 8px",
-            height: CONTROL_H,
-            background: "#ffffff",
-            flexShrink: 0,
-          }}
-        >
-          <IconCalendar size={14} style={{ color: "#6B543E" }} />
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => onRangeChange(e.target.value, to)}
-            style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
-          />
-          <span style={{ color: "#C8B8A8", fontSize: 11 }}>to</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => onRangeChange(from, e.target.value)}
-            style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
-          />
-        </div>
+        {/* Single Business Date OR From / To */}
+        {singleDate ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              border: "1px solid #E4D6BF",
+              borderRadius: 9,
+              padding: "0 10px",
+              height: CONTROL_H,
+              background: "#ffffff",
+              flexShrink: 0,
+            }}
+          >
+            <IconCalendar size={14} style={{ color: "#6B543E" }} />
+            <span
+              style={{
+                color: "#6B543E",
+                fontSize: 11.5,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {singleDateLabel}
+            </span>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => {
+                if (e.target.value) onRangeChange(e.target.value, e.target.value);
+              }}
+              style={{ ...dateInput, border: "none", padding: 0, width: 122 }}
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              border: "1px solid #E4D6BF",
+              borderRadius: 9,
+              padding: "0 8px",
+              height: CONTROL_H,
+              background: "#ffffff",
+              flexShrink: 0,
+            }}
+          >
+            <IconCalendar size={14} style={{ color: "#6B543E" }} />
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => onRangeChange(e.target.value, to)}
+              style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
+            />
+            <span style={{ color: "#C8B8A8", fontSize: 11 }}>to</span>
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => onRangeChange(from, e.target.value)}
+              style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
+            />
+          </div>
+        )}
 
         {/* Zoom */}
         <div
@@ -843,13 +885,13 @@ export default function ReportToolbar({
           flexWrap: "wrap",
         }}
       >
-        {QUICK_RANGES.map((r) => {
+        {(singleDate ? QUICK_RANGES.slice(0, 2) : QUICK_RANGES).map((r) => {
           const [f, t] = r.get();
-          const active = f === from && t === to;
+          const active = singleDate ? f === from : f === from && t === to;
           return (
             <button
               key={r.label}
-              onClick={() => onRangeChange(f, t)}
+              onClick={() => onRangeChange(f, singleDate ? f : t)}
               style={{
                 border: "1px solid",
                 borderColor: active ? "transparent" : "#E4D6BF",

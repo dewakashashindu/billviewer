@@ -745,6 +745,58 @@ export async function getLocationsAction() {
 }
 
 // ============================================================
+// Main Locations ONLY — Tbl_LocationMaster WHERE SubLoc = 0 / false
+// (Performance Report location tabs + Compare mode)
+// ============================================================
+export async function getMainLocationsAction() {
+  try {
+    await requireSession();
+
+    if (!isDbConfigured()) {
+      return {
+        success: false,
+        error: "Database not configured (DB_* env vars missing)",
+      };
+    }
+    const pool = await getPool();
+    const locCols = await viewColumnsGeneric(pool, "Tbl_LocationMaster");
+    const lcCol = pickCol(locCols, ["LocCode", "Code", "Loc"]) ?? "LocCode";
+    const ldCol = pickCol(locCols, ["LocDes", "LocName", "Description"]);
+    const subCol = pickCol(locCols, [
+      "SubLoc",
+      "SUBLOC",
+      "IsSubLoc",
+      "SubLocation",
+      "Sub_Loc",
+    ]);
+
+    const res = await pool.request().query(`
+      SELECT
+        LTRIM(RTRIM([${lcCol}])) AS code,
+        ${
+          ldCol
+            ? `ISNULL(NULLIF(LTRIM(RTRIM([${ldCol}])), ''), LTRIM(RTRIM([${lcCol}])))`
+            : `LTRIM(RTRIM([${lcCol}]))`
+        } AS name
+      FROM dbo.Tbl_LocationMaster WITH (NOLOCK)
+      ${
+        subCol
+          ? `WHERE ISNULL(LTRIM(RTRIM(CAST([${subCol}] AS varchar(20)))), '0') IN ('0', 'false', 'False', 'FALSE', 'N', 'n', '')`
+          : ""
+      }
+      ORDER BY LTRIM(RTRIM([${lcCol}]));
+    `);
+    return {
+      success: true,
+      data: res.recordset as { code: string; name: string }[],
+    };
+  } catch (error) {
+    console.error("Main Locations Action Error:", error);
+    return actionError(error);
+  }
+}
+
+// ============================================================
 // ✅ 1.3.1 / 1.3.2 — Sales By Category (Summery + Detail)
 // LIVE DB eke proof wuna: POS source eke column names
 // ============================================================
@@ -3767,10 +3819,11 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
       return v < -0.004 ? `-${core}` : core;
     };
 
-    const sIsoClean = cleanIso(startDate);
-    const eIsoClean = cleanIso(endDate);
-    const dFrom = parseIsoLocal(sIsoClean);
-    const dTo = parseIsoLocal(eIsoClean);
+    // Performance Report runs for a SINGLE Business Date (no date range)
+    const bDateIso = cleanIso(startDate || endDate);
+    const sIsoClean = bDateIso;
+    const eIsoClean = bDateIso;
+    const dBiz = parseIsoLocal(bDateIso);
     const now = new Date();
 
     const printUser =
@@ -3821,10 +3874,9 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
       };
     }
 
-    let companyName = "RESTAURANT";
-    let subHeader = "";
-    let resolvedLocCode = outletId ? String(outletId).trim() : "";
-
+    // Load Main Locations (Tbl_LocationMaster WHERE SubLoc = 0 / false)
+    type LocMeta = { code: string; name: string; addr1: string; addr2: string };
+    let mainLocs: LocMeta[] = [];
     if (locCols.size > 0) {
       const lcCol = pickCol(locCols, ["LocCode", "Code", "Loc"]);
       const ldCol = pickCol(locCols, ["LocDes", "LocName", "Description"]);
@@ -3832,40 +3884,46 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
         "Address", "LocAdd", "LocAddress", "Add1", "Address1", "Street",
       ]);
       const ad2Col = pickCol(locCols, ["Add2", "Address2", "City"]);
+      const subCol = pickCol(locCols, [
+        "SubLoc", "SUBLOC", "IsSubLoc", "SubLocation", "Sub_Loc",
+      ]);
       if (lcCol) {
-        const lr = pool.request();
-        if (resolvedLocCode) lr.input("lc", sql.VarChar(20), resolvedLocCode);
-        const locRes = await lr
+        const locRes = await pool
+          .request()
           .query(`
             SELECT
               LTRIM(RTRIM([${lcCol}])) AS code,
-              ${ldCol ? `ISNULL(LTRIM(RTRIM([${ldCol}])), '')` : `''`} AS name,
+              ${ldCol ? `ISNULL(NULLIF(LTRIM(RTRIM([${ldCol}])), ''), LTRIM(RTRIM([${lcCol}])))` : `LTRIM(RTRIM([${lcCol}]))`} AS name,
               ${adCol ? `ISNULL(LTRIM(RTRIM([${adCol}])), '')` : `''`} AS addr1,
               ${ad2Col ? `ISNULL(LTRIM(RTRIM([${ad2Col}])), '')` : `''`} AS addr2
             FROM dbo.Tbl_LocationMaster WITH (NOLOCK)
-            ${resolvedLocCode ? `WHERE LTRIM(RTRIM([${lcCol}])) = @lc` : ""}
+            ${
+              subCol
+                ? `WHERE ISNULL(LTRIM(RTRIM(CAST([${subCol}] AS varchar(20)))), '0') IN ('0', 'false', 'False', 'FALSE', 'N', 'n', '')`
+                : ""
+            }
             ORDER BY LTRIM(RTRIM([${lcCol}]))
           `)
           .catch(() => null);
-        const rows = (locRes?.recordset ?? []) as Array<{
-          code: string;
-          name: string;
-          addr1: string;
-          addr2: string;
-        }>;
-        if (rows.length > 0) {
-          const picked = rows[0];
-          if (picked.name) companyName = picked.name;
-          const addrParts = [picked.addr1, picked.addr2].filter(Boolean);
-          if (addrParts.length > 0) subHeader = addrParts.join(", ");
-          if (!resolvedLocCode && rows.length === 1) {
-            resolvedLocCode = picked.code;
-          }
-        }
+        mainLocs = ((locRes?.recordset ?? []) as LocMeta[]).filter((r) => r.code);
       }
     }
 
-    const locDisplay = resolvedLocCode ? `[${resolvedLocCode}]` : "ALL";
+    const locByCode = new Map<string, LocMeta>();
+    for (const l of mainLocs) locByCode.set(l.code.toUpperCase(), l);
+
+    // outletId can be single ("L01") or comma-separated ("L01,L02,L03") in Compare mode.
+    // When empty, default to the FIRST Main Location (never "All Locations").
+    const rawRequested = String(outletId ?? "")
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const targetLocCodes: string[] =
+      rawRequested.length > 0
+        ? rawRequested
+        : mainLocs.length > 0
+          ? [mainLocs[0].code]
+          : [""];
 
     const bhGrossAfterDis = pickCol(bhCols, ["GrossAfterDis", "Gross"]);
     const bhSerChg = pickCol(bhCols, ["SerChg", "ServiceCharge"]);
@@ -3884,545 +3942,49 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
     const bhDoNotShow = pickCol(bhCols, ["DoNotShowInSales"]);
     const bhPromo = pickCol(bhCols, ["PromoVal", "Promotion", "PromoDis"]);
 
-    // Exact calendar-date filter immune to Node UTC (+05:30) shifts
-    const activeWhere = [
-      `h.[${bhDate}] >= CAST(@startDate AS datetime)`,
-      `h.[${bhDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))`,
-      bhDoNotShow ? `ISNULL(h.[${bhDoNotShow}], 0) <> 1` : "",
-      bhBillType ? `ISNULL(LTRIM(RTRIM(h.[${bhBillType}])), '') <> 'CM'` : "",
-      outletId && bhLoc ? `LTRIM(RTRIM(h.[${bhLoc}])) = @outletId` : "",
-    ]
-      .filter(Boolean)
-      .join(" AND ");
-
-    const bindRange = (req: sql.Request, sIso = sIsoClean, eIso = eIsoClean) => {
-      req.input("startDate", sql.VarChar(10), sIso);
-      req.input("endDate", sql.VarChar(10), eIso);
-      if (outletId && bhLoc) {
-        req.input("outletId", sql.VarChar(20), String(outletId).trim());
-      }
-      return req;
-    };
-
     const sumExpr = (c: string | null) =>
       c ? `SUM(ISNULL(CAST(h.[${c}] AS float), 0))` : "0";
 
-    const mtdStartIso = `${dTo.getFullYear()}-${pad2(dTo.getMonth() + 1)}-01`;
-    const mtdDays = dTo.getDate();
+    const mtdStartIso = `${dBiz.getFullYear()}-${pad2(dBiz.getMonth() + 1)}-01`;
+    const mtdDays = dBiz.getDate();
 
-    // ── Batch 2: Execute all section queries in parallel ──
-    const taxRatesPromise = (async () => {
-      if (perfCols.size === 0) return null;
-      const pDesCol = pickCol(perfCols, ["PerDes"]);
-      const vDesCol = pickCol(perfCols, ["Valdes", "ValDes"]);
-      const sortCol = pickCol(perfCols, ["SortingOrder"]);
-      const txnCol = pickCol(perfCols, ["TxnDate"]);
-      const locIdCol = pickCol(perfCols, ["LocID", "LocCode"]);
-      if (!pDesCol || !vDesCol) return null;
-      const tr = pool.request();
-      if (resolvedLocCode && locIdCol) {
-        tr.input("ploc", sql.VarChar(20), resolvedLocCode);
-      }
-      const orderClause = [
-        txnCol ? `[${txnCol}] DESC` : "",
-        sortCol ? `[${sortCol}] ASC` : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
-      return tr
-        .query(`
-          SELECT TOP 80
-            LTRIM(RTRIM(ISNULL([${pDesCol}], ''))) AS pdes,
-            LTRIM(RTRIM(ISNULL([${vDesCol}], ''))) AS vdes
-          FROM dbo.Tbl_PerformanceValues WITH (NOLOCK)
-          WHERE [${pDesCol}] IN ('Service Charge', 'VAT', 'TDL', 'SSCL', 'N.B.T', 'NBT')
-          ${resolvedLocCode && locIdCol ? `AND LTRIM(RTRIM([${locIdCol}])) = @ploc` : ""}
-          ${orderClause ? `ORDER BY ${orderClause}` : ""}
-        `)
-        .catch(() => null);
-    })();
-
-    const aggPromise = bindRange(pool.request()).query(`
-      SELECT
-        COUNT(*) AS BillCount,
-        ${sumExpr(bhNet)} AS SalesVolume,
-        ${sumExpr(bhGrossAfterDis)} AS GrossAfterDis,
-        ${sumExpr(bhSerChg)} AS SerChg,
-        ${sumExpr(bhOtherSerChg)} AS OtherSerChg,
-        ${sumExpr(bhAddSerChg)} AS AddSerChg,
-        ${sumExpr(bhVat)} AS VAT,
-        ${sumExpr(bhTdl)} AS TDL,
-        ${sumExpr(bhOtherVat)} AS OtherVAT,
-        ${sumExpr(bhDisVal)} AS TotalDiscount,
-        ${sumExpr(bhNoPax)} AS NoPax,
-        ${sumExpr(bhLocalPax)} AS LocalPax,
-        ${sumExpr(bhForeignPax)} AS ForeignPax,
-        ${sumExpr(bhPromo)} AS PromoTotal
-      FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
-      WHERE ${activeWhere}
-    `);
-
-    const orderModesPromise = (async () => {
-      if (omCols.size === 0) return null;
-      const mCode = pickCol(omCols, ["ModeID", "ModeCode", "OrderMode", "Code"]);
-      const mDes = pickCol(omCols, ["ModeDes", "Description", "ModeName"]);
-      if (!mCode || !mDes) return null;
-      return pool
-        .request()
-        .query(`
-          SELECT
-            UPPER(LTRIM(RTRIM(ISNULL([${mCode}], '')))) AS code,
-            UPPER(LTRIM(RTRIM(ISNULL([${mDes}], '')))) AS des
-          FROM dbo.Tbl_OrderModes WITH (NOLOCK)
-        `)
-        .catch(() => null);
-    })();
-
-    const smPromise = bhOrderMode
-      ? bindRange(pool.request())
+    // Shared across all locations: order mode names + payment fallback column metadata
+    const [omRes, payFallbackMeta] = await Promise.all([
+      (async () => {
+        if (omCols.size === 0) return null;
+        const mCode = pickCol(omCols, ["ModeID", "ModeCode", "OrderMode", "Code"]);
+        const mDes = pickCol(omCols, ["ModeDes", "Description", "ModeName"]);
+        if (!mCode || !mDes) return null;
+        return pool
+          .request()
           .query(`
             SELECT
-              UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], '')))) AS ModeCode,
-              ${sumExpr(bhNet)} AS Amt
-            FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
-            WHERE ${activeWhere}
-            GROUP BY UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], ''))))
-            ORDER BY ModeCode
-          `)
-          .catch(() => null)
-      : Promise.resolve(null);
-
-    const payPromise = (async () => {
-      if (pvCols.size > 0) {
-        const pvDate = pickCol(pvCols, [
-          "Txndate", "TxnDate", "TrnDate", "SalesDate", "BillDate",
-        ]);
-        const pvLoc = pickCol(pvCols, ["LocCode", "Loc", "Location", "Outlet"]);
-        const pvDes = pickCol(pvCols, [
-          "PayDes", "PaymentDes", "PaymentDescription", "PayMode", "ModeDes",
-        ]);
-        const pvAmt = pickCol(pvCols, [
-          "ActAmt", "Amount", "PayAmount", "PayValue", "TenderedAmt",
-        ]);
-        const pvDoNot = pickCol(pvCols, ["DoNotShowInSales"]);
-        const pvBt = pickCol(pvCols, ["BillType", "BILLTYPE"]);
-        if (pvDate && pvDes && pvAmt) {
-          const pr = pool.request();
-          pr.input("startDate", sql.VarChar(10), sIsoClean);
-          pr.input("endDate", sql.VarChar(10), eIsoClean);
-          if (outletId && pvLoc) {
-            pr.input("outletId", sql.VarChar(20), String(outletId).trim());
-          }
-          return pr
-            .query(`
-              SELECT
-                UPPER(LTRIM(RTRIM(ISNULL(v.[${pvDes}], 'OTHER')))) AS PayName,
-                SUM(ISNULL(CAST(v.[${pvAmt}] AS float), 0)) AS Amt
-              FROM dbo.[${PAY_VIEW_NAME}] v WITH (NOLOCK)
-              WHERE v.[${pvDate}] >= CAST(@startDate AS datetime)
-                AND v.[${pvDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))
-                ${pvDoNot ? `AND ISNULL(v.[${pvDoNot}], 0) <> 1` : ""}
-                ${pvBt ? `AND ISNULL(LTRIM(RTRIM(v.[${pvBt}])), '') <> 'CM'` : ""}
-                ${outletId && pvLoc ? `AND LTRIM(RTRIM(v.[${pvLoc}])) = @outletId` : ""}
-              GROUP BY UPPER(LTRIM(RTRIM(ISNULL(v.[${pvDes}], 'OTHER'))))
-              ORDER BY PayName
-            `)
-            .catch(() => null);
-        }
-      }
-      const [bptCols, pmCols] = await Promise.all([
-        viewColumnsGeneric(pool, "Tbl_BillPayTxn"),
-        viewColumnsGeneric(pool, "Tbl_PaymentModes"),
-      ]);
-      const bptBill = pickCol(bptCols, ["BillNo", "BILLNO"]);
-      const bptCode = pickCol(bptCols, ["PayCode", "ModeCode"]);
-      const bptAmt = pickCol(bptCols, ["ActAmt", "Amount", "TenderedAmt"]);
-      const pmCode = pickCol(pmCols, ["PayCode", "ModeCode"]);
-      const pmDes = pickCol(pmCols, ["PayDes", "Description"]);
-      if (!bptBill || !bptCode || !bptAmt) return null;
-      const expr =
-        pmCode && pmDes
-          ? `UPPER(ISNULL(NULLIF(LTRIM(RTRIM(pm.[${pmDes}])), ''), LTRIM(RTRIM(p.[${bptCode}]))))`
-          : `UPPER(LTRIM(RTRIM(ISNULL(p.[${bptCode}], 'CASH'))))`;
-      return bindRange(pool.request())
-        .query(`
-          SELECT
-            ${expr} AS PayName,
-            SUM(ISNULL(CAST(p.[${bptAmt}] AS float), 0)) AS Amt
-          FROM dbo.Tbl_BillPayTxn p WITH (NOLOCK)
-          INNER JOIN dbo.Tbl_BillHeader h WITH (NOLOCK)
-            ON LTRIM(RTRIM(p.[${bptBill}])) = LTRIM(RTRIM(h.[${bhBill}]))
-          ${
-            pmCode && pmDes
-              ? `LEFT JOIN dbo.Tbl_PaymentModes pm WITH (NOLOCK) ON LTRIM(RTRIM(p.[${bptCode}])) = LTRIM(RTRIM(pm.[${pmCode}]))`
-              : ""
-          }
-          WHERE ${activeWhere}
-          GROUP BY ${expr}
-          ORDER BY PayName
-        `)
-        .catch(() => null);
-    })();
-
-    const cashierPromise = (async () => {
-      if (!bhCashier) return null;
-      const uId = pickCol(uCols, ["UserId", "UserID"]);
-      const uLog = pickCol(uCols, ["LogName"]);
-      const uLogin = pickCol(uCols, ["LoginName"]);
-      const uName = pickCol(uCols, ["UserName"]);
-
-      const nameFallbacks: string[] = [];
-      if (uId && uLogin) nameFallbacks.push(`NULLIF(LTRIM(RTRIM(u.[${uLogin}])), '')`);
-      if (uId && uLog) nameFallbacks.push(`NULLIF(LTRIM(RTRIM(u.[${uLog}])), '')`);
-      if (uId && uName) nameFallbacks.push(`NULLIF(LTRIM(RTRIM(u.[${uName}])), '')`);
-      nameFallbacks.push(`NULLIF(LTRIM(RTRIM(h.[${bhCashier}])), '')`);
-      nameFallbacks.push(`'UNKNOWN'`);
-      const cashLabelExpr = `COALESCE(${nameFallbacks.join(", ")})`;
-
-      return bindRange(pool.request())
-        .query(`
-          SELECT
-            ${cashLabelExpr} AS CashierName,
-            ${sumExpr(bhNet)} AS Amt
-          FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
-          ${
-            uId
-              ? `LEFT JOIN dbo.Tbl_UserDetails u WITH (NOLOCK) ON LTRIM(RTRIM(h.[${bhCashier}])) = LTRIM(RTRIM(u.[${uId}]))`
-              : ""
-          }
-          WHERE ${activeWhere}
-          GROUP BY ${cashLabelExpr}
-          ORDER BY CashierName
-        `)
-        .catch(() => null);
-    })();
-
-    const voidPromise = bhDoNotShow
-      ? (() => {
-          const voidWhere = [
-            `h.[${bhDate}] >= CAST(@startDate AS datetime)`,
-            `h.[${bhDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))`,
-            `ISNULL(h.[${bhDoNotShow}], 0) = 1`,
-            outletId && bhLoc ? `LTRIM(RTRIM(h.[${bhLoc}])) = @outletId` : "",
-          ]
-            .filter(Boolean)
-            .join(" AND ");
-          return bindRange(pool.request())
-            .query(`
-              SELECT
-                COUNT(*) AS VCount,
-                ${sumExpr(bhNet)} AS VAmt
-              FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
-              WHERE ${voidWhere}
-            `)
-            .catch(() => null);
-        })()
-      : Promise.resolve(null);
-
-    const openPromise = (async () => {
-      if (openCols.size === 0) return null;
-      const oCode = pickCol(openCols, [
-        "TransCode", "TableCode", "TabCode", "Section", "TableNo",
-      ]);
-      const oVal = pickCol(openCols, ["ItemPrice", "Value", "Amount", "Total"]);
-      const oLoc = pickCol(openCols, ["LocCode", "LOCCODE", "Loc"]);
-      const oCancel = pickCol(openCols, ["CANCEL", "Cancel", "Cancelled"]);
-      if (!oCode || !oVal) return null;
-      const or = pool.request();
-      if (outletId && oLoc) {
-        or.input("outletId", sql.VarChar(20), String(outletId).trim());
-      }
-      const oWhere = [
-        oCancel
-          ? `ISNULL(LTRIM(RTRIM(CAST(v.[${oCancel}] AS varchar(10)))), '0') NOT IN ('1', 'Y', 'TRUE')`
-          : "",
-        outletId && oLoc ? `LTRIM(RTRIM(v.[${oLoc}])) = @outletId` : "",
-      ]
-        .filter(Boolean)
-        .join(" AND ");
-      return or
-        .query(`
-          SELECT
-            COUNT(DISTINCT LTRIM(RTRIM(v.[${oCode}]))) AS OpenCount,
-            SUM(ISNULL(CAST(v.[${oVal}] AS float), 0)) AS OpenAmt
-          FROM dbo.[${OPEN_VIEW_NAME}] v WITH (NOLOCK)
-          ${oWhere ? `WHERE ${oWhere}` : ""}
-        `)
-        .catch(() => null);
-    })();
-
-    const catPromise = (async () => {
-      if (catCols.size === 0) return { mg: null, fg: null };
-      const cLoc = pickCol(catCols, [
-        "LocCode", "LOCCODE", "Loc", "Location", "Outlet",
-      ]);
-      const cDate = pickCol(catCols, [
-        "Txndate", "TxnDate", "TrnDate", "SalesDate", "BillDate",
-      ]);
-      const cMain = pickCol(catCols, [
-        "LEVEL1", "Level1", "MainCategory", "MainCat", "Category", "MainGroup", "CatDes",
-      ]);
-      const cFam = pickCol(catCols, [
-        "FamilyGroup", "FamDes", "FamCode", "Family", "LEVEL3", "Level3", "LEVEL2", "Level2", "SubCategory", "SubGroup",
-      ]);
-      const cTot = pickCol(catCols, [
-        "SaleTotal", "ItemPrice", "TotalItmPrice", "NetTotal", "Total", "Amount", "Value",
-      ]);
-      const cDoNot = pickCol(catCols, ["DoNotShowInSales"]);
-      const cBt = pickCol(catCols, ["BillType", "BILLTYPE"]);
-      if (!cDate || !cMain || !cTot) return { mg: null, fg: null };
-
-      const catWhere = [
-        `v.[${cDate}] >= CAST(@startDate AS datetime)`,
-        `v.[${cDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))`,
-        cDoNot ? `ISNULL(v.[${cDoNot}], 0) <> 1` : "",
-        cBt ? `ISNULL(LTRIM(RTRIM(v.[${cBt}])), '') <> 'CM'` : "",
-        outletId && cLoc ? `LTRIM(RTRIM(v.[${cLoc}])) = @outletId` : "",
-      ]
-        .filter(Boolean)
-        .join(" AND ");
-
-      const bindCat = () => {
-        const cr = pool.request();
-        cr.input("startDate", sql.VarChar(10), sIsoClean);
-        cr.input("endDate", sql.VarChar(10), eIsoClean);
-        if (outletId && cLoc) {
-          cr.input("outletId", sql.VarChar(20), String(outletId).trim());
-        }
-        return cr;
-      };
-
-      const mgP = bindCat()
-        .query(`
-          SELECT
-            UPPER(ISNULL(NULLIF(LTRIM(RTRIM(v.[${cMain}])), ''), 'OTHER')) AS GrpName,
-            SUM(ISNULL(CAST(v.[${cTot}] AS float), 0)) AS Amt
-          FROM dbo.[${CATEGORY_VIEW}] v WITH (NOLOCK)
-          WHERE ${catWhere}
-          GROUP BY UPPER(ISNULL(NULLIF(LTRIM(RTRIM(v.[${cMain}])), ''), 'OTHER'))
-          ORDER BY GrpName
-        `)
-        .catch(() => null);
-
-      const fgP = cFam
-        ? bindCat()
-            .query(`
-              SELECT
-                ISNULL(NULLIF(LTRIM(RTRIM(CAST(v.[${cFam}] AS varchar(120)))), ''), 'OTHER') AS FamName,
-                SUM(ISNULL(CAST(v.[${cTot}] AS float), 0)) AS Amt
-              FROM dbo.[${CATEGORY_VIEW}] v WITH (NOLOCK)
-              WHERE ${catWhere}
-              GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(CAST(v.[${cFam}] AS varchar(120)))), ''), 'OTHER')
-              ORDER BY FamName
-            `)
-            .catch(() => null)
-        : Promise.resolve(null);
-
-      const [mg, fg] = await Promise.all([mgP, fgP]);
-      return { mg, fg };
-    })();
-
-    const mtdPromise = bhOrderMode
-      ? bindRange(pool.request(), mtdStartIso, eIsoClean)
-          .query(`
-            SELECT
-              UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], '')))) AS ModeCode,
-              ${sumExpr(bhNet)} AS Amt
-            FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
-            WHERE ${activeWhere}
-            GROUP BY UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], ''))))
-            ORDER BY ModeCode
-          `)
-          .catch(() => null)
-      : bindRange(pool.request(), mtdStartIso, eIsoClean)
-          .query(`
-            SELECT ${sumExpr(bhNet)} AS Amt
-            FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
-            WHERE ${activeWhere}
+              UPPER(LTRIM(RTRIM(ISNULL([${mCode}], '')))) AS code,
+              UPPER(LTRIM(RTRIM(ISNULL([${mDes}], '')))) AS des
+            FROM dbo.Tbl_OrderModes WITH (NOLOCK)
           `)
           .catch(() => null);
-
-    const [
-      rateRes,
-      aggRes,
-      omRes,
-      smRes,
-      pRes,
-      cRes,
-      vRes,
-      oRes,
-      catRes,
-      mtdRes,
-    ] = await Promise.all([
-      taxRatesPromise,
-      aggPromise,
-      orderModesPromise,
-      smPromise,
-      payPromise,
-      cashierPromise,
-      voidPromise,
-      openPromise,
-      catPromise,
-      mtdPromise,
+      })(),
+      (async () => {
+        if (pvCols.size > 0) {
+          const pvDate = pickCol(pvCols, [
+            "Txndate", "TxnDate", "TrnDate", "SalesDate", "BillDate",
+          ]);
+          const pvDes = pickCol(pvCols, [
+            "PayDes", "PaymentDes", "PaymentDescription", "PayMode", "ModeDes",
+          ]);
+          const pvAmt = pickCol(pvCols, [
+            "ActAmt", "Amount", "PayAmount", "PayValue", "TenderedAmt",
+          ]);
+          if (pvDate && pvDes && pvAmt) return null;
+        }
+        const [bptCols, pmCols] = await Promise.all([
+          viewColumnsGeneric(pool, "Tbl_BillPayTxn"),
+          viewColumnsGeneric(pool, "Tbl_PaymentModes"),
+        ]);
+        return { bptCols, pmCols };
+      })(),
     ]);
-
-    let scRateLbl = "10%";
-    let vatRateLbl = "0%";
-    let tdlRateLbl = "1%";
-    let otherTaxName = "SSCL";
-    let otherTaxRateLbl = "15%";
-
-    if (rateRes?.recordset) {
-      const seen = new Set<string>();
-      for (const r of rateRes.recordset as Array<{ pdes: string; vdes: string }>) {
-        const k = r.pdes.toUpperCase();
-        if (seen.has(k)) continue;
-        seen.add(k);
-        if (k === "SERVICE CHARGE" && r.vdes) scRateLbl = r.vdes;
-        else if (k === "VAT" && r.vdes) vatRateLbl = r.vdes;
-        else if (k === "TDL" && r.vdes) tdlRateLbl = r.vdes;
-        else if (k === "SSCL" || k === "N.B.T" || k === "NBT") {
-          otherTaxName = r.pdes;
-          if (r.vdes) otherTaxRateLbl = r.vdes;
-        }
-      }
-    }
-
-    const agg = aggRes.recordset?.[0] ?? {};
-    const billCount = Number(agg.BillCount ?? 0);
-
-    // ── Optional fallback: if 0 live bills in range AND Tbl_PerformanceValues has exact snapshot rows ──
-    if (billCount === 0 && perfCols.size > 0) {
-      const pDesCol = pickCol(perfCols, ["PerDes"]);
-      const vDesCol = pickCol(perfCols, ["Valdes", "ValDes"]);
-      const pAmtCol = pickCol(perfCols, ["PerfAmount"]);
-      const headCol = pickCol(perfCols, ["Heading"]);
-      const sortCol = pickCol(perfCols, ["SortingOrder"]);
-      const txnCol = pickCol(perfCols, ["TxnDate"]);
-      const locIdCol = pickCol(perfCols, ["LocID", "LocCode"]);
-
-      if (pDesCol && vDesCol && pAmtCol && headCol && txnCol) {
-        const snapReq = pool.request();
-        snapReq.input("sDate", sql.VarChar(10), sIsoClean);
-        snapReq.input("eDate", sql.VarChar(10), eIsoClean);
-        if (outletId && locIdCol) {
-          snapReq.input("sLoc", sql.VarChar(20), String(outletId).trim());
-        }
-        const snapRes = await snapReq
-          .query(`
-            SELECT
-              ISNULL([${pDesCol}], '') AS PerDes,
-              ISNULL([${vDesCol}], '') AS Valdes,
-              ISNULL([${pAmtCol}], '') AS PerfAmount,
-              ISNULL([${headCol}], 0) AS Heading,
-              ${sortCol ? `ISNULL([${sortCol}], 0)` : "0"} AS SortingOrder
-            FROM dbo.Tbl_PerformanceValues WITH (NOLOCK)
-            WHERE [${txnCol}] >= CAST(@sDate AS datetime)
-              AND [${txnCol}] < DATEADD(day, 1, CAST(@eDate AS datetime))
-              ${outletId && locIdCol ? `AND LTRIM(RTRIM([${locIdCol}])) = @sLoc` : ""}
-            ${sortCol ? `ORDER BY [${sortCol}] ASC` : ""}
-          `)
-          .catch(() => null);
-
-        const snapRows = (snapRes?.recordset ?? []) as Array<{
-          PerDes: string;
-          Valdes: string;
-          PerfAmount: string;
-          Heading: boolean | number;
-          SortingOrder: number;
-        }>;
-
-        if (snapRows.length >= 6) {
-          const snapMeta: Array<{ label: string; value: string }> = [];
-          const snapSections: Array<{
-            heading: string;
-            rows: Array<{
-              desc: string;
-              val: string;
-              amt: string;
-              centerVal?: boolean;
-              bold?: boolean;
-            }>;
-          }> = [];
-          let curSec: (typeof snapSections)[number] | null = null;
-
-          for (const sr of snapRows) {
-            const isHead = Boolean(sr.Heading);
-            const desc = String(sr.PerDes ?? "").trim();
-            const val = String(sr.Valdes ?? "").trim();
-            const amt = String(sr.PerfAmount ?? "").trim();
-            if (isHead) {
-              curSec = { heading: desc, rows: [] };
-              snapSections.push(curSec);
-            } else if (!curSec) {
-              if (desc) snapMeta.push({ label: desc, value: val || amt });
-            } else if (desc || val || amt) {
-              const isCenteredCount =
-                desc === "Bill Count" ||
-                desc === "Unclosed Bills" ||
-                desc === "Month To Date Average";
-              curSec.rows.push({
-                desc,
-                val,
-                amt,
-                centerVal: isCenteredCount,
-              });
-            }
-          }
-
-          if (snapSections.length > 0) {
-            return {
-              success: true,
-              data: {
-                companyName,
-                subHeader,
-                printDate: fmtDashDate(now),
-                printTime: fmt12Time(now),
-                printUser,
-                meta:
-                  snapMeta.length > 0
-                    ? snapMeta
-                    : [
-                        { label: "Bussiness Day", value: fmtSlashDate(dTo) },
-                        { label: "Reporting Date From", value: fmtSlashDate(dFrom) },
-                        { label: "Reporting Date To", value: fmtSlashDate(dTo) },
-                        { label: "Current Time", value: fmt24Time(now) },
-                        { label: "User", value: metaUser },
-                        { label: "Location", value: locDisplay },
-                      ],
-                sections: snapSections,
-              },
-            };
-          }
-        }
-      }
-    }
-
-    const salesVolume = r2(Number(agg.SalesVolume ?? 0));
-    const serChg = r2(Number(agg.SerChg ?? 0));
-    const otherSerChg = r2(Number(agg.OtherSerChg ?? 0));
-    const addSerChg = r2(Number(agg.AddSerChg ?? 0));
-    const vat = r2(Number(agg.VAT ?? 0));
-    const tdl = r2(Number(agg.TDL ?? 0));
-    const otherVat = r2(Number(agg.OtherVAT ?? 0));
-    const totalDiscount = r2(Number(agg.TotalDiscount ?? 0));
-    const promoTotal = r2(Number(agg.PromoTotal ?? 0));
-
-    const taxTotal = r2(vat + tdl + otherVat);
-    const salesWithoutTax = r2(
-      salesVolume - serChg - otherSerChg - addSerChg - taxTotal
-    );
-
-    let localPax = Math.round(Number(agg.LocalPax ?? 0));
-    let foreignPax = Math.round(Number(agg.ForeignPax ?? 0));
-    const noPax = Math.round(Number(agg.NoPax ?? 0));
-    if (!bhLocalPax && !bhForeignPax) {
-      localPax = noPax;
-      foreignPax = 0;
-    } else if (localPax + foreignPax === 0 && noPax > 0) {
-      localPax = noPax;
-    }
-    const totalPax = localPax + foreignPax;
 
     const modeMap = new Map<string, string>([
       ["TA", "TAKEAWAY"],
@@ -4440,205 +4002,730 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
       return modeMap.get(k) || k;
     };
 
-    const serviceModeRows: Array<{ desc: string; val: string; amt: string }> = [];
-    if (smRes?.recordset) {
-      const byName = new Map<string, number>();
-      for (const r of smRes.recordset as Array<{ ModeCode: string; Amt: number }>) {
-        const name = resolveModeName(r.ModeCode);
-        byName.set(name, r2((byName.get(name) ?? 0) + Number(r.Amt ?? 0)));
+    type PerfSectionOut = {
+      heading: string;
+      rows: Array<{
+        desc: string;
+        val: string;
+        amt: string;
+        centerVal?: boolean;
+        bold?: boolean;
+      }>;
+    };
+
+    const buildForLocation = async (locCode: string): Promise<{
+      locCode: string;
+      locName: string;
+      subHeader: string;
+      sections: PerfSectionOut[];
+    }> => {
+      const trimmedLoc = String(locCode ?? "").trim();
+      const lm = locByCode.get(trimmedLoc.toUpperCase());
+      const locName = lm?.name || trimmedLoc || "RESTAURANT";
+      const locSubHdr = [lm?.addr1, lm?.addr2].filter(Boolean).join(", ");
+
+      const activeWhere = [
+        `h.[${bhDate}] >= CAST(@startDate AS datetime)`,
+        `h.[${bhDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))`,
+        bhDoNotShow ? `ISNULL(h.[${bhDoNotShow}], 0) <> 1` : "",
+        bhBillType ? `ISNULL(LTRIM(RTRIM(h.[${bhBillType}])), '') <> 'CM'` : "",
+        trimmedLoc && bhLoc ? `LTRIM(RTRIM(h.[${bhLoc}])) = @outletId` : "",
+      ]
+        .filter(Boolean)
+        .join(" AND ");
+
+      const bindRange = (req: sql.Request, sIso = sIsoClean, eIso = eIsoClean) => {
+        req.input("startDate", sql.VarChar(10), sIso);
+        req.input("endDate", sql.VarChar(10), eIso);
+        if (trimmedLoc && bhLoc) {
+          req.input("outletId", sql.VarChar(20), trimmedLoc);
+        }
+        return req;
+      };
+
+      const taxRatesPromise = (async () => {
+        if (perfCols.size === 0) return null;
+        const pDesCol = pickCol(perfCols, ["PerDes"]);
+        const vDesCol = pickCol(perfCols, ["Valdes", "ValDes"]);
+        const sortCol = pickCol(perfCols, ["SortingOrder"]);
+        const txnCol = pickCol(perfCols, ["TxnDate"]);
+        const locIdCol = pickCol(perfCols, ["LocID", "LocCode"]);
+        if (!pDesCol || !vDesCol) return null;
+        const tr = pool.request();
+        if (trimmedLoc && locIdCol) {
+          tr.input("ploc", sql.VarChar(20), trimmedLoc);
+        }
+        const orderClause = [
+          txnCol ? `[${txnCol}] DESC` : "",
+          sortCol ? `[${sortCol}] ASC` : "",
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return tr
+          .query(`
+            SELECT TOP 80
+              LTRIM(RTRIM(ISNULL([${pDesCol}], ''))) AS pdes,
+              LTRIM(RTRIM(ISNULL([${vDesCol}], ''))) AS vdes
+            FROM dbo.Tbl_PerformanceValues WITH (NOLOCK)
+            WHERE [${pDesCol}] IN ('Service Charge', 'VAT', 'TDL', 'SSCL', 'N.B.T', 'NBT')
+            ${trimmedLoc && locIdCol ? `AND LTRIM(RTRIM([${locIdCol}])) = @ploc` : ""}
+            ${orderClause ? `ORDER BY ${orderClause}` : ""}
+          `)
+          .catch(() => null);
+      })();
+
+      const aggPromise = bindRange(pool.request()).query(`
+        SELECT
+          COUNT(*) AS BillCount,
+          ${sumExpr(bhNet)} AS SalesVolume,
+          ${sumExpr(bhGrossAfterDis)} AS GrossAfterDis,
+          ${sumExpr(bhSerChg)} AS SerChg,
+          ${sumExpr(bhOtherSerChg)} AS OtherSerChg,
+          ${sumExpr(bhAddSerChg)} AS AddSerChg,
+          ${sumExpr(bhVat)} AS VAT,
+          ${sumExpr(bhTdl)} AS TDL,
+          ${sumExpr(bhOtherVat)} AS OtherVAT,
+          ${sumExpr(bhDisVal)} AS TotalDiscount,
+          ${sumExpr(bhNoPax)} AS NoPax,
+          ${sumExpr(bhLocalPax)} AS LocalPax,
+          ${sumExpr(bhForeignPax)} AS ForeignPax,
+          ${sumExpr(bhPromo)} AS PromoTotal
+        FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
+        WHERE ${activeWhere}
+      `);
+
+      const smPromise = bhOrderMode
+        ? bindRange(pool.request())
+            .query(`
+              SELECT
+                UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], '')))) AS ModeCode,
+                ${sumExpr(bhNet)} AS Amt
+              FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
+              WHERE ${activeWhere}
+              GROUP BY UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], ''))))
+              ORDER BY ModeCode
+            `)
+            .catch(() => null)
+        : Promise.resolve(null);
+
+      const payPromise = (async () => {
+        if (pvCols.size > 0) {
+          const pvDate = pickCol(pvCols, [
+            "Txndate", "TxnDate", "TrnDate", "SalesDate", "BillDate",
+          ]);
+          const pvLoc = pickCol(pvCols, ["LocCode", "Loc", "Location", "Outlet"]);
+          const pvDes = pickCol(pvCols, [
+            "PayDes", "PaymentDes", "PaymentDescription", "PayMode", "ModeDes",
+          ]);
+          const pvAmt = pickCol(pvCols, [
+            "ActAmt", "Amount", "PayAmount", "PayValue", "TenderedAmt",
+          ]);
+          const pvDoNot = pickCol(pvCols, ["DoNotShowInSales"]);
+          const pvBt = pickCol(pvCols, ["BillType", "BILLTYPE"]);
+          if (pvDate && pvDes && pvAmt) {
+            const pr = pool.request();
+            pr.input("startDate", sql.VarChar(10), sIsoClean);
+            pr.input("endDate", sql.VarChar(10), eIsoClean);
+            if (trimmedLoc && pvLoc) {
+              pr.input("outletId", sql.VarChar(20), trimmedLoc);
+            }
+            return pr
+              .query(`
+                SELECT
+                  UPPER(LTRIM(RTRIM(ISNULL(v.[${pvDes}], 'OTHER')))) AS PayName,
+                  SUM(ISNULL(CAST(v.[${pvAmt}] AS float), 0)) AS Amt
+                FROM dbo.[${PAY_VIEW_NAME}] v WITH (NOLOCK)
+                WHERE v.[${pvDate}] >= CAST(@startDate AS datetime)
+                  AND v.[${pvDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))
+                  ${pvDoNot ? `AND ISNULL(v.[${pvDoNot}], 0) <> 1` : ""}
+                  ${pvBt ? `AND ISNULL(LTRIM(RTRIM(v.[${pvBt}])), '') <> 'CM'` : ""}
+                  ${trimmedLoc && pvLoc ? `AND LTRIM(RTRIM(v.[${pvLoc}])) = @outletId` : ""}
+                GROUP BY UPPER(LTRIM(RTRIM(ISNULL(v.[${pvDes}], 'OTHER'))))
+                ORDER BY PayName
+              `)
+              .catch(() => null);
+          }
+        }
+        if (!payFallbackMeta) return null;
+        const { bptCols, pmCols } = payFallbackMeta;
+        const bptBill = pickCol(bptCols, ["BillNo", "BILLNO"]);
+        const bptCode = pickCol(bptCols, ["PayCode", "ModeCode"]);
+        const bptAmt = pickCol(bptCols, ["ActAmt", "Amount", "TenderedAmt"]);
+        const pmCode = pickCol(pmCols, ["PayCode", "ModeCode"]);
+        const pmDes = pickCol(pmCols, ["PayDes", "Description"]);
+        if (!bptBill || !bptCode || !bptAmt) return null;
+        const expr =
+          pmCode && pmDes
+            ? `UPPER(ISNULL(NULLIF(LTRIM(RTRIM(pm.[${pmDes}])), ''), LTRIM(RTRIM(p.[${bptCode}]))))`
+            : `UPPER(LTRIM(RTRIM(ISNULL(p.[${bptCode}], 'CASH'))))`;
+        return bindRange(pool.request())
+          .query(`
+            SELECT
+              ${expr} AS PayName,
+              SUM(ISNULL(CAST(p.[${bptAmt}] AS float), 0)) AS Amt
+            FROM dbo.Tbl_BillPayTxn p WITH (NOLOCK)
+            INNER JOIN dbo.Tbl_BillHeader h WITH (NOLOCK)
+              ON LTRIM(RTRIM(p.[${bptBill}])) = LTRIM(RTRIM(h.[${bhBill}]))
+            ${
+              pmCode && pmDes
+                ? `LEFT JOIN dbo.Tbl_PaymentModes pm WITH (NOLOCK) ON LTRIM(RTRIM(p.[${bptCode}])) = LTRIM(RTRIM(pm.[${pmCode}]))`
+                : ""
+            }
+            WHERE ${activeWhere}
+            GROUP BY ${expr}
+            ORDER BY PayName
+          `)
+          .catch(() => null);
+      })();
+
+      const cashierPromise = (async () => {
+        if (!bhCashier) return null;
+        const uId = pickCol(uCols, ["UserId", "UserID"]);
+        const uLog = pickCol(uCols, ["LogName"]);
+        const uLogin = pickCol(uCols, ["LoginName"]);
+        const uName = pickCol(uCols, ["UserName"]);
+
+        const nameFallbacks: string[] = [];
+        if (uId && uLogin) nameFallbacks.push(`NULLIF(LTRIM(RTRIM(u.[${uLogin}])), '')`);
+        if (uId && uLog) nameFallbacks.push(`NULLIF(LTRIM(RTRIM(u.[${uLog}])), '')`);
+        if (uId && uName) nameFallbacks.push(`NULLIF(LTRIM(RTRIM(u.[${uName}])), '')`);
+        nameFallbacks.push(`NULLIF(LTRIM(RTRIM(h.[${bhCashier}])), '')`);
+        nameFallbacks.push(`'UNKNOWN'`);
+        const cashLabelExpr = `COALESCE(${nameFallbacks.join(", ")})`;
+
+        return bindRange(pool.request())
+          .query(`
+            SELECT
+              ${cashLabelExpr} AS CashierName,
+              ${sumExpr(bhNet)} AS Amt
+            FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
+            ${
+              uId
+                ? `LEFT JOIN dbo.Tbl_UserDetails u WITH (NOLOCK) ON LTRIM(RTRIM(h.[${bhCashier}])) = LTRIM(RTRIM(u.[${uId}]))`
+                : ""
+            }
+            WHERE ${activeWhere}
+            GROUP BY ${cashLabelExpr}
+            ORDER BY CashierName
+          `)
+          .catch(() => null);
+      })();
+
+      const voidPromise = bhDoNotShow
+        ? (() => {
+            const voidWhere = [
+              `h.[${bhDate}] >= CAST(@startDate AS datetime)`,
+              `h.[${bhDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))`,
+              `ISNULL(h.[${bhDoNotShow}], 0) = 1`,
+              trimmedLoc && bhLoc ? `LTRIM(RTRIM(h.[${bhLoc}])) = @outletId` : "",
+            ]
+              .filter(Boolean)
+              .join(" AND ");
+            return bindRange(pool.request())
+              .query(`
+                SELECT
+                  COUNT(*) AS VCount,
+                  ${sumExpr(bhNet)} AS VAmt
+                FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
+                WHERE ${voidWhere}
+              `)
+              .catch(() => null);
+          })()
+        : Promise.resolve(null);
+
+      const openPromise = (async () => {
+        if (openCols.size === 0) return null;
+        const oCode = pickCol(openCols, [
+          "TransCode", "TableCode", "TabCode", "Section", "TableNo",
+        ]);
+        const oVal = pickCol(openCols, ["ItemPrice", "Value", "Amount", "Total"]);
+        const oLoc = pickCol(openCols, ["LocCode", "LOCCODE", "Loc"]);
+        const oCancel = pickCol(openCols, ["CANCEL", "Cancel", "Cancelled"]);
+        if (!oCode || !oVal) return null;
+        const or = pool.request();
+        if (trimmedLoc && oLoc) {
+          or.input("outletId", sql.VarChar(20), trimmedLoc);
+        }
+        const oWhere = [
+          oCancel
+            ? `ISNULL(LTRIM(RTRIM(CAST(v.[${oCancel}] AS varchar(10)))), '0') NOT IN ('1', 'Y', 'TRUE')`
+            : "",
+          trimmedLoc && oLoc ? `LTRIM(RTRIM(v.[${oLoc}])) = @outletId` : "",
+        ]
+          .filter(Boolean)
+          .join(" AND ");
+        return or
+          .query(`
+            SELECT
+              COUNT(DISTINCT LTRIM(RTRIM(v.[${oCode}]))) AS OpenCount,
+              SUM(ISNULL(CAST(v.[${oVal}] AS float), 0)) AS OpenAmt
+            FROM dbo.[${OPEN_VIEW_NAME}] v WITH (NOLOCK)
+            ${oWhere ? `WHERE ${oWhere}` : ""}
+          `)
+          .catch(() => null);
+      })();
+
+      const catPromise = (async () => {
+        if (catCols.size === 0) return { mg: null, fg: null };
+        const cLoc = pickCol(catCols, [
+          "LocCode", "LOCCODE", "Loc", "Location", "Outlet",
+        ]);
+        const cDate = pickCol(catCols, [
+          "Txndate", "TxnDate", "TrnDate", "SalesDate", "BillDate",
+        ]);
+        const cMain = pickCol(catCols, [
+          "LEVEL1", "Level1", "MainCategory", "MainCat", "Category", "MainGroup", "CatDes",
+        ]);
+        const cFam = pickCol(catCols, [
+          "FamilyGroup", "FamDes", "FamCode", "Family", "LEVEL3", "Level3", "LEVEL2", "Level2", "SubCategory", "SubGroup",
+        ]);
+        const cTot = pickCol(catCols, [
+          "SaleTotal", "ItemPrice", "TotalItmPrice", "NetTotal", "Total", "Amount", "Value",
+        ]);
+        const cDoNot = pickCol(catCols, ["DoNotShowInSales"]);
+        const cBt = pickCol(catCols, ["BillType", "BILLTYPE"]);
+        if (!cDate || !cMain || !cTot) return { mg: null, fg: null };
+
+        const catWhere = [
+          `v.[${cDate}] >= CAST(@startDate AS datetime)`,
+          `v.[${cDate}] < DATEADD(day, 1, CAST(@endDate AS datetime))`,
+          cDoNot ? `ISNULL(v.[${cDoNot}], 0) <> 1` : "",
+          cBt ? `ISNULL(LTRIM(RTRIM(v.[${cBt}])), '') <> 'CM'` : "",
+          trimmedLoc && cLoc ? `LTRIM(RTRIM(v.[${cLoc}])) = @outletId` : "",
+        ]
+          .filter(Boolean)
+          .join(" AND ");
+
+        const bindCat = () => {
+          const cr = pool.request();
+          cr.input("startDate", sql.VarChar(10), sIsoClean);
+          cr.input("endDate", sql.VarChar(10), eIsoClean);
+          if (trimmedLoc && cLoc) {
+            cr.input("outletId", sql.VarChar(20), trimmedLoc);
+          }
+          return cr;
+        };
+
+        const mgP = bindCat()
+          .query(`
+            SELECT
+              UPPER(ISNULL(NULLIF(LTRIM(RTRIM(v.[${cMain}])), ''), 'OTHER')) AS GrpName,
+              SUM(ISNULL(CAST(v.[${cTot}] AS float), 0)) AS Amt
+            FROM dbo.[${CATEGORY_VIEW}] v WITH (NOLOCK)
+            WHERE ${catWhere}
+            GROUP BY UPPER(ISNULL(NULLIF(LTRIM(RTRIM(v.[${cMain}])), ''), 'OTHER'))
+            ORDER BY GrpName
+          `)
+          .catch(() => null);
+
+        const fgP = cFam
+          ? bindCat()
+              .query(`
+                SELECT
+                  ISNULL(NULLIF(LTRIM(RTRIM(CAST(v.[${cFam}] AS varchar(120)))), ''), 'OTHER') AS FamName,
+                  SUM(ISNULL(CAST(v.[${cTot}] AS float), 0)) AS Amt
+                FROM dbo.[${CATEGORY_VIEW}] v WITH (NOLOCK)
+                WHERE ${catWhere}
+                GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(CAST(v.[${cFam}] AS varchar(120)))), ''), 'OTHER')
+                ORDER BY FamName
+              `)
+              .catch(() => null)
+          : Promise.resolve(null);
+
+        const [mg, fg] = await Promise.all([mgP, fgP]);
+        return { mg, fg };
+      })();
+
+      const mtdPromise = bhOrderMode
+        ? bindRange(pool.request(), mtdStartIso, eIsoClean)
+            .query(`
+              SELECT
+                UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], '')))) AS ModeCode,
+                ${sumExpr(bhNet)} AS Amt
+              FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
+              WHERE ${activeWhere}
+              GROUP BY UPPER(LTRIM(RTRIM(ISNULL(h.[${bhOrderMode}], ''))))
+              ORDER BY ModeCode
+            `)
+            .catch(() => null)
+        : bindRange(pool.request(), mtdStartIso, eIsoClean)
+            .query(`
+              SELECT ${sumExpr(bhNet)} AS Amt
+              FROM dbo.Tbl_BillHeader h WITH (NOLOCK)
+              WHERE ${activeWhere}
+            `)
+            .catch(() => null);
+
+      const [
+        rateRes,
+        aggRes,
+        smRes,
+        pRes,
+        cRes,
+        vRes,
+        oRes,
+        catRes,
+        mtdRes,
+      ] = await Promise.all([
+        taxRatesPromise,
+        aggPromise,
+        smPromise,
+        payPromise,
+        cashierPromise,
+        voidPromise,
+        openPromise,
+        catPromise,
+        mtdPromise,
+      ]);
+
+      let scRateLbl = "10%";
+      let vatRateLbl = "0%";
+      let tdlRateLbl = "1%";
+      let otherTaxName = "SSCL";
+      let otherTaxRateLbl = "15%";
+
+      if (rateRes?.recordset) {
+        const seen = new Set<string>();
+        for (const r of rateRes.recordset as Array<{ pdes: string; vdes: string }>) {
+          const k = r.pdes.toUpperCase();
+          if (seen.has(k)) continue;
+          seen.add(k);
+          if (k === "SERVICE CHARGE" && r.vdes) scRateLbl = r.vdes;
+          else if (k === "VAT" && r.vdes) vatRateLbl = r.vdes;
+          else if (k === "TDL" && r.vdes) tdlRateLbl = r.vdes;
+          else if (k === "SSCL" || k === "N.B.T" || k === "NBT") {
+            otherTaxName = r.pdes;
+            if (r.vdes) otherTaxRateLbl = r.vdes;
+          }
+        }
       }
-      for (const [name, amt] of byName.entries()) {
-        serviceModeRows.push({ desc: name, val: "", amt: fmtPerf(amt) });
+
+      const agg = aggRes.recordset?.[0] ?? {};
+      const billCount = Number(agg.BillCount ?? 0);
+
+      // Optional fallback: if 0 live bills on this date AND Tbl_PerformanceValues has exact snapshot rows
+      if (billCount === 0 && perfCols.size > 0) {
+        const pDesCol = pickCol(perfCols, ["PerDes"]);
+        const vDesCol = pickCol(perfCols, ["Valdes", "ValDes"]);
+        const pAmtCol = pickCol(perfCols, ["PerfAmount"]);
+        const headCol = pickCol(perfCols, ["Heading"]);
+        const sortCol = pickCol(perfCols, ["SortingOrder"]);
+        const txnCol = pickCol(perfCols, ["TxnDate"]);
+        const locIdCol = pickCol(perfCols, ["LocID", "LocCode"]);
+
+        if (pDesCol && vDesCol && pAmtCol && headCol && txnCol) {
+          const snapReq = pool.request();
+          snapReq.input("sDate", sql.VarChar(10), sIsoClean);
+          snapReq.input("eDate", sql.VarChar(10), eIsoClean);
+          if (trimmedLoc && locIdCol) {
+            snapReq.input("sLoc", sql.VarChar(20), trimmedLoc);
+          }
+          const snapRes = await snapReq
+            .query(`
+              SELECT
+                ISNULL([${pDesCol}], '') AS PerDes,
+                ISNULL([${vDesCol}], '') AS Valdes,
+                ISNULL([${pAmtCol}], '') AS PerfAmount,
+                ISNULL([${headCol}], 0) AS Heading,
+                ${sortCol ? `ISNULL([${sortCol}], 0)` : "0"} AS SortingOrder
+              FROM dbo.Tbl_PerformanceValues WITH (NOLOCK)
+              WHERE [${txnCol}] >= CAST(@sDate AS datetime)
+                AND [${txnCol}] < DATEADD(day, 1, CAST(@eDate AS datetime))
+                ${trimmedLoc && locIdCol ? `AND LTRIM(RTRIM([${locIdCol}])) = @sLoc` : ""}
+              ${sortCol ? `ORDER BY [${sortCol}] ASC` : ""}
+            `)
+            .catch(() => null);
+
+          const snapRows = (snapRes?.recordset ?? []) as Array<{
+            PerDes: string;
+            Valdes: string;
+            PerfAmount: string;
+            Heading: boolean | number;
+            SortingOrder: number;
+          }>;
+
+          if (snapRows.length >= 6) {
+            const snapSections: PerfSectionOut[] = [];
+            let curSec: PerfSectionOut | null = null;
+
+            for (const sr of snapRows) {
+              const isHead = Boolean(sr.Heading);
+              const desc = String(sr.PerDes ?? "").trim();
+              const val = String(sr.Valdes ?? "").trim();
+              const amt = String(sr.PerfAmount ?? "").trim();
+              if (isHead) {
+                curSec = { heading: desc, rows: [] };
+                snapSections.push(curSec);
+              } else if (curSec && (desc || val || amt)) {
+                const isCenteredCount =
+                  desc === "Bill Count" ||
+                  desc === "Unclosed Bills" ||
+                  desc === "Month To Date Average";
+                curSec.rows.push({
+                  desc,
+                  val,
+                  amt,
+                  centerVal: isCenteredCount,
+                });
+              }
+            }
+
+            if (snapSections.length > 0) {
+              return {
+                locCode: trimmedLoc,
+                locName,
+                subHeader: locSubHdr,
+                sections: snapSections,
+              };
+            }
+          }
+        }
       }
-    }
 
-    const payModeRows: Array<{ desc: string; val: string; amt: string }> = [];
-    for (const r of (pRes?.recordset ?? []) as Array<{ PayName: string; Amt: number }>) {
-      payModeRows.push({
-        desc: r.PayName || "CASH",
-        val: "",
-        amt: fmtPerf(Number(r.Amt ?? 0)),
-      });
-    }
+      const salesVolume = r2(Number(agg.SalesVolume ?? 0));
+      const serChg = r2(Number(agg.SerChg ?? 0));
+      const otherSerChg = r2(Number(agg.OtherSerChg ?? 0));
+      const addSerChg = r2(Number(agg.AddSerChg ?? 0));
+      const vat = r2(Number(agg.VAT ?? 0));
+      const tdl = r2(Number(agg.TDL ?? 0));
+      const otherVat = r2(Number(agg.OtherVAT ?? 0));
+      const totalDiscount = r2(Number(agg.TotalDiscount ?? 0));
+      const promoTotal = r2(Number(agg.PromoTotal ?? 0));
 
-    const cashierRows: Array<{ desc: string; val: string; amt: string }> = [];
-    for (const r of (cRes?.recordset ?? []) as Array<{ CashierName: string; Amt: number }>) {
-      cashierRows.push({
-        desc: String(r.CashierName ?? "").trim() || "UNKNOWN",
-        val: "",
-        amt: fmtPerf(Number(r.Amt ?? 0)),
-      });
-    }
+      const taxTotal = r2(vat + tdl + otherVat);
+      const salesWithoutTax = r2(
+        salesVolume - serChg - otherSerChg - addSerChg - taxTotal
+      );
 
-    const voidSectionRows: Array<{
-      desc: string;
-      val: string;
-      amt: string;
-      centerVal?: boolean;
-    }> = [];
-    const vCount = Number(vRes?.recordset?.[0]?.VCount ?? 0);
-    const vAmt = r2(Number(vRes?.recordset?.[0]?.VAmt ?? 0));
-    if (vCount > 0) {
-      voidSectionRows.push({
-        desc: "Void Bill Count",
-        val: String(vCount),
-        amt: fmtPerf(vAmt),
-        centerVal: true,
-      });
-    }
-
-    voidSectionRows.push({
-      desc: "Bill Count",
-      val: String(billCount),
-      amt: fmtPerf(salesVolume),
-      centerVal: true,
-    });
-
-    const openCount = Number(oRes?.recordset?.[0]?.OpenCount ?? 0);
-    const openAmt = r2(Number(oRes?.recordset?.[0]?.OpenAmt ?? 0));
-    if (openCount > 0) {
-      voidSectionRows.push({
-        desc: "Unclosed Bills",
-        val: String(openCount),
-        amt: fmtPerf(openAmt),
-        centerVal: true,
-      });
-    }
-
-    const mainGroupRows: Array<{ desc: string; val: string; amt: string }> = [];
-    const familyGroupRows: Array<{ desc: string; val: string; amt: string }> = [];
-    let mainGroupTotal = 0;
-    let familyGroupTotal = 0;
-
-    for (const r of (catRes?.mg?.recordset ?? []) as Array<{ GrpName: string; Amt: number }>) {
-      const amt = r2(Number(r.Amt ?? 0));
-      mainGroupTotal = r2(mainGroupTotal + amt);
-      mainGroupRows.push({ desc: r.GrpName, val: "", amt: fmtPerf(amt) });
-    }
-    for (const r of (catRes?.fg?.recordset ?? []) as Array<{ FamName: string; Amt: number }>) {
-      const amt = r2(Number(r.Amt ?? 0));
-      familyGroupTotal = r2(familyGroupTotal + amt);
-      const rawFam = String(r.FamName ?? "").trim();
-      const famLabel = /^\d+$/.test(rawFam) ? `[${rawFam}]` : rawFam;
-      familyGroupRows.push({ desc: famLabel, val: "", amt: fmtPerf(amt) });
-    }
-
-    mainGroupRows.push({
-      desc: "MAIN GROUP TOTAL",
-      val: "",
-      amt: fmtPerf(mainGroupTotal),
-    });
-    familyGroupRows.push({
-      desc: "FAMILY GROUP TOTAL",
-      val: "",
-      amt: fmtPerf(familyGroupTotal),
-    });
-
-    const mtdRows: Array<{
-      desc: string;
-      val: string;
-      amt: string;
-      centerVal?: boolean;
-    }> = [];
-    let mtdTotal = 0;
-    if (bhOrderMode && mtdRes?.recordset) {
-      const mtdByMode = new Map<string, number>();
-      for (const r of mtdRes.recordset as Array<{ ModeCode: string; Amt: number }>) {
-        const mName = resolveModeName(r.ModeCode);
-        const amt = r2(Number(r.Amt ?? 0));
-        mtdByMode.set(mName, r2((mtdByMode.get(mName) ?? 0) + amt));
-        mtdTotal = r2(mtdTotal + amt);
+      let localPax = Math.round(Number(agg.LocalPax ?? 0));
+      let foreignPax = Math.round(Number(agg.ForeignPax ?? 0));
+      const noPax = Math.round(Number(agg.NoPax ?? 0));
+      if (!bhLocalPax && !bhForeignPax) {
+        localPax = noPax;
+        foreignPax = 0;
+      } else if (localPax + foreignPax === 0 && noPax > 0) {
+        localPax = noPax;
       }
-      for (const [mName, amt] of mtdByMode.entries()) {
-        mtdRows.push({
-          desc: `Month To Date${mName}`,
+      const totalPax = localPax + foreignPax;
+
+      const serviceModeRows: Array<{ desc: string; val: string; amt: string }> = [];
+      if (smRes?.recordset) {
+        const byName = new Map<string, number>();
+        for (const r of smRes.recordset as Array<{ ModeCode: string; Amt: number }>) {
+          const name = resolveModeName(r.ModeCode);
+          byName.set(name, r2((byName.get(name) ?? 0) + Number(r.Amt ?? 0)));
+        }
+        for (const [name, amt] of byName.entries()) {
+          serviceModeRows.push({ desc: name, val: "", amt: fmtPerf(amt) });
+        }
+      }
+
+      const payModeRows: Array<{ desc: string; val: string; amt: string }> = [];
+      for (const r of (pRes?.recordset ?? []) as Array<{ PayName: string; Amt: number }>) {
+        payModeRows.push({
+          desc: r.PayName || "CASH",
           val: "",
-          amt: fmtPerf(amt),
+          amt: fmtPerf(Number(r.Amt ?? 0)),
         });
       }
-    } else {
-      mtdTotal = r2(Number(mtdRes?.recordset?.[0]?.Amt ?? 0));
-    }
 
-    mtdRows.push({
-      desc: "Month To Date Total",
-      val: "",
-      amt: fmtPerf(mtdTotal),
-    });
-    mtdRows.push({
-      desc: "Month To Date Average",
-      val: String(mtdDays),
-      amt: fmtPerf(mtdDays > 0 ? mtdTotal / mtdDays : 0),
-      centerVal: true,
-    });
+      const cashierRows: Array<{ desc: string; val: string; amt: string }> = [];
+      for (const r of (cRes?.recordset ?? []) as Array<{ CashierName: string; Amt: number }>) {
+        cashierRows.push({
+          desc: String(r.CashierName ?? "").trim() || "UNKNOWN",
+          val: "",
+          amt: fmtPerf(Number(r.Amt ?? 0)),
+        });
+      }
 
-    const sections = [
-      {
-        heading: "SALES VOLUME",
-        rows: [{ desc: "Sales Volume", val: "", amt: fmtPerf(salesVolume) }],
-      },
-      {
-        heading: "SERVICE CHARGE AND TAXES",
-        rows: [
-          { desc: "Service Charge", val: scRateLbl, amt: fmtPerf(serChg) },
-          { desc: "VAT", val: vatRateLbl, amt: fmtPerf(vat) },
-          { desc: "TDL", val: tdlRateLbl, amt: fmtPerf(tdl) },
-          { desc: otherTaxName, val: otherTaxRateLbl, amt: fmtPerf(otherVat) },
-          { desc: "TAX Total", val: "", amt: fmtPerf(taxTotal) },
-          { desc: "Sales Without TAX", val: "", amt: fmtPerf(salesWithoutTax) },
-        ],
-      },
-      { heading: "SERVICE MODE COLLECTION", rows: serviceModeRows },
-      {
-        heading: "PAX DISTRIBUTION",
-        rows: [
-          { desc: "Total Pax Count", val: "", amt: totalPax > 0 ? String(totalPax) : "0" },
-          { desc: "Local Pax Count", val: "", amt: localPax > 0 ? String(localPax) : "0" },
-          { desc: "Foriegn Pax Count", val: "", amt: foreignPax > 0 ? String(foreignPax) : "" },
-        ],
-      },
-      { heading: "PAY MODE WISE COLLECTION", rows: payModeRows },
-      { heading: "CASHIER WISE COLLECTION", rows: cashierRows },
-      {
-        heading: "DEDUCTIONS",
-        rows: [
-          { desc: "Total Discount", val: "", amt: fmtPerf(totalDiscount) },
-          { desc: "Other Service Charge", val: "", amt: fmtPerf(otherSerChg) },
-          { desc: "Additional Service Chg", val: "", amt: fmtPerf(addSerChg) },
-        ],
-      },
-      {
-        heading: "PROMOTIONS",
-        rows:
-          promoTotal > 0
-            ? [{ desc: "Promotions", val: "", amt: fmtPerf(promoTotal) }]
-            : [],
-      },
-      { heading: "VOID BILLS", rows: voidSectionRows },
-      {
-        heading: "SPENDING AVERAGE",
-        rows: [
-          {
-            desc: "Spending Per Bill",
+      const voidSectionRows: Array<{
+        desc: string;
+        val: string;
+        amt: string;
+        centerVal?: boolean;
+      }> = [];
+      const vCount = Number(vRes?.recordset?.[0]?.VCount ?? 0);
+      const vAmt = r2(Number(vRes?.recordset?.[0]?.VAmt ?? 0));
+      if (vCount > 0) {
+        voidSectionRows.push({
+          desc: "Void Bill Count",
+          val: String(vCount),
+          amt: fmtPerf(vAmt),
+          centerVal: true,
+        });
+      }
+
+      voidSectionRows.push({
+        desc: "Bill Count",
+        val: String(billCount),
+        amt: fmtPerf(salesVolume),
+        centerVal: true,
+      });
+
+      const openCount = Number(oRes?.recordset?.[0]?.OpenCount ?? 0);
+      const openAmt = r2(Number(oRes?.recordset?.[0]?.OpenAmt ?? 0));
+      if (openCount > 0) {
+        voidSectionRows.push({
+          desc: "Unclosed Bills",
+          val: String(openCount),
+          amt: fmtPerf(openAmt),
+          centerVal: true,
+        });
+      }
+
+      const mainGroupRows: Array<{ desc: string; val: string; amt: string }> = [];
+      const familyGroupRows: Array<{ desc: string; val: string; amt: string }> = [];
+      let mainGroupTotal = 0;
+      let familyGroupTotal = 0;
+
+      for (const r of (catRes?.mg?.recordset ?? []) as Array<{ GrpName: string; Amt: number }>) {
+        const amt = r2(Number(r.Amt ?? 0));
+        mainGroupTotal = r2(mainGroupTotal + amt);
+        mainGroupRows.push({ desc: r.GrpName, val: "", amt: fmtPerf(amt) });
+      }
+      for (const r of (catRes?.fg?.recordset ?? []) as Array<{ FamName: string; Amt: number }>) {
+        const amt = r2(Number(r.Amt ?? 0));
+        familyGroupTotal = r2(familyGroupTotal + amt);
+        const rawFam = String(r.FamName ?? "").trim();
+        const famLabel = /^\d+$/.test(rawFam) ? `[${rawFam}]` : rawFam;
+        familyGroupRows.push({ desc: famLabel, val: "", amt: fmtPerf(amt) });
+      }
+
+      mainGroupRows.push({
+        desc: "MAIN GROUP TOTAL",
+        val: "",
+        amt: fmtPerf(mainGroupTotal),
+      });
+      familyGroupRows.push({
+        desc: "FAMILY GROUP TOTAL",
+        val: "",
+        amt: fmtPerf(familyGroupTotal),
+      });
+
+      const mtdRows: Array<{
+        desc: string;
+        val: string;
+        amt: string;
+        centerVal?: boolean;
+      }> = [];
+      let mtdTotal = 0;
+      if (bhOrderMode && mtdRes?.recordset) {
+        const mtdByMode = new Map<string, number>();
+        for (const r of mtdRes.recordset as Array<{ ModeCode: string; Amt: number }>) {
+          const mName = resolveModeName(r.ModeCode);
+          const amt = r2(Number(r.Amt ?? 0));
+          mtdByMode.set(mName, r2((mtdByMode.get(mName) ?? 0) + amt));
+          mtdTotal = r2(mtdTotal + amt);
+        }
+        for (const [mName, amt] of mtdByMode.entries()) {
+          mtdRows.push({
+            desc: `Month To Date${mName}`,
             val: "",
-            amt: fmtPerf(billCount > 0 ? salesWithoutTax / billCount : 0),
-          },
-          {
-            desc: "Spending Per Pax",
-            val: "",
-            amt: fmtPerf(totalPax > 0 ? salesWithoutTax / totalPax : 0),
-          },
-          {
-            desc: "Avg Pax Per Bill",
-            val: "",
-            amt: fmtPerf(billCount > 0 ? totalPax / billCount : 0),
-          },
-        ],
-      },
-      { heading: "MAIN GROUP SALES", rows: mainGroupRows },
-      { heading: "FAMILY SALES", rows: familyGroupRows },
-      { heading: "MONTH TO DATE", rows: mtdRows },
-    ];
+            amt: fmtPerf(amt),
+          });
+        }
+      } else {
+        mtdTotal = r2(Number(mtdRes?.recordset?.[0]?.Amt ?? 0));
+      }
+
+      mtdRows.push({
+        desc: "Month To Date Total",
+        val: "",
+        amt: fmtPerf(mtdTotal),
+      });
+      mtdRows.push({
+        desc: "Month To Date Average",
+        val: String(mtdDays),
+        amt: fmtPerf(mtdDays > 0 ? mtdTotal / mtdDays : 0),
+        centerVal: true,
+      });
+
+      const sections: PerfSectionOut[] = [
+        {
+          heading: "SALES VOLUME",
+          rows: [{ desc: "Sales Volume", val: "", amt: fmtPerf(salesVolume) }],
+        },
+        {
+          heading: "SERVICE CHARGE AND TAXES",
+          rows: [
+            { desc: "Service Charge", val: scRateLbl, amt: fmtPerf(serChg) },
+            { desc: "VAT", val: vatRateLbl, amt: fmtPerf(vat) },
+            { desc: "TDL", val: tdlRateLbl, amt: fmtPerf(tdl) },
+            { desc: otherTaxName, val: otherTaxRateLbl, amt: fmtPerf(otherVat) },
+            { desc: "TAX Total", val: "", amt: fmtPerf(taxTotal) },
+            { desc: "Sales Without TAX", val: "", amt: fmtPerf(salesWithoutTax) },
+          ],
+        },
+        { heading: "SERVICE MODE COLLECTION", rows: serviceModeRows },
+        {
+          heading: "PAX DISTRIBUTION",
+          rows: [
+            { desc: "Total Pax Count", val: "", amt: totalPax > 0 ? String(totalPax) : "0" },
+            { desc: "Local Pax Count", val: "", amt: localPax > 0 ? String(localPax) : "0" },
+            { desc: "Foriegn Pax Count", val: "", amt: foreignPax > 0 ? String(foreignPax) : "" },
+          ],
+        },
+        { heading: "PAY MODE WISE COLLECTION", rows: payModeRows },
+        { heading: "CASHIER WISE COLLECTION", rows: cashierRows },
+        {
+          heading: "DEDUCTIONS",
+          rows: [
+            { desc: "Total Discount", val: "", amt: fmtPerf(totalDiscount) },
+            { desc: "Other Service Charge", val: "", amt: fmtPerf(otherSerChg) },
+            { desc: "Additional Service Chg", val: "", amt: fmtPerf(addSerChg) },
+          ],
+        },
+        {
+          heading: "PROMOTIONS",
+          rows:
+            promoTotal > 0
+              ? [{ desc: "Promotions", val: "", amt: fmtPerf(promoTotal) }]
+              : [],
+        },
+        { heading: "VOID BILLS", rows: voidSectionRows },
+        {
+          heading: "SPENDING AVERAGE",
+          rows: [
+            {
+              desc: "Spending Per Bill",
+              val: "",
+              amt: fmtPerf(billCount > 0 ? salesWithoutTax / billCount : 0),
+            },
+            {
+              desc: "Spending Per Pax",
+              val: "",
+              amt: fmtPerf(totalPax > 0 ? salesWithoutTax / totalPax : 0),
+            },
+            {
+              desc: "Avg Pax Per Bill",
+              val: "",
+              amt: fmtPerf(billCount > 0 ? totalPax / billCount : 0),
+            },
+          ],
+        },
+        { heading: "MAIN GROUP SALES", rows: mainGroupRows },
+        { heading: "FAMILY SALES", rows: familyGroupRows },
+        { heading: "MONTH TO DATE", rows: mtdRows },
+      ];
+
+      return {
+        locCode: trimmedLoc,
+        locName,
+        subHeader: locSubHdr,
+        sections,
+      };
+    };
+
+    const locationReports = await Promise.all(
+      targetLocCodes.map((lc) => buildForLocation(lc))
+    );
+
+    const primary = locationReports[0];
+    const companyName = primary?.locName || "RESTAURANT";
+    const subHeader = primary?.subHeader || "";
+    const locDisplay = locationReports
+      .map((r) => (r.locCode ? `[${r.locCode}] ${r.locName}` : r.locName))
+      .join(", ");
 
     return {
       success: true,
@@ -4648,15 +4735,20 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
         printDate: fmtDashDate(now),
         printTime: fmt12Time(now),
         printUser,
+        businessDate: fmtSlashDate(dBiz),
+        reportDate: fmtSlashDate(now),
+        currentTime: fmt24Time(now),
+        reportUser: metaUser,
+        mainLocations: mainLocs.map((l) => ({ code: l.code, name: l.name })),
+        locationReports,
         meta: [
-          { label: "Bussiness Day", value: fmtSlashDate(dTo) },
-          { label: "Reporting Date From", value: fmtSlashDate(dFrom) },
-          { label: "Reporting Date To", value: fmtSlashDate(dTo) },
+          { label: "Bussiness Day", value: fmtSlashDate(dBiz) },
+          { label: "Report Date", value: fmtSlashDate(now) },
           { label: "Current Time", value: fmt24Time(now) },
           { label: "User", value: metaUser },
           { label: "Location", value: locDisplay },
         ],
-        sections,
+        sections: primary?.sections ?? [],
       },
     };
   } catch (error) {

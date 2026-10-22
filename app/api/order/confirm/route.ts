@@ -6,8 +6,8 @@
 //   { tableNo, tableGroup?, t?, pax?, customerName?, customerPhone?,
 //     customerCode?, orderType?, items: [{ itemId, quantity, remark? }] }
 //
-// tableNo = "TA" → takeaway: OrderType TA, takeaway number from
-// Tbl_Serials('TA'), no table/pax needed (phone + name required).
+// tableNo = "TA" → takeaway: OrderType TA, TabelNo from Tbl_Serials('TA')
+// (e.g. TA-0001) and InvoiceNo from Tbl_Serials('INV') (same as DI).
 //
 // Guards (see web-qr-ordering-spec.md §6):
 //   1. the table token must match the table number

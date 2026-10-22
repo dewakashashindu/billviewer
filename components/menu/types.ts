@@ -87,7 +87,7 @@ export interface ConfirmResult {
   invoiceNo: string;
   itemCount: number;
   source: "database" | "mock";
-  /** 'DI' = dine-in · 'TA' = takeaway (invoiceNo = the TA number) */
+  /** 'DI' = dine-in · 'TA' = takeaway (tableNo = TA-0001, invoiceNo = INV-...) */
   orderType?: "DI" | "TA";
 }
 

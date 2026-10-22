@@ -457,11 +457,11 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
     fetchAction: getKotBotAction,
     columns: [],
   },
-  // Performance Report (POS Crystal Report — Location + Business Date From/To)
+  // Performance Report (POS Crystal Report — Single Business Date & Main Locations)
   "performance-report": {
     id: "performance-report",
     title: "Performance Report",
-    subtitle: "Complete POS operational performance summary (Location & Business Date From / To)",
+    subtitle: "Complete POS operational performance summary (Business Date & Main Locations)",
     render: "performance-report",
     fetchAction: getPerformanceReportAction,
     columns: [],

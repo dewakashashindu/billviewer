@@ -1233,7 +1233,8 @@ export default function TableQrPage() {
             <span style={{ fontSize: 12, color: FAINT, lineHeight: 1.55 }}>
               <b style={{ color: BROWN }}>Takeaway:</b> type <b>TA</b> above (or press the
               button) — only <b>one</b> Takeaway QR can be created. Orders from it are saved
-              with Order Type <b>TA</b> and a takeaway number from <b>Tbl_Serials</b>.
+              with Order Type <b>TA</b>, takeaway number (<b>TA-0001</b>) in <b>TabelNo</b>, and
+              an <b>INV</b> invoice in <b>InvoiceNo</b>.
             </span>
             <span style={{ flex: 1 }} />
             <button

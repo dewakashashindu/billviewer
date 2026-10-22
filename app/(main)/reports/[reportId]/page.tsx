@@ -164,7 +164,7 @@ import PerformanceReport, {
   PerformancePdfDocument,
   type PerformanceReportData,
 } from "@/components/reports/PerformanceReport";
-import { getLocationsAction } from "@/app/actions/reports";
+import { getMainLocationsAction } from "@/app/actions/reports";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -267,11 +267,12 @@ export default function DynamicReportPage() {
   const [credCus, setCredCus] = useState("");
   const [cashSel, setCashSel] = useState("");
   const [perfLocs, setPerfLocs] = useState<{ code: string; name: string }[]>([]);
+  const [perfCompare, setPerfCompare] = useState(false);
 
   useEffect(() => {
     if (reportId !== "performance-report") return;
     let alive = true;
-    getLocationsAction()
+    getMainLocationsAction()
       .then((res) => {
         if (alive && res?.success && Array.isArray(res.data)) {
           setPerfLocs(res.data);
@@ -287,13 +288,22 @@ export default function DynamicReportPage() {
   useEffect(() => {
     const f = searchParams.get("from");
     const t = searchParams.get("to");
+    if (reportId === "performance-report") {
+      if (f) {
+        setStartDate(f);
+        setEndDate(f);
+      }
+      const qLoc = searchParams.get("loc");
+      if (qLoc) setLoc(qLoc);
+      return;
+    }
     if (f) setStartDate(f);
     if (t) setEndDate(t);
     setLoc(searchParams.get("loc") || "");
     setOrderMode(searchParams.get("om") || "");
     setBillType(searchParams.get("bt") || "");
     setPayMode(searchParams.get("pm") || "");
-  }, [searchParams]);
+  }, [searchParams, reportId]);
 
   // ── single fetch effect — ALL reports (sales summary includes) ──
   useEffect(() => {
@@ -353,6 +363,7 @@ export default function DynamicReportPage() {
   useEffect(() => {
     setSearch("");
     setChartMode(false);
+    setPerfCompare(false);
   }, [reportId]);
 
   // generic rows (array data) + search filter
@@ -1722,7 +1733,7 @@ export default function DynamicReportPage() {
     );
   }
 
-  // ── Performance Report (Crystal Report layout + A4 PDF) ──
+  // ── Performance Report (Single Business Date + Main Location Tabs + Compare) ──
   if (config.render === "performance-report") {
     const perfData = objectData
       ? (objectData as unknown as PerformanceReportData)
@@ -1737,82 +1748,203 @@ export default function DynamicReportPage() {
       <PerformancePdfDocument data={filteredPerf} />
     ) : undefined;
 
+    const mainTabs =
+      perfLocs.length > 0 ? perfLocs : (perfData?.mainLocations ?? []);
+    const parsedLocs = loc
+      ? loc
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const activeLocCodes =
+      parsedLocs.length > 0
+        ? parsedLocs
+        : mainTabs.length > 0
+          ? [mainTabs[0].code]
+          : [];
+
+    const onSelectLocationTab = (code: string) => {
+      if (!perfCompare) {
+        // Single-select mode: switches directly to the clicked main location
+        setLoc(code);
+        return;
+      }
+      // Compare mode: toggle multiple main locations (keep at least 1 selected)
+      const exists = activeLocCodes.includes(code);
+      if (exists) {
+        if (activeLocCodes.length <= 1) return;
+        const next = activeLocCodes.filter((c) => c !== code);
+        setLoc(next.join(","));
+      } else {
+        const nextSet = new Set([...activeLocCodes, code]);
+        const ordered = mainTabs
+          .map((t) => t.code)
+          .filter((c) => nextSet.has(c));
+        setLoc((ordered.length > 0 ? ordered : [...nextSet]).join(","));
+      }
+    };
+
+    const onToggleCompare = () => {
+      if (perfCompare) {
+        setPerfCompare(false);
+        if (activeLocCodes.length > 1) {
+          setLoc(activeLocCodes[0]);
+        }
+      } else {
+        setPerfCompare(true);
+      }
+    };
+
     return (
       <>
         <ReportToolbar
           title={config.title}
           subtitle={config.subtitle}
           from={startDate}
-          to={endDate}
-          onRangeChange={rangeChange}
+          to={startDate}
+          onRangeChange={(f) => {
+            setStartDate(f);
+            setEndDate(f);
+          }}
+          singleDate
+          singleDateLabel="Business Date"
           search={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search section, description, amount..."
           pdfDocument={pdfDocPerf}
-          pdfFileName={`performance-report-${startDate}_to_${endDate}.pdf`}
+          pdfFileName={`performance-report-${startDate}.pdf`}
           chartSupported={chartsPerf.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
-        <div
-          style={{
-            display: "flex",
-            gap: 14,
-            padding: "10px 24px 0",
-            fontFamily: "Inter, sans-serif",
-            fontSize: 12,
-            color: "#684830",
-            alignItems: "center",
-          }}
-        >
-          <label
+
+        {/* Main Locations Tabs (Tbl_LocationMaster.SubLoc = false ONLY) + Compare Button */}
+        {mainTabs.length > 0 && (
+          <div
             style={{
-              display: "inline-flex",
+              display: "flex",
+              justifyContent: "space-between",
               alignItems: "center",
-              gap: 8,
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#45301D",
-              background: "#FAF5EE",
-              border: "1px solid #E4D6BF",
-              borderRadius: 8,
-              padding: "5px 12px",
+              flexWrap: "wrap",
+              gap: 12,
+              padding: "12px 24px 0",
+              fontFamily: "Inter, sans-serif",
             }}
           >
-            <span
+            <div
               style={{
-                color: "#907860",
-                fontWeight: 700,
-                fontSize: 10.5,
-                textTransform: "uppercase",
-                letterSpacing: 0.4,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
               }}
             >
-              Location
-            </span>
-            <select
-              value={loc}
-              onChange={(e) => setLoc(e.target.value)}
+              {mainTabs.map((t) => {
+                const isActive = activeLocCodes.includes(t.code);
+                return (
+                  <button
+                    key={t.code}
+                    type="button"
+                    onClick={() => onSelectLocationTab(t.code)}
+                    style={{
+                      height: 36,
+                      padding: "0 15px",
+                      borderRadius: 9,
+                      border: isActive
+                        ? "1px solid #45301D"
+                        : "1px solid #DECBB0",
+                      background: isActive
+                        ? "linear-gradient(135deg,#45301D 0%,#684830 100%)"
+                        : "#FFFFFF",
+                      color: isActive ? "#FFFFFF" : "#684830",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      fontFamily: "Inter, sans-serif",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      boxShadow: isActive
+                        ? "0 2px 8px rgba(69,48,29,0.20)"
+                        : "none",
+                      transition: "all 0.14s ease",
+                    }}
+                  >
+                    {perfCompare && (
+                      <span
+                        style={{
+                          width: 15,
+                          height: 15,
+                          borderRadius: 4,
+                          border: isActive
+                            ? "1.5px solid #F2CB95"
+                            : "1.5px solid currentColor",
+                          background: isActive ? "#F2CB95" : "transparent",
+                          color: "#2C1E12",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 10,
+                          fontWeight: 900,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {isActive ? "✓" : ""}
+                      </span>
+                    )}
+                    <span>{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div
               style={{
-                border: "none",
-                background: "transparent",
-                fontSize: 12.5,
-                fontWeight: 600,
-                color: "#45301D",
-                fontFamily: "Inter, sans-serif",
-                cursor: "pointer",
-                outline: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
               }}
             >
-              <option value="">All Locations</option>
-              {perfLocs.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.code} – {l.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+              {perfCompare && (
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: "#6B543E",
+                  }}
+                >
+                  Select locations to compare:
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={onToggleCompare}
+                style={{
+                  height: 36,
+                  padding: "0 15px",
+                  borderRadius: 9,
+                  border: perfCompare
+                    ? "1.5px solid #45301D"
+                    : "1.5px solid #684830",
+                  background: perfCompare ? "#684830" : "#FCF7F3",
+                  color: perfCompare ? "#FFFFFF" : "#45301D",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  fontFamily: "Inter, sans-serif",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                }}
+              >
+                {perfCompare
+                  ? `✓ Comparing (${activeLocCodes.length})`
+                  : "⇄ Compare"}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />

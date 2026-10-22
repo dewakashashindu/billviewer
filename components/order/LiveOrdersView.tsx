@@ -120,7 +120,10 @@ export default function LiveOrdersView({
             gap: 16,
           }}
         >
-          {orders.map((o) => (
+          {orders.map((o) => {
+            const isTakeaway =
+              o.orderType === "TA" || /^TA(?:-|$)/i.test(o.tableNo || "");
+            return (
             <div
               key={o.invoiceNo}
               style={{
@@ -153,7 +156,7 @@ export default function LiveOrdersView({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  Table {o.tableNo || "—"}
+                  {isTakeaway ? o.tableNo || "Takeaway" : `Table ${o.tableNo || "—"}`}
                 </span>
                 <span
                   style={{
@@ -269,7 +272,8 @@ export default function LiveOrdersView({
                 </span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

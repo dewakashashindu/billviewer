@@ -2,7 +2,6 @@
 
 import React, { Fragment, type CSSProperties } from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import { IconCoins, IconPin } from "./ReportIcons";
 
 export interface PerformanceReportRow {
   desc: string;
@@ -17,41 +16,210 @@ export interface PerformanceReportSection {
   rows: PerformanceReportRow[];
 }
 
+export interface PerformanceLocationReport {
+  locCode: string;
+  locName: string;
+  subHeader?: string;
+  sections: PerformanceReportSection[];
+}
+
 export interface PerformanceReportData {
   companyName: string;
   subHeader: string;
   printDate: string;
   printTime: string;
   printUser: string;
+  businessDate?: string;
+  reportDate?: string;
+  currentTime?: string;
+  reportUser?: string;
+  mainLocations?: Array<{ code: string; name: string }>;
+  locationReports?: PerformanceLocationReport[];
   meta: Array<{ label: string; value: string }>;
   sections: PerformanceReportSection[];
+}
+
+function isSummaryRow(desc: string): boolean {
+  const u = String(desc ?? "").trim().toUpperCase();
+  return (
+    u === "TAX TOTAL" ||
+    u === "SALES WITHOUT TAX" ||
+    u === "MAIN GROUP TOTAL" ||
+    u === "FAMILY GROUP TOTAL" ||
+    u === "MONTH TO DATE TOTAL"
+  );
+}
+
+function isBottomSpecialRow(desc: string): boolean {
+  return isSummaryRow(desc) || String(desc ?? "").trim().toUpperCase() === "MONTH TO DATE AVERAGE";
+}
+
+interface MergedPerfRow {
+  desc: string;
+  bold?: boolean;
+  cells: Array<{
+    val: string;
+    amt: string;
+    centerVal?: boolean;
+  }>;
+}
+
+interface MergedPerfSection {
+  heading: string;
+  rows: MergedPerfRow[];
+}
+
+function getEffectiveLocations(d: PerformanceReportData): PerformanceLocationReport[] {
+  if (Array.isArray(d.locationReports) && d.locationReports.length > 0) {
+    return d.locationReports;
+  }
+  const locMeta =
+    (d.meta ?? []).find((m) => m.label.toLowerCase() === "location")?.value || "";
+  return [
+    {
+      locCode: locMeta.replace(/^\[|\].*$/g, "").trim() || "LOC",
+      locName: d.companyName || locMeta || "Location",
+      subHeader: d.subHeader,
+      sections: d.sections ?? [],
+    },
+  ];
+}
+
+function mergeLocationSections(
+  locations: PerformanceLocationReport[]
+): MergedPerfSection[] {
+  if (locations.length === 0) return [];
+
+  // Preserve canonical section heading order across all selected locations
+  const headings: string[] = [];
+  const headingSeen = new Set<string>();
+  for (const loc of locations) {
+    for (const sec of loc.sections ?? []) {
+      const key = sec.heading.trim().toUpperCase();
+      if (!headingSeen.has(key)) {
+        headingSeen.add(key);
+        headings.push(sec.heading);
+      }
+    }
+  }
+
+  return headings.map((heading) => {
+    const hKey = heading.trim().toUpperCase();
+    const regularDescs: string[] = [];
+    const bottomDescs: string[] = [];
+    const seenDesc = new Set<string>();
+
+    const perLocMap = locations.map((loc) => {
+      const sec = (loc.sections ?? []).find(
+        (s) => s.heading.trim().toUpperCase() === hKey
+      );
+      const rowMap = new Map<string, PerformanceReportRow>();
+      for (const r of sec?.rows ?? []) {
+        const dKey = r.desc.trim().toUpperCase();
+        if (!rowMap.has(dKey)) rowMap.set(dKey, r);
+        if (!seenDesc.has(dKey)) {
+          seenDesc.add(dKey);
+          if (isBottomSpecialRow(r.desc)) {
+            bottomDescs.push(r.desc);
+          } else {
+            regularDescs.push(r.desc);
+          }
+        }
+      }
+      return rowMap;
+    });
+
+    const orderedDescs = [...regularDescs, ...bottomDescs];
+    const rows: MergedPerfRow[] = orderedDescs.map((desc) => {
+      const dKey = desc.trim().toUpperCase();
+      let anyBold = false;
+      const cells = perLocMap.map((rm) => {
+        const hit = rm.get(dKey);
+        if (hit) {
+          if (hit.bold) anyBold = true;
+          return {
+            val: hit.val,
+            amt: hit.amt,
+            centerVal: hit.centerVal,
+          };
+        }
+        return {
+          val: "",
+          amt: "0.00",
+          centerVal: false,
+        };
+      });
+      return { desc, bold: anyBold, cells };
+    });
+
+    return { heading, rows };
+  });
 }
 
 export function filterPerformanceReport(
   d: PerformanceReportData,
   search: string
 ): PerformanceReportData {
-  if (!d || !Array.isArray(d.sections)) return d;
+  if (!d) return d;
   const q = search.trim().toLowerCase();
   if (!q) return d;
 
-  const sections = d.sections
-    .map((sec) => {
-      if (sec.heading.toLowerCase().includes(q)) return sec;
-      const rows = (sec.rows ?? []).filter(
-        (r) =>
-          r.desc.toLowerCase().includes(q) ||
-          r.val.toLowerCase().includes(q) ||
-          r.amt.toLowerCase().includes(q)
-      );
-      return rows.length > 0 ? { ...sec, rows } : null;
-    })
-    .filter((s): s is PerformanceReportSection => s !== null);
+  const filterSecList = (secs: PerformanceReportSection[], keepDescs?: Set<string>) =>
+    (secs ?? [])
+      .map((sec) => {
+        if (sec.heading.toLowerCase().includes(q)) return sec;
+        const rows = (sec.rows ?? []).filter((r) => {
+          if (keepDescs && keepDescs.has(`${sec.heading.toUpperCase()}||${r.desc.toUpperCase()}`)) {
+            return true;
+          }
+          return (
+            r.desc.toLowerCase().includes(q) ||
+            r.val.toLowerCase().includes(q) ||
+            r.amt.toLowerCase().includes(q)
+          );
+        });
+        return rows.length > 0 ? { ...sec, rows } : null;
+      })
+      .filter((s): s is PerformanceReportSection => s !== null);
 
-  return { ...d, sections };
+  if (Array.isArray(d.locationReports) && d.locationReports.length > 0) {
+    // Keep any (section, desc) that matches in ANY selected location so columns stay aligned
+    const matchedKeys = new Set<string>();
+    for (const loc of d.locationReports) {
+      for (const sec of loc.sections ?? []) {
+        const secMatch = sec.heading.toLowerCase().includes(q);
+        for (const r of sec.rows ?? []) {
+          if (
+            secMatch ||
+            r.desc.toLowerCase().includes(q) ||
+            r.val.toLowerCase().includes(q) ||
+            r.amt.toLowerCase().includes(q)
+          ) {
+            matchedKeys.add(`${sec.heading.toUpperCase()}||${r.desc.toUpperCase()}`);
+          }
+        }
+      }
+    }
+
+    const locationReports = d.locationReports.map((loc) => ({
+      ...loc,
+      sections: filterSecList(loc.sections ?? [], matchedKeys),
+    }));
+
+    return {
+      ...d,
+      locationReports,
+      sections: filterSecList(d.sections ?? [], matchedKeys),
+    };
+  }
+
+  return {
+    ...d,
+    sections: filterSecList(d.sections ?? []),
+  };
 }
 
-/* ── PDF STYLES (A4 portrait — Crystal Reports Performance Report layout, UNCHANGED) ── */
+/* ── PDF STYLES (A4 Crystal Reports Performance Report layout + Multi-Location Compare PDF) ── */
 const ps = StyleSheet.create({
   page: {
     paddingTop: 26,
@@ -239,6 +407,203 @@ export function PerformancePdfDocument({
 }: {
   data: PerformanceReportData;
 }) {
+  const locs = getEffectiveLocations(data);
+
+  // Multi-Location Compare PDF (2+ locations selected)
+  if (locs.length > 1) {
+    const merged = mergeLocationSections(locs);
+    const landscape = locs.length >= 3;
+    const descPct = locs.length >= 4 ? 24 : locs.length === 3 ? 28 : 34;
+    const perLocPct = (100 - descPct) / locs.length;
+    const ratePct = perLocPct * 0.36;
+    const amtPct = perLocPct * 0.64;
+
+    return (
+      <Document title="Performance Report - Location Comparison">
+        <Page
+          size="A4"
+          orientation={landscape ? "landscape" : "portrait"}
+          style={ps.page}
+        >
+          <View style={ps.topHdr}>
+            <View style={ps.compCol}>
+              <Text style={ps.compName}>Performance Report (Compare)</Text>
+              <Text style={ps.compAddr}>
+                Business Date: {data.businessDate || "—"} • User:{" "}
+                {data.reportUser || data.printUser}
+              </Text>
+            </View>
+            <View style={ps.titleCol}>
+              <Text style={ps.reportTitle}>Performance Report</Text>
+            </View>
+            <View style={ps.printCol}>
+              <View style={ps.printRow}>
+                <Text style={ps.printLbl}>Report Date</Text>
+                <Text style={ps.printVal}>
+                  {data.reportDate || data.printDate}
+                </Text>
+              </View>
+              <View style={ps.printRow}>
+                <Text style={ps.printLbl}>Time</Text>
+                <Text style={ps.printVal}>
+                  {data.currentTime || data.printTime}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Repeating Location Column Header */}
+          <View
+            fixed
+            style={{
+              borderWidth: 0.9,
+              borderColor: "#7f9db9",
+              marginBottom: 6,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                backgroundColor: "#45301D",
+                paddingVertical: 4,
+              }}
+            >
+              <Text
+                style={{
+                  width: `${descPct}%`,
+                  paddingHorizontal: 5,
+                  fontSize: 8,
+                  fontFamily: "Helvetica-Bold",
+                  color: "#ffffff",
+                }}
+              >
+                DESCRIPTION
+              </Text>
+              {locs.map((l) => (
+                <Text
+                  key={`ploc-${l.locCode}`}
+                  style={{
+                    width: `${perLocPct}%`,
+                    paddingHorizontal: 3,
+                    fontSize: 8,
+                    fontFamily: "Helvetica-Bold",
+                    color: "#ffffff",
+                    textAlign: "center",
+                  }}
+                >
+                  {l.locName}
+                </Text>
+              ))}
+            </View>
+            <View
+              style={{
+                flexDirection: "row",
+                backgroundColor: "#E4D6BF",
+                paddingVertical: 3,
+              }}
+            >
+              <Text style={{ width: `${descPct}%`, paddingHorizontal: 5, fontSize: 7.2 }} />
+              {locs.map((l) => (
+                <Fragment key={`psub-${l.locCode}`}>
+                  <Text
+                    style={{
+                      width: `${ratePct}%`,
+                      fontSize: 7,
+                      fontFamily: "Helvetica-Bold",
+                      color: "#45301D",
+                      textAlign: "center",
+                    }}
+                  >
+                    Rate / Count
+                  </Text>
+                  <Text
+                    style={{
+                      width: `${amtPct}%`,
+                      paddingRight: 4,
+                      fontSize: 7,
+                      fontFamily: "Helvetica-Bold",
+                      color: "#45301D",
+                      textAlign: "right",
+                    }}
+                  >
+                    Amount
+                  </Text>
+                </Fragment>
+              ))}
+            </View>
+          </View>
+
+          {merged.map((sec, sIdx) => (
+            <View
+              key={`msec-${sIdx}`}
+              style={ps.secBlock}
+              wrap={(sec.rows ?? []).length > 8}
+            >
+              <View style={ps.secBox} minPresenceAhead={24}>
+                <Text style={ps.secTitle}>{sec.heading}</Text>
+              </View>
+              {sec.rows.map((r, rIdx) => {
+                const bold = isSummaryRow(r.desc) || Boolean(r.bold);
+                return (
+                  <View key={`mr-${sIdx}-${rIdx}`} style={ps.rowLine} wrap={false}>
+                    <Text
+                      style={{
+                        width: `${descPct}%`,
+                        fontSize: 7.8,
+                        fontFamily: bold ? "Helvetica-Bold" : "Helvetica",
+                        color: "#111111",
+                      }}
+                    >
+                      {r.desc}
+                    </Text>
+                    {r.cells.map((c, cIdx) => (
+                      <Fragment key={`mc-${sIdx}-${rIdx}-${cIdx}`}>
+                        <Text
+                          style={{
+                            width: `${ratePct}%`,
+                            fontSize: 7.5,
+                            color: "#333333",
+                            textAlign: "center",
+                          }}
+                        >
+                          {c.val || "—"}
+                        </Text>
+                        <Text
+                          style={{
+                            width: `${amtPct}%`,
+                            paddingRight: 4,
+                            fontSize: 7.8,
+                            fontFamily: bold ? "Helvetica-Bold" : "Helvetica",
+                            color: "#111111",
+                            textAlign: "right",
+                          }}
+                        >
+                          {fmtWebAmt(c.amt, r.desc)}
+                        </Text>
+                      </Fragment>
+                    ))}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+
+          <View style={ps.footer} fixed>
+            <Text style={ps.footerBrand}>MicroMax - eChef</Text>
+            <Text
+              style={ps.footerPage}
+              render={({ pageNumber, totalPages }) =>
+                `Page ${pageNumber} of ${totalPages}`
+              }
+            />
+            <View style={ps.footerSpacer} />
+          </View>
+        </Page>
+      </Document>
+    );
+  }
+
+  // Single-Location Crystal Report A4 PDF (UNCHANGED)
   return (
     <Document title="Performance Report">
       <Page size="A4" style={ps.page}>
@@ -327,42 +692,58 @@ export function PerformancePdfDocument({
   );
 }
 
-/* ── ON-SCREEN WEB REPORT VIEW (Matched to SalesSummaryReport / CategorySummaryReport / DynamicReportTable) ── */
-const grad = "linear-gradient(135deg,#45301D 0%,#684830 100%)";
+/* ── ON-SCREEN WEB REPORT VIEW (Metadata Line + Location-Wise Multi-Column Table) ── */
+const thDescStyle: CSSProperties = {
+  background: "#E4D6BF",
+  color: "#45301D",
+  padding: "12px 16px",
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: 0.6,
+  textTransform: "uppercase",
+  borderRight: "2px solid #C8B8A8",
+  borderBottom: "2px solid #684830",
+  whiteSpace: "nowrap",
+  textAlign: "left",
+  verticalAlign: "middle",
+  minWidth: 230,
+};
 
-const thStyle: CSSProperties = {
+const thLocGroupStyle: CSSProperties = {
+  background: "linear-gradient(180deg,#5A3E28 0%,#684830 100%)",
+  color: "#FFFFFF",
+  padding: "9.5px 14px",
+  fontSize: 11.5,
+  fontWeight: 800,
+  letterSpacing: 0.5,
+  textTransform: "uppercase",
+  textAlign: "center",
+  borderRight: "2px solid #45301D",
+  borderBottom: "1px solid #8C6A4E",
+  whiteSpace: "nowrap",
+};
+
+const thSubStyle: CSSProperties = {
   background: "#E4D6BF",
   color: "#684830",
-  padding: "11px 16px",
-  fontSize: 10.5,
+  padding: "8.5px 14px",
+  fontSize: 10,
   fontWeight: 700,
-  letterSpacing: 0.6,
+  letterSpacing: 0.55,
   textTransform: "uppercase",
   borderRight: "1px solid #C8B8A8",
   borderBottom: "2px solid #684830",
   whiteSpace: "nowrap",
-  textAlign: "left",
 };
 
 const tdStyle: CSSProperties = {
-  padding: "9.5px 16px",
+  padding: "9.5px 14px",
   fontSize: 12.5,
   color: "#45301D",
-  borderRight: "1px solid #FCF7F3",
-  borderBottom: "1px solid #FCF7F3",
+  borderRight: "1px solid #F3ECE2",
+  borderBottom: "1px solid #F3ECE2",
   fontVariantNumeric: "tabular-nums",
 };
-
-function isSummaryRow(desc: string): boolean {
-  const u = String(desc ?? "").trim().toUpperCase();
-  return (
-    u === "TAX TOTAL" ||
-    u === "SALES WITHOUT TAX" ||
-    u === "MAIN GROUP TOTAL" ||
-    u === "FAMILY GROUP TOTAL" ||
-    u === "MONTH TO DATE TOTAL"
-  );
-}
 
 function fmtWebAmt(raw: string, desc?: string): string {
   const s = String(raw ?? "").trim();
@@ -387,134 +768,104 @@ export default function PerformanceReport({
 }: {
   report: PerformanceReportData;
 }) {
-  const meta = report.meta ?? [];
-  const sections = report.sections ?? [];
+  const activeLocations = getEffectiveLocations(report);
+  const mergedSections = mergeLocationSections(activeLocations);
+  const totalCols = 1 + activeLocations.length * 2;
 
-  const locVal =
-    meta.find((m) => m.label.toLowerCase() === "location")?.value || "ALL";
+  const findMeta = (needle: string) =>
+    (report.meta ?? []).find((m) =>
+      m.label.toLowerCase().includes(needle.toLowerCase())
+    )?.value || "";
 
-  const salesSec = sections.find((s) => s.heading === "SALES VOLUME");
-  const salesRaw = salesSec?.rows?.[0]?.amt ?? "0";
-  const salesDisplay = fmtWebAmt(salesRaw, "Sales Volume");
+  // Top 4-card metadata line ONLY: Business Date | Report Date | Current Time | User
+  const metaCards: Array<{ label: string; value: string }> = [
+    {
+      label: "Business Date",
+      value:
+        report.businessDate ||
+        findMeta("bussiness day") ||
+        findMeta("business") ||
+        "—",
+    },
+    {
+      label: "Report Date",
+      value:
+        report.reportDate ||
+        findMeta("report date") ||
+        report.printDate ||
+        "—",
+    },
+    {
+      label: "Current Time",
+      value:
+        report.currentTime ||
+        findMeta("current time") ||
+        report.printTime ||
+        "—",
+    },
+    {
+      label: "User",
+      value: report.reportUser || findMeta("user") || report.printUser || "—",
+    },
+  ];
 
-  const mtdSec = sections.find((s) => s.heading === "MONTH TO DATE");
-  const mtdTotRow = mtdSec?.rows?.find(
-    (r) => r.desc.toUpperCase() === "MONTH TO DATE TOTAL"
-  );
-  const mtdDisplay = mtdTotRow
-    ? fmtWebAmt(mtdTotRow.amt, "Month To Date Total")
-    : "0.00";
-
-  const totalRows = sections.reduce(
+  const totalRows = mergedSections.reduce(
     (acc, sec) => acc + (sec.rows?.length ?? 0),
     0
   );
 
   return (
-    <div style={{ padding: "16px 24px 28px", fontFamily: "Inter, sans-serif" }}>
-      {/* Location Header Banner (same visual language as SalesSummaryReport / CategoryReports) */}
+    <div style={{ padding: "14px 24px 28px", fontFamily: "Inter, sans-serif" }}>
+      {/* Metadata Info Line: Business Date | Report Date | Current Time | User */}
       <div
         style={{
-          borderRadius: 12,
-          overflow: "hidden",
-          background: "#F0E8D8",
-          border: "1px solid #E4D6BF",
-          padding: "12px 16px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: 10,
-          boxShadow: "0 2px 6px rgba(104,72,48,0.08)",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span
+        {metaCards.map((m, idx) => (
+          <div
+            key={`mcard-${idx}`}
             style={{
-              color: "#45301D",
-              fontSize: 13.5,
-              fontWeight: 800,
-              letterSpacing: 0.5,
-              display: "flex",
-              alignItems: "center",
-              gap: 9,
-              textTransform: "uppercase",
+              background: "#ffffff",
+              border: "1px solid #E4D6BF",
+              borderRadius: 10,
+              padding: "9px 14px",
+              boxShadow: "0 1px 2px rgba(114,86,60,0.04)",
             }}
           >
-            <IconPin size={15} strokeWidth={2.2} />
-            {locVal} — {report.companyName || "RESTAURANT"}
-          </span>
-          {report.subHeader ? (
-            <span style={{ fontSize: 11.5, color: "#6B543E", paddingLeft: 24 }}>
-              {report.subHeader}
-            </span>
-          ) : null}
-        </div>
-        <span
-          style={{
-            color: "#684830",
-            fontSize: 13.5,
-            fontWeight: 800,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          Rs. {salesDisplay}
-        </span>
-      </div>
-
-      {/* Metadata Info Cards */}
-      {meta.length > 0 && (
-        <div
-          style={{
-            marginTop: 12,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-            gap: 10,
-          }}
-        >
-          {meta.map((m, idx) => (
             <div
-              key={`mcard-${idx}`}
               style={{
-                background: "#ffffff",
-                border: "1px solid #E4D6BF",
-                borderRadius: 10,
-                padding: "9px 13px",
-                boxShadow: "0 1px 2px rgba(114,86,60,0.04)",
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                color: "#907860",
+                marginBottom: 3,
               }}
             >
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#907860",
-                  marginBottom: 3,
-                }}
-              >
-                {m.label}
-              </div>
-              <div
-                style={{
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  color: "#45301D",
-                  fontVariantNumeric: "tabular-nums",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={m.value}
-              >
-                {m.value || "—"}
-              </div>
+              {m.label}
             </div>
-          ))}
-        </div>
-      )}
+            <div
+              style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                color: "#45301D",
+                fontVariantNumeric: "tabular-nums",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={m.value}
+            >
+              {m.value || "—"}
+            </div>
+          </div>
+        ))}
+      </div>
 
-      {/* Unified Report Table Card */}
+      {/* Location-wise Performance Table (Location headers sit directly between Metadata line & Table rows) */}
       <div
         style={{
           marginTop: 14,
@@ -530,49 +881,80 @@ export default function PerformanceReport({
           <table
             style={{
               width: "100%",
-              tableLayout: "fixed",
               borderCollapse: "collapse",
               fontSize: 12.5,
-              minWidth: 540,
+              minWidth: Math.max(560, 240 + activeLocations.length * 230),
             }}
           >
             <thead>
+              {/* Header Row 1: Common Description + Selected Location Column Headers */}
               <tr>
-                <th style={{ ...thStyle, width: "52%" }}>Description</th>
-                <th
-                  style={{
-                    ...thStyle,
-                    width: "20%",
-                    textAlign: "center",
-                  }}
-                >
-                  Rate / Count
+                <th rowSpan={2} style={thDescStyle}>
+                  Description
                 </th>
-                <th
-                  style={{
-                    ...thStyle,
-                    width: "28%",
-                    textAlign: "right",
-                    borderRight: "none",
-                  }}
-                >
-                  Amount (Rs.)
-                </th>
+                {activeLocations.map((loc, idx) => (
+                  <th
+                    key={`hloc-${loc.locCode}-${idx}`}
+                    colSpan={2}
+                    style={{
+                      ...thLocGroupStyle,
+                      borderRight:
+                        idx < activeLocations.length - 1
+                          ? "2px solid #45301D"
+                          : "none",
+                    }}
+                  >
+                    {loc.locName}
+                  </th>
+                ))}
+              </tr>
+
+              {/* Header Row 2: Rate / Count + Amount (Rs.) under each Location */}
+              <tr>
+                {activeLocations.map((loc, idx) => {
+                  const isLastLoc = idx === activeLocations.length - 1;
+                  return (
+                    <Fragment key={`hsub-${loc.locCode}-${idx}`}>
+                      <th
+                        style={{
+                          ...thSubStyle,
+                          textAlign: "center",
+                          minWidth: 100,
+                        }}
+                      >
+                        Rate / Count
+                      </th>
+                      <th
+                        style={{
+                          ...thSubStyle,
+                          textAlign: "right",
+                          minWidth: 130,
+                          borderRight: isLastLoc
+                            ? "none"
+                            : "2px solid #B5A18B",
+                        }}
+                      >
+                        Amount (Rs.)
+                      </th>
+                    </Fragment>
+                  );
+                })}
               </tr>
             </thead>
+
             <tbody>
-              {sections.map((sec, sIdx) => {
+              {mergedSections.map((sec, sIdx) => {
                 const sRows = sec.rows ?? [];
                 return (
                   <Fragment key={`sec-grp-${sIdx}`}>
                     {/* Section Header Band */}
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={totalCols}
                         style={{
                           background: "#E9DCC6",
                           color: "#45301D",
-                          padding: "9px 16px",
+                          padding: "8.5px 16px",
                           fontSize: 11.5,
                           fontWeight: 800,
                           letterSpacing: 0.45,
@@ -611,7 +993,7 @@ export default function PerformanceReport({
                     {sRows.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={3}
+                          colSpan={totalCols}
                           style={{
                             padding: "8px 16px",
                             color: "#907860",
@@ -628,7 +1010,7 @@ export default function PerformanceReport({
                       sRows.map((r, rIdx) => {
                         const sumRow = isSummaryRow(r.desc);
                         const baseBg = sumRow
-                          ? "#FCF7F3"
+                          ? "#F5EDE0"
                           : rIdx % 2 === 1
                             ? "#FCF7F3"
                             : "#ffffff";
@@ -653,65 +1035,78 @@ export default function PerformanceReport({
                             <td
                               style={{
                                 ...tdStyle,
-                                fontWeight: sumRow || r.bold ? 700 : 500,
+                                paddingLeft: 16,
+                                fontWeight: sumRow || r.bold ? 800 : 500,
+                                borderRight: "2px solid #EAE0D2",
                                 borderTop: sumRow
                                   ? "1.5px solid #C8B8A8"
                                   : undefined,
                                 borderBottom: sumRow
-                                  ? "1px solid #E4D6BF"
-                                  : "1px solid #FCF7F3",
+                                  ? "1.5px solid #C8B8A8"
+                                  : "1px solid #F3ECE2",
                               }}
                             >
                               {r.desc}
                             </td>
-                            <td
-                              style={{
-                                ...tdStyle,
-                                textAlign: "center",
-                                borderTop: sumRow
-                                  ? "1.5px solid #C8B8A8"
-                                  : undefined,
-                                borderBottom: sumRow
-                                  ? "1px solid #E4D6BF"
-                                  : "1px solid #FCF7F3",
-                              }}
-                            >
-                              {r.val ? (
-                                <span
-                                  style={{
-                                    display: "inline-block",
-                                    background: "#F4EDE2",
-                                    border: "1px solid #E4D6BF",
-                                    color: "#684830",
-                                    padding: "1.5px 8px",
-                                    borderRadius: 999,
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {r.val}
-                                </span>
-                              ) : (
-                                <span style={{ color: "#C8B8A8" }}>—</span>
-                              )}
-                            </td>
-                            <td
-                              style={{
-                                ...tdStyle,
-                                textAlign: "right",
-                                borderRight: "none",
-                                fontWeight: sumRow || r.bold ? 800 : 600,
-                                color: sumRow ? "#684830" : "#45301D",
-                                borderTop: sumRow
-                                  ? "1.5px solid #C8B8A8"
-                                  : undefined,
-                                borderBottom: sumRow
-                                  ? "1px solid #E4D6BF"
-                                  : "1px solid #FCF7F3",
-                              }}
-                            >
-                              {fmtWebAmt(r.amt, r.desc)}
-                            </td>
+
+                            {r.cells.map((cell, cIdx) => {
+                              const isLastLoc =
+                                cIdx === activeLocations.length - 1;
+                              return (
+                                <Fragment key={`scell-${sIdx}-${rIdx}-${cIdx}`}>
+                                  <td
+                                    style={{
+                                      ...tdStyle,
+                                      textAlign: "center",
+                                      borderTop: sumRow
+                                        ? "1.5px solid #C8B8A8"
+                                        : undefined,
+                                      borderBottom: sumRow
+                                        ? "1.5px solid #C8B8A8"
+                                        : "1px solid #F3ECE2",
+                                    }}
+                                  >
+                                    {cell.val ? (
+                                      <span
+                                        style={{
+                                          display: "inline-block",
+                                          background: "#F4EDE2",
+                                          border: "1px solid #E4D6BF",
+                                          color: "#684830",
+                                          padding: "1.5px 8px",
+                                          borderRadius: 999,
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {cell.val}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: "#C8B8A8" }}>—</span>
+                                    )}
+                                  </td>
+                                  <td
+                                    style={{
+                                      ...tdStyle,
+                                      textAlign: "right",
+                                      borderRight: isLastLoc
+                                        ? "none"
+                                        : "2px solid #EAE0D2",
+                                      fontWeight: sumRow || r.bold ? 800 : 600,
+                                      color: sumRow ? "#45301D" : "#45301D",
+                                      borderTop: sumRow
+                                        ? "1.5px solid #C8B8A8"
+                                        : undefined,
+                                      borderBottom: sumRow
+                                        ? "1.5px solid #C8B8A8"
+                                        : "1px solid #F3ECE2",
+                                    }}
+                                  >
+                                    {fmtWebAmt(cell.amt, r.desc)}
+                                  </td>
+                                </Fragment>
+                              );
+                            })}
                           </tr>
                         );
                       })
@@ -723,7 +1118,7 @@ export default function PerformanceReport({
           </table>
         </div>
 
-        {/* Footer Strip (matches SalesSummaryReport / DynamicReportTable) */}
+        {/* Footer Strip */}
         <div
           style={{
             display: "flex",
@@ -737,8 +1132,10 @@ export default function PerformanceReport({
           }}
         >
           <span>
-            {sections.length} section{sections.length === 1 ? "" : "s"} •{" "}
-            {totalRows} row{totalRows === 1 ? "" : "s"}
+            {mergedSections.length} section
+            {mergedSections.length === 1 ? "" : "s"} • {totalRows} row
+            {totalRows === 1 ? "" : "s"} • {activeLocations.length} location
+            {activeLocations.length === 1 ? "" : "s"}
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span
@@ -751,54 +1148,6 @@ export default function PerformanceReport({
               }}
             />
             Live data
-          </span>
-        </div>
-      </div>
-
-      {/* Bottom Dark Brown Summary Banner (matches SalesSummaryReport Grand Total banner) */}
-      <div
-        style={{
-          marginTop: 16,
-          borderRadius: 14,
-          overflow: "hidden",
-          background: grad,
-          padding: "15px 18px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 12,
-          boxShadow: "0 4px 14px rgba(114,86,60,0.25)",
-        }}
-      >
-        <span
-          style={{
-            color: "#E4D6BF",
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
-          }}
-        >
-          <IconCoins size={16} strokeWidth={2} />
-          Sales Volume Summary
-        </span>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
-          <span style={{ color: "#E4D6BF", fontSize: 12, fontWeight: 600 }}>
-            MTD Total: Rs. {mtdDisplay}
-          </span>
-          <span
-            style={{
-              color: "#ffffff",
-              fontSize: 20,
-              fontWeight: 800,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            Rs. {salesDisplay}
           </span>
         </div>
       </div>

@@ -56,14 +56,18 @@ export default function DateRangeModal({
     { code: string; name: string }[]
   >([]);
 
+  const isPerf = title === "Performance Report";
+
   // modal eka open unama locations load (DB eken)
   useEffect(() => {
     if (!open) return;
-    if (title === "Performance Report") {
+    if (isPerf) {
       const todayIso = iso(new Date());
       setFrom(todayIso);
       setTo(todayIso);
+      setLoc("");
       setErr(null);
+      return;
     }
     if (locations.length > 0) return;
     let alive = true;
@@ -71,20 +75,17 @@ export default function DateRangeModal({
       if (!alive) return;
       if (res.success && Array.isArray(res.data)) {
         setLocations(res.data);
-        if (title === "Performance Report" && res.data.length === 1) {
-          setLoc(res.data[0].code);
-        }
       }
     });
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, title]);
+  }, [open, isPerf]);
 
   if (!open) return null;
 
-  const presets: { label: string; get: () => [string, string] }[] = [
+  const allPresets: { label: string; get: () => [string, string] }[] = [
     { label: "Today", get: () => [iso(new Date()), iso(new Date())] },
     {
       label: "Yesterday",
@@ -119,8 +120,18 @@ export default function DateRangeModal({
       get: () => [iso(new Date(Date.now() - 30 * 86400000)), iso(now)],
     },
   ];
+  const presets = isPerf ? allPresets.slice(0, 2) : allPresets;
 
   const apply = () => {
+    if (isPerf) {
+      if (!from) {
+        setErr("Please select a Business Date");
+        return;
+      }
+      setErr(null);
+      onApply(from, from, "", filter ? { param: filter.param, value: extra } : undefined);
+      return;
+    }
     if (!from || !to) {
       setErr("Please select both From and To dates");
       return;
@@ -184,7 +195,7 @@ export default function DateRangeModal({
                 textTransform: "uppercase",
               }}
             >
-              Select Date Range
+              {isPerf ? "Select Business Date" : "Select Date Range"}
             </p>
             <h3 style={{ margin: "2px 0 0", fontSize: 15, color: "#45301D" }}>
               {title}
@@ -279,43 +290,45 @@ export default function DateRangeModal({
               ))}
             </div>
 
-            {/* Location */}
-            <div style={{ marginBottom: 12 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "#6B543E",
-                  marginBottom: 5,
-                }}
-              >
-                Location
-              </label>
-              <select
-                value={loc}
-                onChange={(e) => setLoc(e.target.value)}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  border: "1px solid #C8B8A8",
-                  borderRadius: 8,
-                  padding: "9px 10px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "#45301D",
-                  background: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="">All Locations</option>
-                {locations.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Location (hidden for Performance Report — location tabs are inside the report) */}
+            {!isPerf && (
+              <div style={{ marginBottom: 12 }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#6B543E",
+                    marginBottom: 5,
+                  }}
+                >
+                  Location
+                </label>
+                <select
+                  value={loc}
+                  onChange={(e) => setLoc(e.target.value)}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    border: "1px solid #C8B8A8",
+                    borderRadius: 8,
+                    padding: "9px 10px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#45301D",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="">All Locations</option>
+                  {locations.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Extra filter (Order Mode / Bill Type) — POS 1.1.1 / 1.1.2 */}
             {filter && (
@@ -358,9 +371,9 @@ export default function DateRangeModal({
               </div>
             )}
 
-            {/* Date inputs */}
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}>
+            {/* Date input(s): single Business Date for Performance Report, From/To for others */}
+            {isPerf ? (
+              <div>
                 <label
                   style={{
                     display: "block",
@@ -370,43 +383,13 @@ export default function DateRangeModal({
                     marginBottom: 5,
                   }}
                 >
-                  {title === "Performance Report" ? "Bussiness Date From" : "From"}
+                  Business Date
                 </label>
                 <input
                   type="date"
                   value={from}
                   onChange={(e) => {
                     setFrom(e.target.value);
-                    setErr(null);
-                  }}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    border: "1px solid #C8B8A8",
-                    borderRadius: 8,
-                    padding: "9px 10px",
-                    fontSize: 13,
-                    color: "#45301D",
-                    background: "#fff",
-                  }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "#6B543E",
-                    marginBottom: 5,
-                  }}
-                >
-                  {title === "Performance Report" ? "Bussiness Date To" : "To"}
-                </label>
-                <input
-                  type="date"
-                  value={to}
-                  onChange={(e) => {
                     setTo(e.target.value);
                     setErr(null);
                   }}
@@ -422,7 +405,72 @@ export default function DateRangeModal({
                   }}
                 />
               </div>
-            </div>
+            ) : (
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#6B543E",
+                      marginBottom: 5,
+                    }}
+                  >
+                    From
+                  </label>
+                  <input
+                    type="date"
+                    value={from}
+                    onChange={(e) => {
+                      setFrom(e.target.value);
+                      setErr(null);
+                    }}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      border: "1px solid #C8B8A8",
+                      borderRadius: 8,
+                      padding: "9px 10px",
+                      fontSize: 13,
+                      color: "#45301D",
+                      background: "#fff",
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#6B543E",
+                      marginBottom: 5,
+                    }}
+                  >
+                    To
+                  </label>
+                  <input
+                    type="date"
+                    value={to}
+                    onChange={(e) => {
+                      setTo(e.target.value);
+                      setErr(null);
+                    }}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      border: "1px solid #C8B8A8",
+                      borderRadius: 8,
+                      padding: "9px 10px",
+                      fontSize: 13,
+                      color: "#45301D",
+                      background: "#fff",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {err && (
               <p

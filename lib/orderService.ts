@@ -108,6 +108,7 @@ export interface LiveOrder {
   invoiceNo: string;
   tableNo: string;
   tableGroup: string;
+  orderType?: string;
   customerName: string;
   customerPhone: string;
   pax: number;
@@ -158,6 +159,7 @@ export async function getLiveWebOrders(
     SELECT TOP (@limit)
       LTRIM(RTRIM(h.InvoiceNo))  AS InvoiceNo,
       LTRIM(RTRIM(h.TabelNo))    AS TableNo,
+      LTRIM(RTRIM(ISNULL(h.OrderType, ''))) AS OrderType,
       ISNULL(h.LPax, 0)          AS LPax,
       ISNULL(h.CusName, '')      AS CusName,
       ISNULL(h.CusCode, '')      AS CusCode,
@@ -187,6 +189,7 @@ export async function getLiveWebOrders(
         invoiceNo,
         tableNo,
         tableGroup: "",
+        orderType: s(r.OrderType).toUpperCase(),
         customerName: s(r.CusName),
         customerPhone: s(r.CusCode),
         pax: Number(r.LPax ?? 0) || 0,
@@ -215,7 +218,7 @@ export async function getLiveWebOrders(
     const pool2 = await getPool();
     const r2 = pool2.request();
     const list = tableNos.map((t, i) => {
-      r2.input(`t${i}`, sql.VarChar(10), t);
+      r2.input(`t${i}`, sql.VarChar(20), t);
       return `@t${i}`;
     });
     const res2 = await r2.query(`
@@ -225,7 +228,10 @@ export async function getLiveWebOrders(
     `);
     for (const row of res2.recordset) groupOf.set(s(row.TableNo), s(row.TableGroup));
   }
-  for (const o of groups.values()) o.tableGroup = groupOf.get(o.tableNo) ?? "";
+  for (const o of groups.values()) {
+    const isTa = o.orderType === "TA" || /^TA(?:-|$)/i.test(o.tableNo);
+    o.tableGroup = groupOf.get(o.tableNo) ?? (isTa ? "Takeaway" : "");
+  }
 
   const orders = [...groups.values()].map((o) => ({
     ...o,
