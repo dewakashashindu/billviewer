@@ -159,6 +159,12 @@ import PaymentHistoryReport, {
   type CphData,
   type CadData,
 } from "@/components/reports/CreditSettlementReports";
+import PerformanceReport, {
+  filterPerformanceReport,
+  PerformancePdfDocument,
+  type PerformanceReportData,
+} from "@/components/reports/PerformanceReport";
+import { getLocationsAction } from "@/app/actions/reports";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -245,7 +251,8 @@ export default function DynamicReportPage() {
   const today = localIso(new Date());
 
   const [startDate, setStartDate] = useState(
-    searchParams.get("from") || yearStart
+    searchParams.get("from") ||
+      (reportId === "performance-report" ? today : yearStart)
   );
   const [endDate, setEndDate] = useState(searchParams.get("to") || today);
   const [loc, setLoc] = useState(searchParams.get("loc") || "");
@@ -259,6 +266,22 @@ export default function DynamicReportPage() {
   const [kotType, setKotType] = useState("all");
   const [credCus, setCredCus] = useState("");
   const [cashSel, setCashSel] = useState("");
+  const [perfLocs, setPerfLocs] = useState<{ code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (reportId !== "performance-report") return;
+    let alive = true;
+    getLocationsAction()
+      .then((res) => {
+        if (alive && res?.success && Array.isArray(res.data)) {
+          setPerfLocs(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [reportId]);
 
   // URL change (sidebar modal eken aluth range) -> state update
   useEffect(() => {
@@ -1693,6 +1716,112 @@ export default function DynamicReportPage() {
             <ReportChartsView charts={chartsTrace} title={config.title} />
           ) : filteredTrace ? (
             <TraceReport report={filteredTrace} invoiceHint={reportId === "invoice-trace"} />
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+  // ── Performance Report (Crystal Report layout + A4 PDF) ──
+  if (config.render === "performance-report") {
+    const perfData = objectData
+      ? (objectData as unknown as PerformanceReportData)
+      : null;
+    const filteredPerf = perfData
+      ? filterPerformanceReport(perfData, search)
+      : null;
+    const chartsPerf = filteredPerf
+      ? buildReportCharts(reportId, filteredPerf)
+      : [];
+    const pdfDocPerf = filteredPerf ? (
+      <PerformancePdfDocument data={filteredPerf} />
+    ) : undefined;
+
+    return (
+      <>
+        <ReportToolbar
+          title={config.title}
+          subtitle={config.subtitle}
+          from={startDate}
+          to={endDate}
+          onRangeChange={rangeChange}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search section, description, amount..."
+          pdfDocument={pdfDocPerf}
+          pdfFileName={`performance-report-${startDate}_to_${endDate}.pdf`}
+          chartSupported={chartsPerf.length > 0}
+          chartMode={chartMode}
+          onChartToggle={() => setChartMode((c) => !c)}
+        />
+        <div
+          style={{
+            display: "flex",
+            gap: 14,
+            padding: "10px 24px 0",
+            fontFamily: "Inter, sans-serif",
+            fontSize: 12,
+            color: "#684830",
+            alignItems: "center",
+          }}
+        >
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#45301D",
+              background: "#FAF5EE",
+              border: "1px solid #E4D6BF",
+              borderRadius: 8,
+              padding: "5px 12px",
+            }}
+          >
+            <span
+              style={{
+                color: "#907860",
+                fontWeight: 700,
+                fontSize: 10.5,
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+              }}
+            >
+              Location
+            </span>
+            <select
+              value={loc}
+              onChange={(e) => setLoc(e.target.value)}
+              style={{
+                border: "none",
+                background: "transparent",
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "#45301D",
+                fontFamily: "Inter, sans-serif",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              <option value="">All Locations</option>
+              {perfLocs.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.code} – {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div id="report-zoom-area" style={{ flex: 1 }}>
+          {loading ? (
+            <LoadingBlock />
+          ) : error ? (
+            <ErrorBlock message={error} />
+          ) : chartMode && chartsPerf.length > 0 ? (
+            <ReportChartsView charts={chartsPerf} title={config.title} />
+          ) : filteredPerf ? (
+            <PerformanceReport report={filteredPerf} />
           ) : null}
         </div>
       </>

@@ -108,6 +108,18 @@ const NAV: NavItem[] = [
     icon: <IChart />,
     children: [
       {
+        // Performance Report (POS Crystal Report)
+        key: "cat-performance",
+        label: "Performance Report",
+        children: [
+          {
+            key: "r-perf-report",
+            label: "Performance Report",
+            reportId: "performance-report",
+          },
+        ],
+      },
+      {
         // 1.1 – 1.5 Sales
         key: "cat-sales",
         label: "Sales Reports",
@@ -490,6 +502,7 @@ export default function AppShell({
   const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     reports: true,
+    "cat-performance": true,
   });
   const [modal, setModal] = useState<{
     title: string;

@@ -41,30 +41,19 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, stored: string): boolean {
-  const raw = String(stored ?? "").trim();
-  if (!password || !raw) return false;
-
-  // Standard web format: scrypt$<saltHex>$<hashHex>
-  if (raw.startsWith("scrypt$")) {
-    const parts = raw.split("$");
-    if (parts.length !== 3) return false;
-    try {
-      const salt = Buffer.from(parts[1], "hex");
-      const expected = Buffer.from(parts[2], "hex");
-      const actual = crypto.scryptSync(password, salt, 64);
-      return (
-        actual.length === expected.length &&
-        crypto.timingSafeEqual(actual, expected)
-      );
-    } catch {
-      return false;
-    }
+  const parts = String(stored ?? "").trim().split("$");
+  if (parts.length !== 3 || parts[0] !== "scrypt") return false;
+  try {
+    const salt = Buffer.from(parts[1], "hex");
+    const expected = Buffer.from(parts[2], "hex");
+    const actual = crypto.scryptSync(password, salt, 64);
+    return (
+      actual.length === expected.length &&
+      crypto.timingSafeEqual(actual, expected)
+    );
+  } catch {
+    return false;
   }
-
-  // Fallback for accounts whose Password column was populated directly in SQL
-  const a = Buffer.from(password, "utf8");
-  const b = Buffer.from(raw, "utf8");
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // ── Session cookie (signed) ──

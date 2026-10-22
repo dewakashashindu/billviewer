@@ -58,17 +58,29 @@ export default function DateRangeModal({
 
   // modal eka open unama locations load (DB eken)
   useEffect(() => {
-    if (!open || locations.length > 0) return;
+    if (!open) return;
+    if (title === "Performance Report") {
+      const todayIso = iso(new Date());
+      setFrom(todayIso);
+      setTo(todayIso);
+      setErr(null);
+    }
+    if (locations.length > 0) return;
     let alive = true;
     getLocationsAction().then((res) => {
       if (!alive) return;
-      if (res.success && Array.isArray(res.data)) setLocations(res.data);
+      if (res.success && Array.isArray(res.data)) {
+        setLocations(res.data);
+        if (title === "Performance Report" && res.data.length === 1) {
+          setLoc(res.data[0].code);
+        }
+      }
     });
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, title]);
 
   if (!open) return null;
 
@@ -358,7 +370,7 @@ export default function DateRangeModal({
                     marginBottom: 5,
                   }}
                 >
-                  From
+                  {title === "Performance Report" ? "Bussiness Date From" : "From"}
                 </label>
                 <input
                   type="date"
@@ -389,7 +401,7 @@ export default function DateRangeModal({
                     marginBottom: 5,
                   }}
                 >
-                  To
+                  {title === "Performance Report" ? "Bussiness Date To" : "To"}
                 </label>
                 <input
                   type="date"

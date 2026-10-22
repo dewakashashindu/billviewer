@@ -17,6 +17,13 @@ const ICard = () => (<svg width="17" height="17" viewBox="0 0 24 24" {...stroke}
 // with this-month range (sidebar eken click kalama date popup eka wenawa).
 const REPORTS = [
   {
+    id: "performance-report",
+    title: "Performance Report",
+    desc: "Complete POS operational summary — sales volume, taxes, pax, pay modes, categories & MTD",
+    icon: "bar",
+    linked: true,
+  },
+  {
     id: "transaction-summary",
     title: "Transaction Summary By Date",
     desc: "Daily aggregated sales performance — bills, pax, sales volume, tax",
@@ -70,9 +77,11 @@ const REPORTS = [
 export default function ReportsLandingPage() {
   const router = useRouter();
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const localIso = (d: Date) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const todayIso = localIso(now);
+  const monthStart = localIso(new Date(now.getFullYear(), now.getMonth(), 1));
 
   return (
     <div style={{ padding: "28px 26px", fontFamily: "Inter, sans-serif" }}>
@@ -97,7 +106,9 @@ export default function ReportsLandingPage() {
             key={r.title}
             onClick={() =>
               r.linked &&
-              router.push(`/reports/${r.id}?from=${monthStart}&to=${now.toISOString().split("T")[0]}`)
+              router.push(
+                `/reports/${r.id}?from=${r.id === "performance-report" ? todayIso : monthStart}&to=${todayIso}`
+              )
             }
             style={{
               textAlign: "left",

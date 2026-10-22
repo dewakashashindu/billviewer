@@ -26,6 +26,7 @@ import {
   getKotBotAction,
   getCreditAccountDetailAction,
   getCashierBreakdownGridAction,
+  getPerformanceReportAction,
 } from "@/app/actions/reports";
 
 export interface ColumnConfig {
@@ -72,7 +73,8 @@ export interface ReportConfig {
     | "mii-date"
     | "item-movement"
     | "cash-inout"
-    | "kot-bot";
+    | "kot-bot"
+    | "performance-report";
   filter?: ReportFilterSpec;
   // fixed bill type (9 Complimentary Cost = CM)
   lockBillType?: string;
@@ -453,6 +455,15 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
     subtitle: "Trace KOT/BOT issues by server & order type (POS 16)",
     render: "kot-bot",
     fetchAction: getKotBotAction,
+    columns: [],
+  },
+  // Performance Report (POS Crystal Report — Location + Business Date From/To)
+  "performance-report": {
+    id: "performance-report",
+    title: "Performance Report",
+    subtitle: "Complete POS operational performance summary (Location & Business Date From / To)",
+    render: "performance-report",
+    fetchAction: getPerformanceReportAction,
     columns: [],
   },
 };

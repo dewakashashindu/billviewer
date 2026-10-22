@@ -21,13 +21,12 @@ export async function ensureLoginNameColumn(
       END
     `);
 
-    // Batch 2: Backfill LoginName for existing web accounts that have Password set
+    // Batch 2: Backfill LoginName ONLY for web accounts that have scrypt Password set
     await pool.request().query(`
       UPDATE dbo.Tbl_UserDetails
       SET LoginName = LEFT(LTRIM(RTRIM(LogName)), 50)
       WHERE (LoginName IS NULL OR LTRIM(RTRIM(LoginName)) = '')
-        AND [Password] IS NOT NULL
-        AND LTRIM(RTRIM([Password])) <> ''
+        AND [Password] LIKE 'scrypt$%$%'
         AND LogName IS NOT NULL
         AND LTRIM(RTRIM(LogName)) <> '';
     `);

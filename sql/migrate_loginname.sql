@@ -47,8 +47,7 @@ GO
 UPDATE dbo.Tbl_UserDetails
 SET LoginName = LEFT(LTRIM(RTRIM(LogName)), 50)
 WHERE (LoginName IS NULL OR LTRIM(RTRIM(LoginName)) = '')
-  AND [Password] IS NOT NULL
-  AND LTRIM(RTRIM([Password])) <> ''
+  AND [Password] LIKE 'scrypt$%$%'
   AND LogName IS NOT NULL
   AND LTRIM(RTRIM(LogName)) <> '';
 GO

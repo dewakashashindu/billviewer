@@ -26,6 +26,7 @@ import type { ImvData } from "./ItemMovementReport";
 import type { CioData } from "./CashInOutReport";
 import type { KotData } from "./KotBotReport";
 import type { CphData, CadData } from "./CreditSettlementReports";
+import type { PerformanceReportData } from "./PerformanceReport";
 
 export interface ChartPoint {
   label: string;
@@ -635,9 +636,31 @@ function rowsCharts(rows: Array<Record<string, unknown>>): ChartModel[] {
   ];
 }
 
+function perfCharts(d: PerformanceReportData): ChartModel[] {
+  if (!d || !Array.isArray(d.sections)) return [];
+  const secPts = (heading: string, skipLabel?: string): ChartPoint[] => {
+    const sec = d.sections.find((s) => s.heading === heading);
+    if (!sec || !Array.isArray(sec.rows)) return [];
+    const m: Agg = new Map();
+    for (const r of sec.rows) {
+      if (skipLabel && r.desc.toUpperCase() === skipLabel.toUpperCase()) continue;
+      const v = Number(String(r.amt ?? "").replace(/,/g, ""));
+      if (Number.isFinite(v) && v > 0) bump(m, r.desc, 0, v, 1);
+    }
+    return toPoints(m, false);
+  };
+  return [
+    ...only(pie("perf-sm", "Service Mode Collection", secPts("SERVICE MODE COLLECTION"), "currency")),
+    ...only(pie("perf-pm", "Pay Mode Wise Collection", secPts("PAY MODE WISE COLLECTION"), "currency")),
+    ...only(hbars("perf-mg", "Main Group Sales", secPts("MAIN GROUP SALES", "MAIN GROUP TOTAL"), "currency")),
+    ...only(hbars("perf-cs", "Cashier Wise Collection", secPts("CASHIER WISE COLLECTION"), "currency")),
+  ];
+}
+
 export function buildReportCharts(reportId: string, data: unknown): ChartModel[] {
   if (!data) return [];
   if (Array.isArray(data)) return rowsCharts(data);
+  if (reportId === "performance-report") return perfCharts(data as PerformanceReportData);
   if (reportId.startsWith("sales-summary")) return summaryCharts(data as SalesSummaryData);
   if (reportId.startsWith("sales-details") || reportId === "complimentary-cost")
     return detailsCharts(data as SalesDetailsData, reportId === "complimentary-cost");

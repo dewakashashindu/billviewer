@@ -163,7 +163,14 @@ export default function ReportToolbar({
   const [zoom, setZoom] = useState(100);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const [pdfPrep, setPdfPrep] = useState<{
+    status: "idle" | "building" | "ready" | "error";
+    blob: Blob | null;
+    file: File | null;
+  }>({ status: "idle", blob: null, file: null });
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const pdfDocRef = useRef<React.ReactElement | undefined>(pdfDocument);
+  pdfDocRef.current = pdfDocument;
 
   // zoom — report content container ekatama (CSS zoom)
   useEffect(() => {
@@ -185,132 +192,234 @@ export default function ReportToolbar({
     return () => document.removeEventListener("mousedown", handler);
   }, [shareOpen]);
 
-  const shareUrl = () =>
-    typeof window !== "undefined" ? window.location.href : "";
+  // Pre-generate the actual PDF File as soon as Share popover opens so
+  // navigator.share({ files }) & window.open run SYNCHRONOUSLY inside
+  // the user click gesture (prevents NotAllowedError & popup blocking).
+  useEffect(() => {
+    if (!shareOpen) return;
+    const docEl = pdfDocRef.current;
+    if (!docEl) {
+      setPdfPrep({ status: "error", blob: null, file: null });
+      return;
+    }
+    let alive = true;
+    setShareMsg(null);
+    setPdfPrep({ status: "building", blob: null, file: null });
 
-  async function buildPdfBlob(): Promise<Blob | null> {
-    if (!pdfDocument) return null;
+    (async () => {
+      try {
+        const ReactPDF = await import("@react-pdf/renderer");
+        const { pdf } = ReactPDF as any;
+        const rawBlob: Blob = await (
+          pdf as (el: any) => { toBlob: () => Promise<Blob> }
+        )(docEl).toBlob();
+        const pdfBlob =
+          rawBlob.type === "application/pdf"
+            ? rawBlob
+            : new Blob([rawBlob], { type: "application/pdf" });
+        const safeName = pdfFileName.toLowerCase().endsWith(".pdf")
+          ? pdfFileName
+          : `${pdfFileName}.pdf`;
+        const file = new File([pdfBlob], safeName, {
+          type: "application/pdf",
+          lastModified: Date.now(),
+        });
+        if (alive) {
+          setPdfPrep({ status: "ready", blob: pdfBlob, file });
+        }
+      } catch (e) {
+        console.error("PDF build failed:", e);
+        if (alive) {
+          setPdfPrep({ status: "error", blob: null, file: null });
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [shareOpen, pdfFileName, from, to, search]);
+
+  function downloadPdfBlob(blob: Blob, filename: string) {
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 20_000);
+  }
+
+  function openPdfInTab(blob: Blob) {
+    const objUrl = URL.createObjectURL(blob);
+    window.open(objUrl, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
+  }
+
+  function canNativeSharePdf(file: File): boolean {
     try {
-      const ReactPDF = await import("@react-pdf/renderer");
-      const { pdf } = ReactPDF as any;
-      const el = pdfDocument as any;
-      const blob = await (pdf as (el: any) => { toBlob: () => Promise<Blob> })(
-        el
-      ).toBlob();
-      return blob;
-    } catch (e) {
-      console.error("PDF build failed:", e);
-      return null;
+      const nav =
+        typeof navigator !== "undefined" ? (navigator as any) : null;
+      if (!nav || typeof nav.share !== "function") return false;
+      if (typeof nav.canShare === "function") {
+        return Boolean(nav.canShare({ files: [file] }));
+      }
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  async function shareTo(target: "whatsapp" | "email" | "copy" | "native") {
+  function shareTo(target: "native" | "whatsapp" | "email" | "save") {
     setShareMsg(null);
-    const url = shareUrl();
-    const text = `${title} (${from} to ${to})`;
+    const { blob, file, status } = pdfPrep;
+    if (status !== "ready" || !blob || !file) {
+      setShareMsg(
+        status === "building"
+          ? "Please wait a moment — generating PDF..."
+          : "Unable to build PDF for this report"
+      );
+      return;
+    }
+
+    const reportLabel = `${title} (${from} to ${to})`;
+    const nav = typeof navigator !== "undefined" ? (navigator as any) : null;
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
 
     if (target === "native") {
-      const blob = await buildPdfBlob();
-      const nav = navigator as any;
-      if (blob && nav.canShare?.({ files: [new File([blob], pdfFileName, { type: "application/pdf" })] })) {
-        const file = new File([blob], pdfFileName, { type: "application/pdf" });
-        try {
-          await nav.share({ title, text, files: [file] });
-          setShareOpen(false);
-          return;
-        } catch {
-          /* user cancelled */
-        }
+      if (canNativeSharePdf(file)) {
+        nav
+          .share({ files: [file], title: reportLabel })
+          .then(() => setShareOpen(false))
+          .catch((err: any) => {
+            if (err?.name === "AbortError") return;
+            downloadPdfBlob(blob, file.name);
+            setShareMsg(`PDF downloaded (${file.name}) — ready to send`);
+          });
+        return;
       }
-      setShareMsg("Direct share not supported — use WhatsApp or Email");
+      downloadPdfBlob(blob, file.name);
+      openPdfInTab(blob);
+      setShareMsg(`PDF ready (${file.name}) — downloaded & opened`);
       return;
     }
 
     if (target === "whatsapp") {
-      const blob = await buildPdfBlob();
-      if (blob) {
-        const file = new File([blob], pdfFileName, { type: "application/pdf" });
-        const nav = navigator as any;
-        if (nav.canShare?.({ files: [file] })) {
-          try {
-            await nav.share({ files: [file], title, text });
-            setShareOpen(false);
-            return;
-          } catch {
-            /* cancelled */
-          }
-        }
+      // On mobile / OSes that support Web Share API with files, invoke native
+      // share sheet synchronously so WhatsApp receives the actual .pdf file!
+      if (canNativeSharePdf(file) && isMobile) {
+        nav
+          .share({ files: [file], title: reportLabel })
+          .then(() => setShareOpen(false))
+          .catch((err: any) => {
+            if (err?.name === "AbortError") return;
+            downloadPdfBlob(blob, file.name);
+            setShareMsg(`PDF saved (${file.name}) — attach in WhatsApp`);
+          });
+        return;
       }
+      if (canNativeSharePdf(file)) {
+        // Desktop browser with OS file-share support (e.g. Windows Share / macOS Safari)
+        nav
+          .share({ files: [file], title: reportLabel })
+          .then(() => setShareOpen(false))
+          .catch((err: any) => {
+            if (err?.name === "AbortError") return;
+            downloadPdfBlob(blob, file.name);
+            window.open(
+              `https://wa.me/?text=${encodeURIComponent(`*${title}* (${from} to ${to})\nPDF Report: ${file.name}`)}`,
+              "_blank",
+              "noopener,noreferrer"
+            );
+            setShareMsg(`PDF saved (${file.name}) — attach it in WhatsApp`);
+          });
+        return;
+      }
+      // Desktop fallback where browser disables navigator.share (e.g. LAN HTTP):
+      // synchronously open WhatsApp AND save the PDF file ready to drag/attach.
       window.open(
-        `https://wa.me/?text=${encodeURIComponent(`${title} (${from} to ${to}) — ${url}`)}`,
-        "_blank"
+        `https://wa.me/?text=${encodeURIComponent(`*${title}* (${from} to ${to})\nPDF Report: ${file.name}`)}`,
+        "_blank",
+        "noopener,noreferrer"
       );
-      setShareOpen(false);
+      downloadPdfBlob(blob, file.name);
+      setShareMsg(`PDF saved (${file.name}) — attach/drop into WhatsApp`);
       return;
     }
 
     if (target === "email") {
-      const blob = await buildPdfBlob();
-      let attachmentNote = "";
-      if (blob) {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = pdfFileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        attachmentNote = " (PDF downloaded — attach it to this email)";
+      if (canNativeSharePdf(file) && isMobile) {
+        nav
+          .share({
+            files: [file],
+            title: reportLabel,
+            text: `Please find attached the PDF report: ${file.name}`,
+          })
+          .then(() => setShareOpen(false))
+          .catch((err: any) => {
+            if (err?.name === "AbortError") return;
+            downloadPdfBlob(blob, file.name);
+          });
+        return;
       }
-      window.location.href = `mailto:?subject=${encodeURIComponent(
-        title
-      )}&body=${encodeURIComponent(`${text}\n${url}${attachmentNote}`)}`;
-      setShareOpen(false);
+      // Download PDF first, then launch mail client after 450ms so Chrome
+      // does not cancel the pending blob download when handling mailto:
+      downloadPdfBlob(blob, file.name);
+      const subject = encodeURIComponent(`${title} (${from} to ${to})`);
+      const body = encodeURIComponent(
+        `Please find attached the PDF report: ${file.name}\n\nReport: ${title}\nPeriod: ${from} to ${to}`
+      );
+      setTimeout(() => {
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      }, 450);
+      setShareMsg(`PDF downloaded (${file.name}) — attach to email`);
       return;
     }
 
-    if (target === "copy") {
-      try {
-        await navigator.clipboard.writeText(url);
-        setShareMsg("Link copied");
-      } catch {
-        setShareMsg("Copy failed");
-      }
+    if (target === "save") {
+      downloadPdfBlob(blob, file.name);
+      openPdfInTab(blob);
+      setShareMsg(`PDF downloaded & opened (${file.name})`);
       return;
     }
   }
 
   const shareItems: {
-    key: "whatsapp" | "email" | "native" | "copy";
+    key: "native" | "whatsapp" | "email" | "save";
     label: string;
     icon: React.ReactNode;
     iconBg: string;
     iconColor: string;
   }[] = [
     {
+      key: "native",
+      label: "Share PDF (Apps / Device)",
+      icon: <IconPhone size={14} />,
+      iconBg: "#F0E8D8",
+      iconColor: "#684830",
+    },
+    {
       key: "whatsapp",
-      label: "Share via WhatsApp",
+      label: "Share PDF via WhatsApp",
       icon: <IconChat size={14} />,
       iconBg: "#e8f9ef",
       iconColor: "#16a34a",
     },
     {
       key: "email",
-      label: "Share via Email",
+      label: "Share PDF via Email",
       icon: <IconMail size={14} />,
       iconBg: "#F0E8D8",
       iconColor: "#684830",
     },
     {
-      key: "native",
-      label: "Share (device) with PDF",
-      icon: <IconPhone size={14} />,
-      iconBg: "#F0E8D8",
-      iconColor: "#907860",
-    },
-    {
-      key: "copy",
-      label: "Copy link",
-      icon: <IconLink size={14} />,
+      key: "save",
+      label: "View & Save PDF",
+      icon: <IconDownload size={14} />,
       iconBg: "#FCF7F3",
       iconColor: "#6B543E",
     },
@@ -604,50 +713,103 @@ export default function ReportToolbar({
                   borderRadius: 12,
                   boxShadow:
                     "0 4px 12px rgba(114,86,60,0.08), 0 16px 40px rgba(114,86,60,0.14)",
-                  minWidth: 224,
+                  minWidth: 256,
                   zIndex: 200,
                   overflow: "hidden",
-                  padding: 5,
+                  padding: 6,
                 }}
               >
-                {shareItems.map((it) => (
-                  <button
-                    key={it.key}
-                    onClick={() => shareTo(it.key)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      width: "100%",
-                      border: "none",
-                      background: "transparent",
-                      padding: "9px 10px",
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      color: "#45301D",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      borderRadius: 8,
-                    }}
-                  >
-                    <span
+                {/* PDF File Status Header */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 9px",
+                    marginBottom: 4,
+                    borderRadius: 8,
+                    background: "#FCF7F3",
+                    border: "1px solid #E4D6BF",
+                    fontSize: 11,
+                    color: "#684830",
+                  }}
+                >
+                  <IconFileText size={14} strokeWidth={2} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
                       style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: 7,
-                        background: it.iconBg,
-                        color: it.iconColor,
+                        fontWeight: 700,
+                        color: "#45301D",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={pdfFileName}
+                    >
+                      {pdfFileName}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: "#907860" }}>
+                      {pdfPrep.status === "building"
+                        ? "Generating PDF..."
+                        : pdfPrep.status === "ready" && pdfPrep.blob
+                          ? `PDF Ready • ${Math.max(1, Math.round(pdfPrep.blob.size / 1024))} KB`
+                          : "PDF unavailable"}
+                    </div>
+                  </div>
+                </div>
+
+                {shareItems.map((it) => {
+                  const disabled = pdfPrep.status !== "ready";
+                  return (
+                    <button
+                      key={it.key}
+                      disabled={disabled}
+                      onClick={() => shareTo(it.key)}
+                      onMouseEnter={(e) => {
+                        if (!disabled) {
+                          e.currentTarget.style.background = "#FCF7F3";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                      style={{
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
+                        gap: 10,
+                        width: "100%",
+                        border: "none",
+                        background: "transparent",
+                        padding: "9px 10px",
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        color: "#45301D",
+                        cursor: disabled ? "wait" : "pointer",
+                        opacity: disabled ? 0.55 : 1,
+                        textAlign: "left",
+                        borderRadius: 8,
+                        transition: "background 0.12s",
                       }}
                     >
-                      {it.icon}
-                    </span>
-                    {it.label}
-                  </button>
-                ))}
+                      <span
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 7,
+                          background: it.iconBg,
+                          color: it.iconColor,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {it.icon}
+                      </span>
+                      {it.label}
+                    </button>
+                  );
+                })}
                 {shareMsg && (
                   <p
                     style={{
