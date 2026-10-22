@@ -9,6 +9,9 @@ const nextConfig = {
   // mssql (tedious) must stay external — don't bundle into server chunks
   serverExternalPackages: ['mssql'],
 
+  // Bundle ESM-only @react-pdf/renderer cleanly under `next build --webpack`
+  transpilePackages: ['@react-pdf/renderer'],
+
   images: {
     remotePatterns: [
       {
