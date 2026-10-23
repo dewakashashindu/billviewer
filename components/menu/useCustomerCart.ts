@@ -102,6 +102,7 @@ export function useCustomerCart({
   const [lines, setLines] = useState<CartLine[]>([]);
   const [baseline, setBaseline] = useState<CartStore["baseline"]>({});
   const [invoiceNo, setInvoiceNo] = useState("");
+  const [takeawayNo, setTakeawayNo] = useState("");
   // storage must not be written until the saved cart + the table's current
   // bill have been read, otherwise the first render wipes the saved cart.
   const [hydrated, setHydrated] = useState(false);
@@ -194,6 +195,7 @@ export function useCustomerCart({
         setLines([]);
         setBaseline({});
         setInvoiceNo("");
+        setTakeawayNo("");
         writeStore(table, null, locCode);
         setHydrated(true);
       });
@@ -274,11 +276,11 @@ export function useCustomerCart({
     };
   }, [table, locCode, token, takeaway]);
 
-  /* ── 2. persist on every change ──────────────────────────── */
+  /* ── 2. persist on every change (dine-in only) ───────────── */
   useEffect(() => {
-    if (!table || !hydrated) return;
+    if (!table || !hydrated || takeaway) return;
     writeStore(table, { lines, baseline, invoiceNo }, locCode);
-  }, [table, locCode, lines, baseline, invoiceNo, hydrated]);
+  }, [table, locCode, lines, baseline, invoiceNo, hydrated, takeaway]);
 
   const baselineQtyOf = useCallback((key: string) => baseline[key]?.qty ?? 0, [baseline]);
 
@@ -451,7 +453,8 @@ export function useCustomerCart({
           tableNo: table,
           tableGroup: tableGroup || undefined,
           locCode: locCode || undefined,
-          existingInvoiceNo: !takeaway && invoiceNo ? invoiceNo : undefined,
+          existingInvoiceNo: invoiceNo || undefined,
+          existingTakeawayNo: takeaway && takeawayNo ? takeawayNo : undefined,
           t: token || undefined,
           orderType: takeaway ? "TA" : "DI",
           localPax: takeaway ? undefined : guest.localPax || undefined,
@@ -468,7 +471,7 @@ export function useCustomerCart({
       }
       const data = json.data as ConfirmResult & { invoiceNo?: string; orderNo?: string; locCode?: string };
       const result: ConfirmResult = {
-        tableNo: data.tableNo ?? table,
+        tableNo: data.tableNo ?? (takeaway && takeawayNo ? takeawayNo : table),
         tableGroup: data.tableGroup ?? tableGroup ?? "",
         invoiceNo: data.invoiceNo ?? "",
         orderNo: data.orderNo ?? "",
@@ -478,27 +481,22 @@ export function useCustomerCart({
         orderType: data.orderType ?? (takeaway ? "TA" : "DI"),
       };
 
-      if (takeaway) {
-        // Takeaway creates a standalone TA serial each time — clear cart
-        // & baseline immediately so previous items never linger.
-        setLines([]);
-        setBaseline({});
-        setInvoiceNo("");
-        writeStore(table, null, locCode);
-      } else {
-        // Dine-in → confirmed cart becomes the table's read-only baseline.
-        const nextBaseline: CartStore["baseline"] = { ...baseline };
-        for (const l of lines) {
-          nextBaseline[l.key] = {
-            qty: l.qty,
-            name: l.name,
-            price: l.unitPrice,
-            remark: l.remark,
-          };
-        }
-        setBaseline(nextBaseline);
-        if (result.invoiceNo) setInvoiceNo(result.invoiceNo);
+      // Confirmed cart becomes the read-only baseline so clicking
+      // "Add more items" (for BOTH Dine-In and Takeaway) appends to
+      // the same InvoiceNo / TA serial without re-sending old items.
+      // Clicking "Done" on Takeaway calls resetAll(true) to start fresh.
+      const nextBaseline: CartStore["baseline"] = { ...baseline };
+      for (const l of lines) {
+        nextBaseline[l.key] = {
+          qty: l.qty,
+          name: l.name,
+          price: l.unitPrice,
+          remark: l.remark,
+        };
       }
+      setBaseline(nextBaseline);
+      if (result.invoiceNo) setInvoiceNo(result.invoiceNo);
+      if (takeaway && result.tableNo) setTakeawayNo(result.tableNo);
       setLastResult(result);
       return result;
     } catch (e) {
@@ -508,13 +506,14 @@ export function useCustomerCart({
       inFlightRef.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, guest, invoiceNo, lines, locCode, newLines, table, tableGroup, token, takeaway]);
+  }, [baseline, confirming, guest, invoiceNo, lines, locCode, newLines, table, tableGroup, takeaway, takeawayNo, token]);
 
   const resetAll = useCallback(
     (clearGuest = false) => {
       setLines([]);
       setBaseline({});
       setInvoiceNo("");
+      setTakeawayNo("");
       setLastResult(null);
       setConfirmError(null);
       writeStore(table, null, locCode);

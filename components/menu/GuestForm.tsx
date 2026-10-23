@@ -168,7 +168,14 @@ export default function GuestForm({
             </div>
             <input
               value={phone}
-              onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+              onChange={(e) => {
+                const next = e.target.value.slice(0, 20);
+                setPhone(next);
+                if (digits(next) !== digits(phone)) {
+                  setCusCode("");
+                  setLookup("idle");
+                }
+              }}
               onBlur={() => void runLookup(phone)}
               placeholder="07X XXX XXXX"
               inputMode="tel"

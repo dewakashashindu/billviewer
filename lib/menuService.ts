@@ -324,8 +324,10 @@ export interface ConfirmInput {
   tableGroup?: string;
   /** Location code from the scanned QR (Tbl_LocationMaster.LocCode). */
   locCode?: string;
-  /** Existing unpaid InvoiceNo on this table's active session (DI only). */
+  /** Existing unpaid InvoiceNo on this active session (DI or TA "Add more items"). */
   existingInvoiceNo?: string;
+  /** Existing Takeaway number (e.g. TA-0001) when guest clicks "Add more items" on TA. */
+  existingTakeawayNo?: string;
   items: ConfirmLineInput[];
   customerName?: string;
   customerPhone?: string;
@@ -677,6 +679,7 @@ function validateInput(
   tableGroup: string;
   locCode: string;
   existingInvoiceNo: string;
+  existingTakeawayNo: string;
   items: { itemId: string; quantity: number; remark: string }[];
   customerName: string;
   customerPhone: string;
@@ -723,6 +726,7 @@ function validateInput(
     tableGroup: s(input.tableGroup),
     locCode: s(input.locCode).slice(0, 10),
     existingInvoiceNo: s(input.existingInvoiceNo).slice(0, 50),
+    existingTakeawayNo: s(input.existingTakeawayNo).slice(0, 10),
     items,
     customerName,
     customerPhone,
@@ -748,12 +752,21 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     }
     mockOrderCounter += 1;
     const { ymd } = slDateParts();
+    const reuseTa =
+      input.takeaway &&
+      Boolean(input.existingTakeawayNo) &&
+      Boolean(input.existingInvoiceNo);
     const inv =
-      !input.takeaway && input.existingInvoiceNo
+      (input.takeaway ? reuseTa : Boolean(input.existingInvoiceNo))
         ? input.existingInvoiceNo
         : `INV-${ymd.replaceAll("-", "")}-${String(mockOrderCounter).padStart(3, "0")}`;
+    const resolvedMockTable = input.takeaway
+      ? reuseTa
+        ? input.existingTakeawayNo
+        : `TA-${String(mockOrderCounter).padStart(4, "0")}`
+      : input.tableNo;
     return {
-      tableNo: input.takeaway ? `TA-${String(mockOrderCounter).padStart(4, "0")}` : input.tableNo,
+      tableNo: resolvedMockTable,
       tableGroup: input.takeaway ? "Takeaway" : input.tableGroup,
       invoiceNo: inv,
       orderNo: String(mockOrderCounter),
@@ -832,14 +845,26 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     const orderNoMax = qrCols["ORDERNO"] && qrCols["ORDERNO"] > 0 ? qrCols["ORDERNO"] : 10;
 
     /* 4) Resolve TabelNo + InvoiceNo:
-          • Takeaway (TA): fresh TA-0001 in TabelNo + fresh INV-... in InvoiceNo
-          • Dine-in  (DI): reuse open unpaid InvoiceNo for this table if one
-                           exists (in Tbl_HoldUpsCloudTempQR, Tbl_HoldUpsCloud,
-                           or active guest session), otherwise generate fresh INV-... */
+          • Takeaway (TA):
+              - "Add more items" -> reuse active TA-0001 + INV-... if not settled
+              - First confirm / after "Done" -> fresh TA-0001 + fresh INV-...
+          • Dine-in  (DI):
+              - reuse open unpaid InvoiceNo for this table if one exists
+                (in Tbl_HoldUpsCloudTempQR, Tbl_HoldUpsCloud, or active session),
+                otherwise generate fresh INV-... */
     let resolvedTableNo = input.tableNo;
     if (input.takeaway) {
-      resolvedTableNo = await generateTakeawayNo(tx, tableMax, input.locCode);
-      invoiceNo = await generateInvoiceNo(tx, invoiceMax, input.locCode);
+      if (input.existingTakeawayNo && input.existingInvoiceNo) {
+        const settled = await isInvoiceSettled(tx, input.existingInvoiceNo);
+        if (!settled) {
+          resolvedTableNo = input.existingTakeawayNo;
+          invoiceNo = input.existingInvoiceNo;
+        }
+      }
+      if (!invoiceNo) {
+        resolvedTableNo = await generateTakeawayNo(tx, tableMax, input.locCode);
+        invoiceNo = await generateInvoiceNo(tx, invoiceMax, input.locCode);
+      }
     } else {
       // (a) Check pending rows still in Tbl_HoldUpsCloudTempQR
       const q1 = tx.request();
@@ -917,10 +942,38 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     const voidRemarkValue = fit(TARGET_TABLE, "VoidRemark", "");
     const invoiceValue = fit(TARGET_TABLE, "InvoiceNo", invoiceNo);
     const cusNameValue = fit(TARGET_TABLE, "CusName", input.customerName);
+    let resolvedCusCode = input.customerCode;
+    if (!resolvedCusCode && input.customerPhone) {
+      const phoneDigits = input.customerPhone.replace(/[^0-9]/g, "");
+      if (phoneDigits.length >= 9) {
+        try {
+          const cReq = tx.request();
+          cReq.input("phone", sql.VarChar(20), phoneDigits);
+          const cRes = await cReq.query(`
+            SELECT TOP 1 LTRIM(RTRIM(CusCode)) AS CusCode
+            FROM dbo.Tbl_CustomerMaster WITH (NOLOCK)
+            WHERE ISNULL(Enable, 1) = 1
+              AND REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(RegTel)), ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' + @phone
+            ORDER BY
+              CASE
+                WHEN REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(RegTel)), ' ', ''), '-', ''), '+', '') = @phone THEN 0
+                ELSE 1
+              END,
+              CusCode;
+          `);
+          if (cRes.recordset.length) {
+            resolvedCusCode = s(cRes.recordset[0].CusCode);
+          }
+        } catch {
+          /* Tbl_CustomerMaster optional */
+        }
+      }
+    }
+
     const cusCodeValue = fit(
       TARGET_TABLE,
       "CusCode",
-      input.customerCode || normalisePhone(input.customerPhone) || input.customerPhone
+      resolvedCusCode || " "
     );
 
     /* 7) Save ONLY into dbo.Tbl_HoldUpsCloudTempQR */

@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
       tableGroup: body.tableGroup ? String(body.tableGroup) : undefined,
       locCode: body.locCode ? String(body.locCode) : undefined,
       existingInvoiceNo: body.existingInvoiceNo ? String(body.existingInvoiceNo) : undefined,
+      existingTakeawayNo: body.existingTakeawayNo ? String(body.existingTakeawayNo) : undefined,
       items: Array.isArray(body.items) ? body.items : [],
       customerName: body.customerName ? String(body.customerName) : undefined,
       customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
