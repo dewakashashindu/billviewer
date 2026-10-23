@@ -1,16 +1,14 @@
 // ============================================================
 // LOCATION: lib/orderService.ts
-// Table lookups + live web orders for the customer QR flow.
+// Table lookups + live QR/web orders for the customer QR flow.
 //
 // Tables:
 //   Tbl_Tables      (TableNo, TableGroup, Vaccant, Enable)
 //   Tbl_TableGroup  (GroupID, GroupName)
 //
-// Web orders (written by lib/menuService.confirmOrder):
-//   Tbl_HoldUpsCloud  — one row per order line, IsPaid = 0 = open
-//
-// If the DB_* env vars are not set, mock data is returned so the
-// whole flow can be demonstrated without a database.
+// QR orders (written by lib/menuService.confirmOrder):
+//   Tbl_HoldUpsCloudTempQR — staging queue (UserID = 'QR')
+//   Tbl_HoldUpsCloud       — open orders already synced by POS
 // ============================================================
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
@@ -62,8 +60,6 @@ export async function getOrderTableInfo(
   const pool = await getPool();
   const req = pool.request();
   req.input("table", sql.VarChar(10), table);
-  /* Tbl_Tables.TableGroup holds the GROUP ID on this POS ("P/M 1"),
-     older installs store the group NAME — accept either. */
   const res = await req.query(`
     SELECT
       LTRIM(RTRIM(t.TableNo))                      AS TableNo,
@@ -85,7 +81,6 @@ export async function getOrderTableInfo(
   const groupName = s(r.GroupName);
   return {
     tableNo: s(r.TableNo),
-    // Show the readable group name when the POS has one.
     tableGroup: groupName || rawGroup || "Main Dining",
     groupId: s(r.GroupID) || rawGroup,
     vacant: vacantRaw === "Y" || vacantRaw === "1" || vacantRaw === "",
@@ -106,9 +101,11 @@ export interface LiveOrderLine {
 
 export interface LiveOrder {
   invoiceNo: string;
+  orderNo?: string;
+  locCode?: string;
   tableNo: string;
   tableGroup: string;
-  orderType?: string;
+  orderType?: "DI" | "TA";
   customerName: string;
   customerPhone: string;
   pax: number;
@@ -122,22 +119,41 @@ export interface LiveOrdersResult {
   source: "database" | "mock";
 }
 
+interface RawLiveRow {
+  InvoiceNo: unknown;
+  OrderNo?: unknown;
+  LocCode?: unknown;
+  TableNo: unknown;
+  OrderType?: unknown;
+  LPax: unknown;
+  FPax?: unknown;
+  CusName: unknown;
+  CusCode: unknown;
+  TxnDateTime: unknown;
+  ItemCode: unknown;
+  ItemName: unknown;
+  QTY: unknown;
+  SalesPrice: unknown;
+  ItemRemarks: unknown;
+}
+
 /**
- * Open (unpaid) web orders for the kitchen / staff view.
- * One entry per invoice, newest first.
+ * Open (unpaid) QR/web orders for the kitchen / staff view.
  */
 export async function getLiveWebOrders(
   limit = 40
 ): Promise<LiveOrdersResult> {
   if (!isDbConfigured()) {
-    // A small demo set so the staff screen is not empty in dev.
     return {
       source: "mock",
       orders: [
         {
           invoiceNo: "INV-DEMO-001",
+          orderNo: "1",
+          locCode: "001",
           tableNo: "T-05",
           tableGroup: "Main Dining Area",
+          orderType: "DI",
           customerName: "Ajana",
           customerPhone: "0773464656",
           pax: 2,
@@ -153,47 +169,99 @@ export async function getLiveWebOrders(
   }
 
   const pool = await getPool();
-  const req = pool.request();
-  req.input("limit", sql.Int, Math.min(200, Math.max(1, limit)));
-  const res = await req.query(`
-    SELECT TOP (@limit)
-      LTRIM(RTRIM(h.InvoiceNo))  AS InvoiceNo,
-      LTRIM(RTRIM(h.TabelNo))    AS TableNo,
-      LTRIM(RTRIM(ISNULL(h.OrderType, ''))) AS OrderType,
-      ISNULL(h.LPax, 0)          AS LPax,
-      ISNULL(h.CusName, '')      AS CusName,
-      ISNULL(h.CusCode, '')      AS CusCode,
-      h.TxnDateTime              AS TxnDateTime,
-      LTRIM(RTRIM(h.ItemCode))   AS ItemCode,
-      ISNULL(NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''), LTRIM(RTRIM(h.ItemCode))) AS ItemName,
-      ISNULL(h.QTY, 0)           AS QTY,
-      ISNULL(h.SalesPrice, 0)    AS SalesPrice,
-      ISNULL(h.ItemRemarks, '')  AS ItemRemarks
-    FROM dbo.Tbl_HoldUpsCloud h WITH (NOLOCK)
-    LEFT JOIN dbo.Tbl_MenuItems m WITH (NOLOCK)
-      ON m.MenuItmId = h.ItemCode
-    WHERE ISNULL(h.IsPaid, 0) = 0
-      AND LTRIM(RTRIM(h.UserID)) = 'WEB'
-    ORDER BY h.TxnDateTime DESC, h.ItemCode;
-  `);
+  const maxRows = Math.min(200, Math.max(1, limit));
+  const rawRows: RawLiveRow[] = [];
+
+  // 1) Pending QR orders queued in dbo.Tbl_HoldUpsCloudTempQR
+  try {
+    const reqQr = pool.request();
+    reqQr.input("limit", sql.Int, maxRows);
+    const resQr = await reqQr.query(`
+      SELECT TOP (@limit)
+        LTRIM(RTRIM(q.InvoiceNo))  AS InvoiceNo,
+        LTRIM(RTRIM(q.OrderNo))    AS OrderNo,
+        LTRIM(RTRIM(q.LocCode))    AS LocCode,
+        LTRIM(RTRIM(q.TabelNo))    AS TableNo,
+        LTRIM(RTRIM(q.OrderType))  AS OrderType,
+        ISNULL(q.LPax, 0)          AS LPax,
+        ISNULL(q.FPax, 0)          AS FPax,
+        ISNULL(q.CusName, '')      AS CusName,
+        ISNULL(q.CusCode, '')      AS CusCode,
+        q.TxnDateTime              AS TxnDateTime,
+        LTRIM(RTRIM(q.ItemCode))   AS ItemCode,
+        ISNULL(NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''), LTRIM(RTRIM(q.ItemCode))) AS ItemName,
+        ISNULL(q.QTY, 0)           AS QTY,
+        ISNULL(q.SalesPrice, 0)    AS SalesPrice,
+        ISNULL(q.ItemRemarks, '')  AS ItemRemarks
+      FROM dbo.Tbl_HoldUpsCloudTempQR q WITH (NOLOCK)
+      LEFT JOIN dbo.Tbl_MenuItems m WITH (NOLOCK)
+        ON m.MenuItmId = q.ItemCode
+      WHERE ISNULL(q.IsPaid, 0) = 0
+      ORDER BY q.TxnDateTime DESC, q.RowLine ASC;
+    `);
+    rawRows.push(...(resQr.recordset as RawLiveRow[]));
+  } catch {
+    /* Tbl_HoldUpsCloudTempQR optional until created */
+  }
+
+  // 2) Open QR/Web orders already imported by POS into dbo.Tbl_HoldUpsCloud
+  try {
+    const reqCloud = pool.request();
+    reqCloud.input("limit", sql.Int, maxRows);
+    const resCloud = await reqCloud.query(`
+      SELECT TOP (@limit)
+        LTRIM(RTRIM(h.InvoiceNo))  AS InvoiceNo,
+        ''                         AS OrderNo,
+        ''                         AS LocCode,
+        LTRIM(RTRIM(h.TabelNo))    AS TableNo,
+        LTRIM(RTRIM(ISNULL(h.OrderType, ''))) AS OrderType,
+        ISNULL(h.LPax, 0)          AS LPax,
+        ISNULL(h.FPax, 0)          AS FPax,
+        ISNULL(h.CusName, '')      AS CusName,
+        ISNULL(h.CusCode, '')      AS CusCode,
+        h.TxnDateTime              AS TxnDateTime,
+        LTRIM(RTRIM(h.ItemCode))   AS ItemCode,
+        ISNULL(NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''), LTRIM(RTRIM(h.ItemCode))) AS ItemName,
+        ISNULL(h.QTY, 0)           AS QTY,
+        ISNULL(h.SalesPrice, 0)    AS SalesPrice,
+        ISNULL(h.ItemRemarks, '')  AS ItemRemarks
+      FROM dbo.Tbl_HoldUpsCloud h WITH (NOLOCK)
+      LEFT JOIN dbo.Tbl_MenuItems m WITH (NOLOCK)
+        ON m.MenuItmId = h.ItemCode
+      WHERE ISNULL(h.IsPaid, 0) = 0
+        AND UPPER(LTRIM(RTRIM(ISNULL(h.UserID, '')))) IN ('QR', 'WEB')
+      ORDER BY h.TxnDateTime DESC, h.ItemCode;
+    `);
+    rawRows.push(...(resCloud.recordset as RawLiveRow[]));
+  } catch {
+    /* Tbl_HoldUpsCloud optional */
+  }
 
   const groups = new Map<string, LiveOrder>();
-  for (const r of res.recordset) {
+  for (const r of rawRows) {
     const invoiceNo = s(r.InvoiceNo);
     if (!invoiceNo) continue;
-    const key = invoiceNo;
+    const ordNo = s(r.OrderNo);
+    const loc = s(r.LocCode);
+    const key = ordNo ? `${loc}|${invoiceNo}|ORD-${ordNo}` : `${loc}|${invoiceNo}`;
     let order = groups.get(key);
     if (!order) {
       const tableNo = s(r.TableNo);
+      const rawType = s(r.OrderType).toUpperCase();
+      const orderType: "DI" | "TA" =
+        rawType === "TA" || /^TA(?:-|$)/i.test(tableNo) ? "TA" : "DI";
+      const paxTotal = (Number(r.LPax ?? 0) || 0) + (Number(r.FPax ?? 0) || 0);
       order = {
-        invoiceNo,
+        invoiceNo: ordNo ? `${invoiceNo} (#${ordNo})` : invoiceNo,
+        orderNo: ordNo || undefined,
+        locCode: loc || undefined,
         tableNo,
-        tableGroup: "",
-        orderType: s(r.OrderType).toUpperCase(),
+        tableGroup: orderType === "TA" ? "Takeaway" : "",
+        orderType,
         customerName: s(r.CusName),
         customerPhone: s(r.CusCode),
-        pax: Number(r.LPax ?? 0) || 0,
-        placedAt: r.TxnDateTime ? new Date(r.TxnDateTime).toISOString() : "",
+        pax: paxTotal,
+        placedAt: r.TxnDateTime ? new Date(r.TxnDateTime as string | Date).toISOString() : "",
         lines: [],
         total: 0,
       };
@@ -211,32 +279,35 @@ export async function getLiveWebOrders(
     order.total += qty * price;
   }
 
-  // Table group for the header chips
   const tableNos = [...new Set([...groups.values()].map((o) => o.tableNo).filter(Boolean))];
   const groupOf = new Map<string, string>();
   if (tableNos.length) {
-    const pool2 = await getPool();
-    const r2 = pool2.request();
-    const list = tableNos.map((t, i) => {
-      r2.input(`t${i}`, sql.VarChar(20), t);
-      return `@t${i}`;
-    });
-    const res2 = await r2.query(`
-      SELECT LTRIM(RTRIM(TableNo)) AS TableNo, LTRIM(RTRIM(TableGroup)) AS TableGroup
-      FROM dbo.Tbl_Tables WITH (NOLOCK)
-      WHERE LTRIM(RTRIM(TableNo)) IN (${list.join(", ")});
-    `);
-    for (const row of res2.recordset) groupOf.set(s(row.TableNo), s(row.TableGroup));
+    try {
+      const r2 = pool.request();
+      const list = tableNos.map((t, i) => {
+        r2.input(`t${i}`, sql.VarChar(20), t);
+        return `@t${i}`;
+      });
+      const res2 = await r2.query(`
+        SELECT LTRIM(RTRIM(TableNo)) AS TableNo, LTRIM(RTRIM(TableGroup)) AS TableGroup
+        FROM dbo.Tbl_Tables WITH (NOLOCK)
+        WHERE LTRIM(RTRIM(TableNo)) IN (${list.join(", ")});
+      `);
+      for (const row of res2.recordset) groupOf.set(s(row.TableNo), s(row.TableGroup));
+    } catch {
+      /* ignore */
+    }
   }
   for (const o of groups.values()) {
-    const isTa = o.orderType === "TA" || /^TA(?:-|$)/i.test(o.tableNo);
-    o.tableGroup = groupOf.get(o.tableNo) ?? (isTa ? "Takeaway" : "");
+    if (!o.tableGroup) o.tableGroup = groupOf.get(o.tableNo) ?? "";
   }
 
-  const orders = [...groups.values()].map((o) => ({
-    ...o,
-    total: Math.round(o.total * 100) / 100,
-  }));
+  const orders = [...groups.values()]
+    .map((o) => ({
+      ...o,
+      total: Math.round(o.total * 100) / 100,
+    }))
+    .sort((a, b) => b.placedAt.localeCompare(a.placedAt));
 
   return { orders, source: "database" };
 }

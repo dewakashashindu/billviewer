@@ -3,20 +3,15 @@
 // POST /api/order/confirm
 //
 // Body:
-//   { tableNo, tableGroup?, t?, pax?, customerName?, customerPhone?,
+//   { tableNo, tableGroup?, locCode?, existingInvoiceNo?, t?,
+//     pax?, localPax?, foreignPax?, customerName?, customerPhone?,
 //     customerCode?, orderType?, items: [{ itemId, quantity, remark? }] }
 //
-// tableNo = "TA" → takeaway: OrderType TA, TabelNo from Tbl_Serials('TA')
-// (e.g. TA-0001) and InvoiceNo from Tbl_Serials('INV') (same as DI).
-//
-// Guards (see web-qr-ordering-spec.md §6):
-//   1. the table token must match the table number
-//   2. rate limit per IP and per table
-//   3. prices + availability are re-read from the DB inside
-//      lib/menuService.confirmOrder — the browser price is never
-//      trusted
-//   4. the invoice is derived from the table on the server, so a
-//      guest cannot add items to somebody else's bill
+// Saves ONLY into dbo.Tbl_HoldUpsCloudTempQR:
+//   • LocCode      = QR location code
+//   • UserID/Name  = 'QR'
+//   • OrderNo      = Tbl_Serials ('ODN') -> 1, 2, 3...
+//   • RowLine      = MAX(RowLine) + 1 per item
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import { checkTableAccess } from "@/lib/orderToken";
@@ -82,6 +77,8 @@ export async function POST(request: NextRequest) {
     const result = await confirmOrder({
       tableNo,
       tableGroup: body.tableGroup ? String(body.tableGroup) : undefined,
+      locCode: body.locCode ? String(body.locCode) : undefined,
+      existingInvoiceNo: body.existingInvoiceNo ? String(body.existingInvoiceNo) : undefined,
       items: Array.isArray(body.items) ? body.items : [],
       customerName: body.customerName ? String(body.customerName) : undefined,
       customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,

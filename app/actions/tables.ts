@@ -1,27 +1,20 @@
 "use server";
 
 // ============================================================
-// Table QR — Tbl_TableGroup + Tbl_Tables (mssql pool, lib/db.ts)
+// Table QR — Tbl_LocationMaster + Tbl_TableGroup + Tbl_Tables
 //
-//   Tbl_TableGroup: GroupID, GroupName (PK), Enable, ...
-//   Tbl_Tables:     TableNo + TableGroup (PK), Enable,
-//                   Vaccant ('Y' = vacant), ListingOrder
-//
-// ⚠️ In this POS, Tbl_Tables.TableGroup holds the GROUP ID
-//    (e.g. "P/M 1"), not the group name. Older installs store the
-//    group NAME instead, so the join below accepts either.
-//
-// Tables whose TableGroup is empty (or points at a disabled /
-// deleted group) are still returned, flagged with an empty
-// groupId — the QR screen lets staff give them a custom card
-// name / group name.
-//
-// If the DB_* env vars are not set, MOCK data is returned (the
-// same dev-fallback pattern as the bill viewer) so the UI can
-// be tested without a database.
+//   Tbl_LocationMaster: LocCode, LocDes, SubLoc (0/false = main loc)
+//   Tbl_TableGroup:     GroupID, GroupName (PK), Enable, ...
+//   Tbl_Tables:         TableNo + TableGroup (PK), Enable,
+//                       Vaccant ('Y' = vacant), ListingOrder
 // ============================================================
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
+
+export interface TableLocationRow {
+  locCode: string;
+  locName: string;
+}
 
 export interface TableGroupRow {
   groupId: string;
@@ -46,6 +39,7 @@ export interface TableRowData {
 }
 
 export interface TablesData {
+  locations: TableLocationRow[];
   groups: TableGroupRow[];
   tables: TableRowData[];
   source: "database" | "mock";
@@ -54,6 +48,10 @@ export interface TablesData {
 const s = (v: unknown): string => (v == null ? "" : String(v).trim());
 
 function mockData(): TablesData {
+  const locations: TableLocationRow[] = [
+    { locCode: "001", locName: "Mila Mirissa" },
+    { locCode: "002", locName: "Beach Lounge" },
+  ];
   const defs: { id: string; name: string; prefix: string; count: number }[] = [
     { id: "001", name: "A. Ground Floor", prefix: "T-", count: 12 },
     { id: "002", name: "B. First Floor", prefix: "F-", count: 6 },
@@ -86,7 +84,32 @@ function mockData(): TablesData {
     listingOrder: 9999,
     inDb: true,
   });
-  return { groups, tables, source: "mock" };
+  return { locations, groups, tables, source: "mock" };
+}
+
+function isSubLocationFlag(val: unknown): boolean {
+  if (val === null || val === undefined) return false;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") return val !== 0;
+  const str = String(val).trim().toLowerCase();
+  if (!str || str === "0" || str === "0.0" || str === "false" || str === "n" || str === "no") {
+    return false;
+  }
+  if (str === "1" || str === "true" || str === "y" || str === "yes") {
+    return true;
+  }
+  const num = Number(str);
+  return Number.isFinite(num) ? num !== 0 : false;
+}
+
+function findRowKey(keys: string[], candidates: string[]): string | null {
+  const lower = new Map<string, string>();
+  for (const k of keys) lower.set(k.toLowerCase(), k);
+  for (const cand of candidates) {
+    const hit = lower.get(cand.toLowerCase());
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export async function getTablesDataAction(): Promise<{
@@ -104,43 +127,99 @@ export async function getTablesDataAction(): Promise<{
 
     const pool = await getPool();
 
-    /* Groups + how many enabled tables point at them. The match
-       accepts either the GroupID or the GroupName, because
-       Tbl_Tables.TableGroup holds the id on this install. */
-    const gRes = await pool.request().query(`
-      SELECT
-        LTRIM(RTRIM(g.GroupID))   AS GroupID,
-        LTRIM(RTRIM(g.GroupName)) AS GroupName,
-        (SELECT COUNT(*) FROM Tbl_Tables t WITH (NOLOCK)
-          WHERE t.Enable = 1
-            AND (
-              LTRIM(RTRIM(t.TableGroup)) = LTRIM(RTRIM(g.GroupID))
-              OR LTRIM(RTRIM(t.TableGroup)) = LTRIM(RTRIM(g.GroupName))
-            )) AS TableCount
-      FROM Tbl_TableGroup g WITH (NOLOCK)
-      WHERE g.Enable = 1
-      ORDER BY LTRIM(RTRIM(g.GroupName));
-    `);
+    /* Run Tbl_LocationMaster, Tbl_TableGroup, and Tbl_Tables in parallel
+       to cut remote DB round-trip latency (~3x faster on SQL5075).
+       Location lookup uses direct SELECT * (no TRY_CAST / INFORMATION_SCHEMA)
+       so it works on SQL Server 2008 R2 / Compat Level 100+. */
+    const [locRes, gRes, tRes] = await Promise.all([
+      pool
+        .request()
+        .query(`SELECT * FROM Tbl_LocationMaster WITH (NOLOCK);`)
+        .catch(() =>
+          pool
+            .request()
+            .query(`SELECT * FROM dbo.Tbl_LocationMaster WITH (NOLOCK);`)
+            .catch((locErr) => {
+              console.error("Location master load error on Table QR:", locErr);
+              return null;
+            })
+        ),
+      pool.request().query(`
+        SELECT
+          LTRIM(RTRIM(g.GroupID))   AS GroupID,
+          LTRIM(RTRIM(g.GroupName)) AS GroupName,
+          (SELECT COUNT(*) FROM Tbl_Tables t WITH (NOLOCK)
+            WHERE t.Enable = 1
+              AND (
+                LTRIM(RTRIM(t.TableGroup)) = LTRIM(RTRIM(g.GroupID))
+                OR LTRIM(RTRIM(t.TableGroup)) = LTRIM(RTRIM(g.GroupName))
+              )) AS TableCount
+        FROM Tbl_TableGroup g WITH (NOLOCK)
+        WHERE g.Enable = 1
+        ORDER BY LTRIM(RTRIM(g.GroupName));
+      `),
+      pool.request().query(`
+        SELECT
+          LTRIM(RTRIM(t.TableNo))                  AS TableNo,
+          LTRIM(RTRIM(ISNULL(t.TableGroup, '')))   AS TableGroup,
+          LTRIM(RTRIM(ISNULL(t.Vaccant, 'Y')))     AS Vaccant,
+          ISNULL(t.ListingOrder, 0)                AS ListingOrder,
+          LTRIM(RTRIM(ISNULL(g.GroupID, '')))      AS GroupID,
+          LTRIM(RTRIM(ISNULL(g.GroupName, '')))    AS GroupName
+        FROM Tbl_Tables t WITH (NOLOCK)
+        LEFT JOIN Tbl_TableGroup g WITH (NOLOCK)
+          ON LTRIM(RTRIM(g.GroupID))   = LTRIM(RTRIM(t.TableGroup))
+          OR LTRIM(RTRIM(g.GroupName)) = LTRIM(RTRIM(t.TableGroup))
+        WHERE t.Enable = 1
+        ORDER BY
+          CASE WHEN ISNULL(g.GroupName, '') = '' THEN 1 ELSE 0 END,
+          LTRIM(RTRIM(g.GroupName)),
+          t.ListingOrder,
+          LTRIM(RTRIM(t.TableNo));
+      `),
+    ]);
 
-    const tRes = await pool.request().query(`
-      SELECT
-        LTRIM(RTRIM(t.TableNo))                  AS TableNo,
-        LTRIM(RTRIM(ISNULL(t.TableGroup, '')))   AS TableGroup,
-        LTRIM(RTRIM(ISNULL(t.Vaccant, 'Y')))     AS Vaccant,
-        ISNULL(t.ListingOrder, 0)                AS ListingOrder,
-        LTRIM(RTRIM(ISNULL(g.GroupID, '')))      AS GroupID,
-        LTRIM(RTRIM(ISNULL(g.GroupName, '')))    AS GroupName
-      FROM Tbl_Tables t WITH (NOLOCK)
-      LEFT JOIN Tbl_TableGroup g WITH (NOLOCK)
-        ON LTRIM(RTRIM(g.GroupID))   = LTRIM(RTRIM(t.TableGroup))
-        OR LTRIM(RTRIM(g.GroupName)) = LTRIM(RTRIM(t.TableGroup))
-      WHERE t.Enable = 1
-      ORDER BY
-        CASE WHEN ISNULL(g.GroupName, '') = '' THEN 1 ELSE 0 END,
-        LTRIM(RTRIM(g.GroupName)),
-        t.ListingOrder,
-        LTRIM(RTRIM(t.TableNo));
-    `);
+    let locations: TableLocationRow[] = [];
+    const locRows = (locRes?.recordset ?? []) as Record<string, unknown>[];
+    if (locRows.length > 0) {
+      const keys = Object.keys(locRows[0]);
+      const lcKey = findRowKey(keys, ["LocCode", "Code", "Loc"]);
+      const ldKey = findRowKey(keys, ["LocDes", "LocName", "Description", "Name"]);
+      const subKey = findRowKey(keys, [
+        "SubLoc",
+        "IsSubLoc",
+        "SubLocation",
+        "Sub_Loc",
+      ]);
+
+      if (lcKey) {
+        const allLocs: TableLocationRow[] = [];
+        const mainLocs: TableLocationRow[] = [];
+        const seenAll = new Set<string>();
+        const seenMain = new Set<string>();
+
+        for (const r of locRows) {
+          const locCode = s(r[lcKey]);
+          if (!locCode) continue;
+          const locName = (ldKey ? s(r[ldKey]) : "") || locCode;
+          const upper = locCode.toUpperCase();
+
+          if (!seenAll.has(upper)) {
+            seenAll.add(upper);
+            allLocs.push({ locCode, locName });
+          }
+          const sub = subKey ? isSubLocationFlag(r[subKey]) : false;
+          if (!sub && !seenMain.has(upper)) {
+            seenMain.add(upper);
+            mainLocs.push({ locCode, locName });
+          }
+        }
+
+        mainLocs.sort((a, b) => a.locCode.localeCompare(b.locCode));
+        allLocs.sort((a, b) => a.locCode.localeCompare(b.locCode));
+        locations = mainLocs.length > 0 ? mainLocs : allLocs;
+      }
+    }
 
     const groups: TableGroupRow[] = gRes.recordset.map((r) => ({
       groupId: s(r.GroupID),
@@ -163,7 +242,7 @@ export async function getTablesDataAction(): Promise<{
       };
     });
 
-    return { success: true, data: { groups, tables, source: "database" } };
+    return { success: true, data: { locations, groups, tables, source: "database" } };
   } catch (error) {
     console.error("Tables Action Error:", error);
     return actionError(error) as { success: boolean; error?: string };

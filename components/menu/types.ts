@@ -85,6 +85,8 @@ export interface ConfirmResult {
   tableNo: string;
   tableGroup: string;
   invoiceNo: string;
+  orderNo?: string;
+  locCode?: string;
   itemCount: number;
   source: "database" | "mock";
   /** 'DI' = dine-in · 'TA' = takeaway (tableNo = TA-0001, invoiceNo = INV-...) */

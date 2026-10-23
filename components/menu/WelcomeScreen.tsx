@@ -21,12 +21,14 @@ import { T } from "./theme";
 export default function WelcomeScreen({
   table,
   tableGroup,
+  locationName,
   takeaway = false,
   onOpenMenu,
   opening,
 }: {
   table: string;
   tableGroup?: string;
+  locationName?: string;
   /** Takeaway QR — show "Takeaway" instead of a table number. */
   takeaway?: boolean;
   onOpenMenu: () => void;
@@ -54,7 +56,11 @@ export default function WelcomeScreen({
 
         <div style={{ ...s.textBlock, animationDelay: "0.16s" }} className="mnu-anim-up">
           <div style={s.welcome}>Welcome to</div>
-          <div style={s.brand}>MILA MIRISSA.</div>
+          <div style={s.brand}>
+            {(locationName ?? "").trim()
+              ? `${(locationName ?? "").trim().toUpperCase()}.`
+              : "MILA MIRISSA."}
+          </div>
           <div style={s.divider}>
             <span style={s.dividerDot} />
           </div>

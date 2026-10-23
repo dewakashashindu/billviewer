@@ -4,22 +4,17 @@
 //
 // The QR link carries ONLY an encrypted id:
 //     /menu?id=<encrypted>
-// Nothing readable is in the URL — no table number, no group.
+// Nothing readable is in the URL — no table number, no group,
+// no location code.
 //
-// Plaintext format (v2):
-//     "TBL:<tableGroup>\u001f<tableNo>"
-//   e.g. "TBL:P/M 1\u001fPICK 5"
+// Plaintext formats:
+//   v3 (table):    "TBL:<tableGroup>\u001f<tableNo>\u001f<locCode>"
+//   v2 (table):    "TBL:<tableGroup>\u001f<tableNo>"
+//   v1 (table):    "TBL:<tableNo>"
+//   v2 (takeaway): "TAK:TA\u001f<locCode>"
+//   v1 (takeaway): "TAK:TA"
 //
-// The record separator (\u001f) can never appear in a POS name,
-// so the two values survive the round-trip intact.
-//
-// v1 links ("TBL:<tableNo>") still decrypt — table number only,
-// no group — so QRs printed with the old build keep working.
-//
-// The prefix stops a bill link id from being replayed as a table
-// link (and vice versa). AES-128-CBC + the fixed IV used by the
-// bill links, so the POS Windows service can mint these too.
-//
+// Older printed QRs (v1 / v2) continue to decrypt cleanly.
 // Server-only — the key must never reach the browser.
 // ============================================================
 import crypto from "crypto";
@@ -31,12 +26,12 @@ const IV = Buffer.from([
 ]);
 
 const PREFIX = "TBL:";
-/** Takeaway QR — the payload is just this prefix ("TAK:TA"). */
+/** Takeaway QR — "TAK:TA" or "TAK:TA\u001f<locCode>". */
 const TAKEAWAY_PREFIX = "TAK:";
 
-/** Table number used for takeaway orders (Tbl_HoldUpsCloud.TabelNo). */
+/** Table number used for takeaway QR links. */
 export const TAKEAWAY_TABLE_NO = "TA";
-/** Unit separator — safe as a field delimiter (never in a table name). */
+/** Unit separator — safe as a field delimiter (never in a POS code/name). */
 const SEP = "\u001f";
 
 function keyBuffer(): Buffer | null {
@@ -57,25 +52,31 @@ export interface TableLinkPayload {
   tableNo: string;
   /** Tbl_Tables.TableGroup (the group id as stored in the POS) */
   tableGroup: string;
+  /** Tbl_LocationMaster.LocCode selected when the QR was created */
+  locCode: string;
 }
 
 /**
- * "PICK 5" (+ group) → URL-safe encrypted id, or null when no
+ * "PICK 5" (+ group + locCode) → URL-safe encrypted id, or null when no
  * valid key is set.
  */
 export function encryptTableId(
   tableNo: string,
-  tableGroup: string = ""
+  tableGroup: string = "",
+  locCode: string = ""
 ): string | null {
   const table = String(tableNo ?? "").trim();
   const group = String(tableGroup ?? "").trim();
+  const loc = String(locCode ?? "").trim();
   const key = keyBuffer();
   if (!table || !key) return null;
   try {
     const cipher = crypto.createCipheriv("aes-128-cbc", key, IV);
-    const plain = group
-      ? `${PREFIX}${group}${SEP}${table}`
-      : `${PREFIX}${table}`;
+    const plain = loc
+      ? `${PREFIX}${group}${SEP}${table}${SEP}${loc}`
+      : group
+        ? `${PREFIX}${group}${SEP}${table}`
+        : `${PREFIX}${table}`;
     const encrypted = Buffer.concat([
       cipher.update(plain, "utf8"),
       cipher.final(),
@@ -92,16 +93,20 @@ export function encryptTableId(
 }
 
 /**
- * The single takeaway QR → URL-safe encrypted id ("TAK:TA"), or
+ * The takeaway QR (+ optional locCode) → URL-safe encrypted id, or
  * null when ENCRYPTION_KEY is not configured.
  */
-export function encryptTakeawayId(): string | null {
+export function encryptTakeawayId(locCode: string = ""): string | null {
+  const loc = String(locCode ?? "").trim();
   const key = keyBuffer();
   if (!key) return null;
   try {
     const cipher = crypto.createCipheriv("aes-128-cbc", key, IV);
+    const plain = loc
+      ? `${TAKEAWAY_PREFIX}${TAKEAWAY_TABLE_NO}${SEP}${loc}`
+      : `${TAKEAWAY_PREFIX}${TAKEAWAY_TABLE_NO}`;
     const encrypted = Buffer.concat([
-      cipher.update(`${TAKEAWAY_PREFIX}${TAKEAWAY_TABLE_NO}`, "utf8"),
+      cipher.update(plain, "utf8"),
       cipher.final(),
     ]);
     return encrypted
@@ -115,7 +120,7 @@ export function encryptTakeawayId(): string | null {
   }
 }
 
-/** URL-safe encrypted id → { kind, tableNo, tableGroup }, or null. */
+/** URL-safe encrypted id → { kind, tableNo, tableGroup, locCode }, or null. */
 export function decryptTableLink(id: string): TableLinkPayload | null {
   const raw = String(id ?? "").trim();
   const key = keyBuffer();
@@ -130,26 +135,37 @@ export function decryptTableLink(id: string): TableLinkPayload | null {
     ]);
     const result = decrypted.toString("utf8");
 
-    /* Takeaway QR — "TAK:TA" */
+    /* Takeaway QR — "TAK:TA" or "TAK:TA\u001f<locCode>" */
     if (result.startsWith(TAKEAWAY_PREFIX)) {
-      const tableNo = result.slice(TAKEAWAY_PREFIX.length).trim() || TAKEAWAY_TABLE_NO;
-      return { kind: "takeaway", tableNo, tableGroup: "" };
+      const body = result.slice(TAKEAWAY_PREFIX.length);
+      const parts = body.split(SEP);
+      const tableNo = (parts[0] ?? "").trim() || TAKEAWAY_TABLE_NO;
+      const locCode = (parts[1] ?? "").trim();
+      return { kind: "takeaway", tableNo, tableGroup: "", locCode };
     }
 
     if (!result.startsWith(PREFIX)) return null; // not a table link
 
     const body = result.slice(PREFIX.length);
-    const sep = body.indexOf(SEP);
-    /* v2 — group + table */
-    if (sep >= 0) {
-      const tableGroup = body.slice(0, sep).trim();
-      const tableNo = body.slice(sep + 1).trim();
+    const parts = body.split(SEP);
+    /* v3 — group + table + locCode */
+    if (parts.length >= 3) {
+      const tableGroup = (parts[0] ?? "").trim();
+      const tableNo = (parts[1] ?? "").trim();
+      const locCode = (parts[2] ?? "").trim();
       if (!tableNo) return null;
-      return { kind: "table", tableNo, tableGroup };
+      return { kind: "table", tableNo, tableGroup, locCode };
+    }
+    /* v2 — group + table */
+    if (parts.length === 2) {
+      const tableGroup = (parts[0] ?? "").trim();
+      const tableNo = (parts[1] ?? "").trim();
+      if (!tableNo) return null;
+      return { kind: "table", tableNo, tableGroup, locCode: "" };
     }
     /* v1 — table number only */
     const tableNo = body.trim();
-    return tableNo ? { kind: "table", tableNo, tableGroup: "" } : null;
+    return tableNo ? { kind: "table", tableNo, tableGroup: "", locCode: "" } : null;
   } catch {
     return null; // bad padding / wrong key / tampered
   }

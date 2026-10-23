@@ -8,17 +8,17 @@
 //   NOT in the list query — they are served separately through
 //   /api/menu/image/[code] (ItemPicMob binary -> PNG).
 //
-// Order confirm (additive — see the technical reference):
-//   Tbl_HoldUpsCloud     = current bill lines (QTY = final qty)
-//   Tbl_HoldUpsCloudTemp = activity lines (QTY = added delta,
-//                          AoR = 'A')
-//   Both writes happen in ONE SQL transaction. The price and
-//   availability are re-read from the database — the price the
-//   browser shows is never trusted.
-//   Invoice: Tbl_Serials (SeriCode 'INV') -> INV-YYYYMMDD-NNN
-//   Takeaway: Tbl_Serials (SeriCode 'TA') -> next serial (TA-0001)
-//             written to TabelNo, plus INV-YYYYMMDD-NNN written to
-//             InvoiceNo, OrderType = 'TA' (no table marked occupied)
+// Order confirm (QR staging queue):
+//   Saves ONLY into dbo.Tbl_HoldUpsCloudTempQR (22 columns):
+//     • LocCode      = location code carried inside the QR link
+//     • UserID/Name  = 'QR'
+//     • OrderNo      = Tbl_Serials (SeriCode 'ODN') -> 1, 2, 3...
+//                      (new OrderNo on every confirm, even when adding
+//                       items to an existing open InvoiceNo)
+//     • RowLine      = MAX(RowLine) + 1 per item in Tbl_HoldUpsCloudTempQR
+//     • Invoice:       Tbl_Serials (SeriCode 'INV') -> INV-YYYYMMDD-NNN
+//                      (reused when adding items to the same open table bill)
+//     • Takeaway:      Tbl_Serials (SeriCode 'TA') -> TA-0001 in TabelNo
 //
 // If the DB_* env vars are not set, mock menu data is served
 // and confirms return a mock invoice (dev/demo mode).
@@ -101,13 +101,35 @@ const col = (src: ColSrc, name: string): string | null => (src ? `${src}.[${name
    or 100, InvoiceNo char(20) …), so the real sizes are read once
    from INFORMATION_SCHEMA and every string parameter is clamped
    to fit before it is sent. */
-const colSizeCache = new Map<string, Record<string, number>>();
+const colSizeCache = new Map<string, Record<string, number>>([
+  [
+    "TBL_HOLDUPSCLOUDTEMPQR",
+    {
+      LOCCODE: 10,
+      TABELNO: 10,
+      ORDERNO: 10,
+      USERID: 10,
+      USERNAME: 50,
+      AOR: 1,
+      ITEMCODE: 10,
+      ITEMREMARKS: 500,
+      TABELGRPID: 10,
+      MGRID: 10,
+      ORDERTYPE: 5,
+      VOIDREMARK: 200,
+      INVOICENO: 50,
+      CUSNAME: 200,
+      CUSCODE: 10,
+    },
+  ],
+]);
+const colSizeLoaded = new Set<string>();
 
 async function loadColumnSizes(
   tx: sql.Transaction,
   tables: string[]
 ): Promise<void> {
-  const missing = tables.filter((t) => !colSizeCache.has(t));
+  const missing = tables.filter((t) => !colSizeLoaded.has(t.toUpperCase()));
   if (!missing.length) return;
   try {
     const req = tx.request();
@@ -121,18 +143,24 @@ async function loadColumnSizes(
       WHERE TABLE_NAME IN (${inList})
         AND CHARACTER_MAXIMUM_LENGTH IS NOT NULL;
     `);
-    for (const t of missing) colSizeCache.set(t, {});
+    for (const t of missing) {
+      const up = t.toUpperCase();
+      colSizeLoaded.add(up);
+      if (!colSizeCache.has(up)) colSizeCache.set(up, {});
+    }
     for (const r of res.recordset) {
-      const table = String(r.TableName);
+      const table = String(r.TableName).toUpperCase();
       const map = colSizeCache.get(table) ?? {};
-      map[String(r.ColumnName)] = Number(r.MaxLen);
+      map[String(r.ColumnName).toUpperCase()] = Number(r.MaxLen);
       colSizeCache.set(table, map);
     }
-    const sizes = [...colSizeCache.entries()].map(([t, m]) => `${t}: ${Object.keys(m).length} cols`);
-    console.log("Order column sizes loaded:", sizes.join(" · "));
   } catch (error) {
-    console.error("Could not read column sizes (clamping disabled):", error);
-    for (const t of missing) colSizeCache.set(t, {});
+    console.error("Could not read column sizes (using fallback defaults):", error);
+    for (const t of missing) {
+      const up = t.toUpperCase();
+      colSizeLoaded.add(up);
+      if (!colSizeCache.has(up)) colSizeCache.set(up, {});
+    }
   }
 }
 
@@ -294,16 +322,20 @@ export interface ConfirmLineInput {
 export interface ConfirmInput {
   tableNo: string;
   tableGroup?: string;
+  /** Location code from the scanned QR (Tbl_LocationMaster.LocCode). */
+  locCode?: string;
+  /** Existing unpaid InvoiceNo on this table's active session (DI only). */
+  existingInvoiceNo?: string;
   items: ConfirmLineInput[];
   customerName?: string;
   customerPhone?: string;
   /** Tbl_CustomerMaster.CusCode when the phone matched a customer. */
   customerCode?: string;
-  /** Number of guests for this order (Tbl_HoldUpsCloud.LPax). */
+  /** Number of guests for this order (LPax). */
   pax?: number;
-  /** Local guests (Tbl_HoldUpsCloud.LPax) — preferred over `pax`. */
+  /** Local guests (LPax) — preferred over `pax`. */
   localPax?: number;
-  /** Foreign guests (Tbl_HoldUpsCloud.FPax). */
+  /** Foreign guests (FPax). */
   foreignPax?: number;
   requestId?: string;
 }
@@ -311,6 +343,8 @@ export interface ConfirmResult {
   tableNo: string;
   tableGroup: string;
   invoiceNo: string;
+  orderNo: string;
+  locCode: string;
   itemCount: number;
   source: "database" | "mock";
   /** 'DI' = dine-in table · 'TA' = takeaway */
@@ -333,118 +367,325 @@ function slDateParts(): { ymd: string; date: Date } {
   // Asia/Colombo date for the invoice number (server tz agnostic)
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Colombo",
-    year: "numeric", month: "2-digit", day: "2-digit",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   });
   const ymd = fmt.format(new Date()); // YYYY-MM-DD
   return { ymd, date: new Date(`${ymd}T00:00:00Z`) };
 }
 
-async function generateInvoiceNo(
+/* ── Dynamic Tbl_Serials schema inspection ───────────────────
+   Some POS databases have SeriDate / LocCode on Tbl_Serials and
+   others do not (e.g. SQL5075 when SeriDate is absent). Inspect
+   INFORMATION_SCHEMA.COLUMNS once so INV, TA, and ODN serials work
+   cleanly on every schema variant. */
+interface SerialColMeta {
+  name: string;
+  dataType: string;
+  nullable: boolean;
+  hasDefault: boolean;
+}
+interface SerialsSchema {
+  codeCol: string;
+  noCol: string;
+  dateCol: string | null;
+  locCol: string | null;
+  requiredExtras: SerialColMeta[];
+}
+let serialsSchemaCache: SerialsSchema | null = null;
+
+async function resolveSerialsSchema(tx: sql.Transaction): Promise<SerialsSchema> {
+  if (serialsSchemaCache) return serialsSchemaCache;
+  try {
+    const res = await tx.request().query(`
+      SELECT
+        COLUMN_NAME AS c,
+        LOWER(DATA_TYPE) AS dt,
+        IS_NULLABLE AS nul,
+        COLUMN_DEFAULT AS def,
+        COLUMNPROPERTY(OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME), COLUMN_NAME, 'IsIdentity') AS isId
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = 'Tbl_Serials';
+    `);
+    const byUpper = new Map<string, SerialColMeta & { isId: boolean }>();
+    for (const r of res.recordset) {
+      const name = s(r.c);
+      if (!name) continue;
+      byUpper.set(name.toUpperCase(), {
+        name,
+        dataType: s(r.dt),
+        nullable: s(r.nul).toUpperCase() === "YES",
+        hasDefault: r.def != null,
+        isId: Number(r.isId) === 1,
+      });
+    }
+    if (byUpper.size === 0) {
+      const probe = await tx
+        .request()
+        .query(`SELECT TOP 1 * FROM Tbl_Serials WITH (NOLOCK);`)
+        .catch(() => null);
+      const sample = probe?.recordset?.[0];
+      if (sample) {
+        for (const name of Object.keys(sample)) {
+          byUpper.set(name.toUpperCase(), {
+            name,
+            dataType: typeof sample[name] === "number" ? "int" : "varchar",
+            nullable: true,
+            hasDefault: true,
+            isId: false,
+          });
+        }
+      }
+    }
+
+    const pick = (cands: string[]) => {
+      for (const c of cands) {
+        const hit = byUpper.get(c.toUpperCase());
+        if (hit) return hit.name;
+      }
+      return null;
+    };
+    const codeCol = pick(["SeriCode", "SerialCode", "Code"]) ?? "SeriCode";
+    const noCol = pick(["SeriNo", "SerialNo", "CurrNo", "NextNo"]) ?? "SeriNo";
+    const dateCol = pick(["SeriDate", "SerialDate", "TxnDate"]);
+    const locCol = pick(["LocCode", "LocationCode"]);
+
+    const handled = new Set(
+      [codeCol, noCol, dateCol, locCol]
+        .filter((x): x is string => Boolean(x))
+        .map((x) => x.toUpperCase())
+    );
+    const requiredExtras: SerialColMeta[] = [];
+    for (const [upper, meta] of byUpper) {
+      if (handled.has(upper) || meta.isId || meta.nullable || meta.hasDefault) continue;
+      requiredExtras.push(meta);
+    }
+
+    serialsSchemaCache = { codeCol, noCol, dateCol, locCol, requiredExtras };
+    return serialsSchemaCache;
+  } catch (err) {
+    console.warn("Could not inspect Tbl_Serials schema, using minimal columns:", err);
+    return {
+      codeCol: "SeriCode",
+      noCol: "SeriNo",
+      dateCol: null,
+      locCol: null,
+      requiredExtras: [],
+    };
+  }
+}
+
+async function nextSerialValue(
   tx: sql.Transaction,
-  maxLen: number = 50
-): Promise<string> {
+  seriCode: string,
+  opts: { dailyReset?: boolean; locCode?: string } = {}
+): Promise<number> {
+  const schema = await resolveSerialsSchema(tx);
   const { ymd, date } = slDateParts();
-  const req = tx.request();
-  req.input("code", sql.Char(10), "INV");
-  const res = await req.query(`
-    SELECT SeriNo, SeriDate FROM dbo.Tbl_Serials WITH (UPDLOCK, HOLDLOCK)
-    WHERE SeriCode = @code;
+  const loc = s(opts.locCode);
+
+  const selectCols = [
+    `[${schema.noCol}] AS SeriNo`,
+    schema.dateCol ? `[${schema.dateCol}] AS SeriDate` : null,
+    schema.locCol ? `LTRIM(RTRIM(CAST([${schema.locCol}] AS VARCHAR(50)))) AS RowLoc` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const sel = tx.request();
+  sel.input("code", sql.VarChar(20), seriCode);
+  if (schema.locCol && loc) sel.input("loc", sql.VarChar(20), loc);
+
+  const selRes = await sel.query(`
+    SELECT ${selectCols}
+    FROM dbo.Tbl_Serials WITH (UPDLOCK, HOLDLOCK)
+    WHERE LTRIM(RTRIM(CAST([${schema.codeCol}] AS VARCHAR(50)))) = @code
+    ${
+      schema.locCol && loc
+        ? `ORDER BY CASE WHEN LTRIM(RTRIM(CAST([${schema.locCol}] AS VARCHAR(50)))) = @loc THEN 0 ELSE 1 END`
+        : ``
+    };
   `);
+
   let seq = 1;
-  if (res.recordset.length) {
-    const prevDate: Date | null = res.recordset[0].SeriDate ?? null;
-    const sameDay =
-      prevDate != null &&
-      new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(prevDate) === ymd;
-    seq = sameDay ? n(res.recordset[0].SeriNo) + 1 : 1;
+  if (selRes.recordset.length) {
+    const row = selRes.recordset[0];
+    if (opts.dailyReset && schema.dateCol) {
+      const prevDate: Date | null = row.SeriDate ? new Date(row.SeriDate) : null;
+      const sameDay =
+        prevDate != null &&
+        !Number.isNaN(prevDate.getTime()) &&
+        new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(prevDate) === ymd;
+      seq = sameDay ? n(row.SeriNo) + 1 : 1;
+    } else {
+      seq = n(row.SeriNo) + 1;
+    }
+
     const upd = tx.request();
-    upd.input("code", sql.Char(10), "INV");
+    upd.input("code", sql.VarChar(20), seriCode);
     upd.input("seq", sql.Int, seq);
-    upd.input("date", sql.DateTime, date);
+    const setParts = [`[${schema.noCol}] = @seq`];
+    if (schema.dateCol) {
+      upd.input("date", sql.DateTime, date);
+      setParts.push(`[${schema.dateCol}] = @date`);
+    }
+    let whereLoc = "";
+    if (schema.locCol && row.RowLoc !== undefined) {
+      upd.input("rowLoc", sql.VarChar(50), s(row.RowLoc));
+      whereLoc = ` AND LTRIM(RTRIM(ISNULL(CAST([${schema.locCol}] AS VARCHAR(50)), ''))) = @rowLoc`;
+    }
     await upd.query(`
-      UPDATE dbo.Tbl_Serials SET SeriNo = @seq, SeriDate = @date
-      WHERE SeriCode = @code;
+      UPDATE dbo.Tbl_Serials
+      SET ${setParts.join(", ")}
+      WHERE LTRIM(RTRIM(CAST([${schema.codeCol}] AS VARCHAR(50)))) = @code${whereLoc};
     `);
   } else {
     const ins = tx.request();
-    ins.input("code", sql.Char(10), "INV");
-    ins.input("date", sql.DateTime, date);
+    const colNames = [`[${schema.codeCol}]`, `[${schema.noCol}]`];
+    const valExprs = ["@code", "@seq"];
+    ins.input("code", sql.VarChar(20), seriCode);
+    ins.input("seq", sql.Int, 1);
+
+    if (schema.dateCol) {
+      colNames.push(`[${schema.dateCol}]`);
+      valExprs.push("@date");
+      ins.input("date", sql.DateTime, date);
+    }
+    if (schema.locCol) {
+      colNames.push(`[${schema.locCol}]`);
+      valExprs.push("@loc");
+      ins.input("loc", sql.VarChar(20), loc);
+    }
+    schema.requiredExtras.forEach((extra, idx) => {
+      const pName = `ex${idx}`;
+      colNames.push(`[${extra.name}]`);
+      valExprs.push(`@${pName}`);
+      if (extra.dataType.includes("date") || extra.dataType.includes("time")) {
+        ins.input(pName, sql.DateTime, date);
+      } else if (
+        extra.dataType.includes("int") ||
+        extra.dataType.includes("float") ||
+        extra.dataType.includes("decimal") ||
+        extra.dataType.includes("numeric") ||
+        extra.dataType.includes("money") ||
+        extra.dataType === "bit"
+      ) {
+        ins.input(pName, sql.Int, 0);
+      } else {
+        ins.input(pName, sql.VarChar(20), "");
+      }
+    });
+
     await ins.query(`
-      INSERT INTO dbo.Tbl_Serials (SeriCode, SeriNo, SeriDate)
-      VALUES (@code, 1, @date);
+      INSERT INTO dbo.Tbl_Serials (${colNames.join(", ")})
+      VALUES (${valExprs.join(", ")});
     `);
   }
-  /* Pick the longest format that still fits InvoiceNo on this DB
-     (some installs have char(10)/char(20), not char(50)). */
-  const compact = ymd.replaceAll("-", "");       // YYYYMMDD
+
+  return seq;
+}
+
+async function generateInvoiceNo(
+  tx: sql.Transaction,
+  maxLen: number = 50,
+  locCode: string = ""
+): Promise<string> {
+  const { ymd } = slDateParts();
+  const seq = await nextSerialValue(tx, "INV", { dailyReset: true, locCode });
+  const compact = ymd.replaceAll("-", ""); // YYYYMMDD
   const nnn = String(seq).padStart(3, "0");
   const candidates = [
-    `INV-${compact}-${nnn}`,                     // INV-20261019-001 (16)
-    `INV-${compact.slice(2)}-${nnn}`,            // INV-261019-001    (14)
-    `INV-${compact.slice(4)}-${nnn}`,            // INV-1019-001      (12)
-    `INV-${nnn}`,                                // INV-001           (7)
-    nnn,                                         // 001
+    `INV-${compact}-${nnn}`,          // INV-20261023-001 (16)
+    `INV-${compact.slice(2)}-${nnn}`, // INV-261023-001   (14)
+    `INV-${compact.slice(4)}-${nnn}`, // INV-1023-001     (12)
+    `INV-${nnn}`,                     // INV-001          (7)
+    nnn,                              // 001
+  ];
+  return candidates.find((c) => c.length <= maxLen) ?? candidates[candidates.length - 1];
+}
+
+async function generateTakeawayNo(
+  tx: sql.Transaction,
+  maxLen: number = 10,
+  locCode: string = ""
+): Promise<string> {
+  const seq = await nextSerialValue(tx, "TA", { dailyReset: false, locCode });
+  const candidates = [
+    `TA-${String(seq).padStart(4, "0")}`, // TA-0001
+    `TA-${String(seq).padStart(3, "0")}`, // TA-001
+    `T${String(seq).padStart(3, "0")}`,   // T001
+    String(seq),                          // 1
   ];
   return candidates.find((c) => c.length <= maxLen) ?? candidates[candidates.length - 1];
 }
 
 /**
- * Takeaway number — Tbl_Serials (SeriCode 'TA').
- *
- *   next = Current Serial + 1   → saved as the new serial
- *   returns the new takeaway number, e.g. "TA-0007"
- *
- * UPDLOCK/HOLDLOCK keeps two simultaneous TA orders from getting
- * the same number (the whole order runs in one transaction).
+ * QR Order number — Tbl_Serials (SeriCode 'ODN').
+ * Plain integer string: "1", "2", "3", ...
+ * Incremented on EVERY order confirmation (including when a guest
+ * adds extra items to an already-open InvoiceNo on the same table).
  */
-async function generateTakeawayNo(
+async function generateOrderNo(
   tx: sql.Transaction,
-  maxLen: number = 20
+  maxLen: number = 10,
+  locCode: string = ""
 ): Promise<string> {
-  const { date } = slDateParts();
-  const req = tx.request();
-  req.input("code", sql.Char(10), "TA");
-  const res = await req.query(`
-    SELECT SeriNo FROM dbo.Tbl_Serials WITH (UPDLOCK, HOLDLOCK)
-    WHERE SeriCode = @code;
-  `);
-  let seq = 1;
-  if (res.recordset.length) {
-    seq = n(res.recordset[0].SeriNo) + 1;
-    const upd = tx.request();
-    upd.input("code", sql.Char(10), "TA");
-    upd.input("seq", sql.Int, seq);
-    upd.input("date", sql.DateTime, date);
-    await upd.query(`
-      UPDATE dbo.Tbl_Serials SET SeriNo = @seq, SeriDate = @date
-      WHERE SeriCode = @code;
+  const seq = await nextSerialValue(tx, "ODN", { dailyReset: false, locCode });
+  const raw = String(seq);
+  return raw.length <= maxLen ? raw : raw.slice(-maxLen);
+}
+
+/** Check whether an invoice has already been settled/closed in POS. */
+async function isInvoiceSettled(
+  tx: sql.Transaction,
+  invoiceNo: string
+): Promise<boolean> {
+  const inv = s(invoiceNo);
+  if (!inv) return true;
+  try {
+    const r1 = tx.request();
+    r1.input("inv", sql.VarChar(50), inv);
+    const res1 = await r1.query(`
+      SELECT TOP 1 1 AS Hit
+      FROM dbo.Tbl_HoldUpsCloud WITH (NOLOCK)
+      WHERE LTRIM(RTRIM(InvoiceNo)) = @inv AND ISNULL(IsPaid, 0) = 1;
     `);
-  } else {
-    const ins = tx.request();
-    ins.input("code", sql.Char(10), "TA");
-    ins.input("date", sql.DateTime, date);
-    await ins.query(`
-      INSERT INTO dbo.Tbl_Serials (SeriCode, SeriNo, SeriDate)
-      VALUES (@code, 1, @date);
-    `);
+    if (res1.recordset.length) return true;
+  } catch {
+    /* Tbl_HoldUpsCloud optional */
   }
-  const candidates = [
-    `TA-${String(seq).padStart(4, "0")}`, // TA-0007
-    `TA-${String(seq).padStart(3, "0")}`, // TA-007
-    `T${String(seq).padStart(3, "0")}`,   // T007
-    String(seq),                          // 7
-  ];
-  return candidates.find((c) => c.length <= maxLen) ?? candidates[candidates.length - 1];
+  try {
+    const r2 = tx.request();
+    r2.input("inv", sql.VarChar(50), inv);
+    const res2 = await r2.query(`
+      SELECT TOP 1 1 AS Hit
+      FROM dbo.Tbl_BillHeader WITH (NOLOCK)
+      WHERE LTRIM(RTRIM(BillNo)) = @inv;
+    `);
+    if (res2.recordset.length) return true;
+  } catch {
+    /* Tbl_BillHeader optional */
+  }
+  return false;
 }
 
 function validateInput(
   input: ConfirmInput
-): Required<Omit<ConfirmInput, "requestId" | "pax" | "localPax" | "foreignPax">> & {
-  requestId: string;
+): {
+  tableNo: string;
+  tableGroup: string;
+  locCode: string;
+  existingInvoiceNo: string;
+  items: { itemId: string; quantity: number; remark: string }[];
+  customerName: string;
+  customerPhone: string;
+  customerCode: string;
   pax: number;
   localPax: number;
   foreignPax: number;
   takeaway: boolean;
+  requestId: string;
 } {
   const tableNo = s(input.tableNo);
   if (!tableNo) throw new OrderError("Table number is required. Scan the table QR code.");
@@ -457,21 +698,18 @@ function validateInput(
     if (!s(i.itemId)) throw new OrderError("Invalid item in cart.");
     if (!Number.isFinite(qty) || qty < 1 || qty > 99)
       throw new OrderError(`Invalid quantity for ${s(i.itemId)}.`);
-    return { itemId: s(i.itemId), quantity: qty, remark: s(i.remark).slice(0, 200) };
+    return { itemId: s(i.itemId), quantity: qty, remark: s(i.remark).slice(0, 500) };
   });
   const paxRaw = Number(input.pax);
   const pax = Number.isFinite(paxRaw) && paxRaw >= 1 ? Math.min(50, Math.round(paxRaw)) : 1;
   const clampPax = (v: unknown, fallback: number) => {
-    const n = Math.floor(Number(v));
-    return Number.isFinite(n) && n >= 0 ? Math.min(50, n) : fallback;
+    const num = Math.floor(Number(v));
+    return Number.isFinite(num) && num >= 0 ? Math.min(50, num) : fallback;
   };
-  // localPax wins over the legacy single `pax` (backward compatible).
   const localPax = clampPax(input.localPax, pax);
   const foreignPax = clampPax(input.foreignPax, 0);
 
-  /* ── mandatory guest details ──────────────────────────────
-     Both flows: name + phone. Dine-in: pax ≥ 1 as well. */
-  const customerName = s(input.customerName).slice(0, 100);
+  const customerName = s(input.customerName).slice(0, 200);
   const customerPhone = s(input.customerPhone).slice(0, 30);
   if (customerName.length < 2)
     throw new OrderError("Please enter the customer name.");
@@ -483,6 +721,8 @@ function validateInput(
   return {
     tableNo,
     tableGroup: s(input.tableGroup),
+    locCode: s(input.locCode).slice(0, 10),
+    existingInvoiceNo: s(input.existingInvoiceNo).slice(0, 50),
     items,
     customerName,
     customerPhone,
@@ -495,6 +735,8 @@ function validateInput(
   };
 }
 
+let mockOrderCounter = 0;
+
 export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResult> {
   const input = validateInput(rawInput);
 
@@ -504,11 +746,18 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       const m = MOCK.find((x) => x.id === line.itemId);
       if (!m) throw new OrderError(`Item not available: ${line.itemId}`);
     }
+    mockOrderCounter += 1;
     const { ymd } = slDateParts();
+    const inv =
+      !input.takeaway && input.existingInvoiceNo
+        ? input.existingInvoiceNo
+        : `INV-${ymd.replaceAll("-", "")}-${String(mockOrderCounter).padStart(3, "0")}`;
     return {
-      tableNo: input.takeaway ? "TA-0001" : input.tableNo,
+      tableNo: input.takeaway ? `TA-${String(mockOrderCounter).padStart(4, "0")}` : input.tableNo,
       tableGroup: input.takeaway ? "Takeaway" : input.tableGroup,
-      invoiceNo: `INV-${ymd.replaceAll("-", "")}-001`,
+      invoiceNo: inv,
+      orderNo: String(mockOrderCounter),
+      locCode: input.locCode,
       itemCount: input.items.reduce((a, i) => a + i.quantity, 0),
       source: "mock",
       orderType: input.takeaway ? "TA" : "DI",
@@ -520,26 +769,25 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
-    /* 1) Order context — dine-in table or the takeaway (TA) flow */
+    /* 1) Order context — dine-in table or takeaway (TA) */
     let dbTableGroup = "Takeaway";
     let tableGrpId = "";
     let invoiceNo = "";
 
-    const tReq = tx.request();
-    tReq.input("table", sql.VarChar(10), input.tableNo);
     if (!input.takeaway) {
+      const tReq = tx.request();
+      tReq.input("table", sql.VarChar(20), input.tableNo);
       const tRes = await tReq.query(`
-        SELECT LTRIM(RTRIM(TableNo)) AS TableNo, LTRIM(RTRIM(TableGroup)) AS TableGroup
-        FROM dbo.Tbl_Tables WITH (UPDLOCK, HOLDLOCK)
+        SELECT
+          LTRIM(RTRIM(TableNo)) AS TableNo,
+          LTRIM(RTRIM(ISNULL(TableGroup, ''))) AS TableGroup
+        FROM dbo.Tbl_Tables WITH (NOLOCK)
         WHERE LTRIM(RTRIM(TableNo)) = @table AND Enable = 1;
       `);
       if (!tRes.recordset.length)
         throw new OrderError("Table not found. Please scan the QR code on your table again.", 404);
       dbTableGroup = s(tRes.recordset[0].TableGroup);
 
-      /* Table group id (Tbl_TableGroup.GroupID).
-         Tbl_Tables.TableGroup holds the group ID on this POS, but older
-         installs store the group name — try the ID first, then the name. */
       tableGrpId = dbTableGroup;
       const gReq = tx.request();
       gReq.input("gval", sql.VarChar(50), dbTableGroup);
@@ -573,160 +821,149 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       priced.push({ ...line, price: n(pRes.recordset[0].SalesPrice) });
     }
 
-    /* 2b) Real column sizes — every string below is clamped so a
-       long name / phone number can never raise SQL 8152. */
-    await loadColumnSizes(tx, ["Tbl_HoldUpsCloud", "Tbl_HoldUpsCloudTemp"]);
+    /* 3) Column sizes for dbo.Tbl_HoldUpsCloudTempQR */
+    const TARGET_TABLE = "Tbl_HoldUpsCloudTempQR";
+    await loadColumnSizes(tx, [TARGET_TABLE]);
     const fit = makeFitter();
 
-    const cloudInvoiceMax = colSizeCache.get("TBL_HOLDUPSCLOUD")?.["INVOICENO"];
-    const tempInvoiceMax = colSizeCache.get("TBL_HOLDUPSCLOUDTEMP")?.["INVOICENO"];
-    const invoiceMax = Math.min(
-      cloudInvoiceMax && cloudInvoiceMax > 0 ? cloudInvoiceMax : 50,
-      tempInvoiceMax && tempInvoiceMax > 0 ? tempInvoiceMax : 50
-    );
-    const cloudTableMax = colSizeCache.get("TBL_HOLDUPSCLOUD")?.["TABELNO"];
-    const tempTableMax = colSizeCache.get("TBL_HOLDUPSCLOUDTEMP")?.["TABELNO"];
-    const tableMax = Math.min(
-      cloudTableMax && cloudTableMax > 0 ? cloudTableMax : 20,
-      tempTableMax && tempTableMax > 0 ? tempTableMax : 20
-    );
+    const qrCols = colSizeCache.get(TARGET_TABLE.toUpperCase()) ?? {};
+    const invoiceMax = qrCols["INVOICENO"] && qrCols["INVOICENO"] > 0 ? qrCols["INVOICENO"] : 50;
+    const tableMax = qrCols["TABELNO"] && qrCols["TABELNO"] > 0 ? qrCols["TABELNO"] : 10;
+    const orderNoMax = qrCols["ORDERNO"] && qrCols["ORDERNO"] > 0 ? qrCols["ORDERNO"] : 10;
+
+    /* 4) Resolve TabelNo + InvoiceNo:
+          • Takeaway (TA): fresh TA-0001 in TabelNo + fresh INV-... in InvoiceNo
+          • Dine-in  (DI): reuse open unpaid InvoiceNo for this table if one
+                           exists (in Tbl_HoldUpsCloudTempQR, Tbl_HoldUpsCloud,
+                           or active guest session), otherwise generate fresh INV-... */
+    let resolvedTableNo = input.tableNo;
+    if (input.takeaway) {
+      resolvedTableNo = await generateTakeawayNo(tx, tableMax, input.locCode);
+      invoiceNo = await generateInvoiceNo(tx, invoiceMax, input.locCode);
+    } else {
+      // (a) Check pending rows still in Tbl_HoldUpsCloudTempQR
+      const q1 = tx.request();
+      q1.input("table", sql.VarChar(20), input.tableNo);
+      q1.input("loc", sql.VarChar(20), input.locCode);
+      const r1 = await q1.query(`
+        SELECT TOP 1 LTRIM(RTRIM(InvoiceNo)) AS InvoiceNo
+        FROM dbo.Tbl_HoldUpsCloudTempQR WITH (UPDLOCK, HOLDLOCK)
+        WHERE LTRIM(RTRIM(TabelNo)) = @table
+          AND (@loc = '' OR LTRIM(RTRIM(LocCode)) = @loc)
+          AND ISNULL(IsPaid, 0) = 0
+        ORDER BY TxnDateTime DESC, RowLine DESC;
+      `);
+      if (r1.recordset.length && s(r1.recordset[0].InvoiceNo)) {
+        invoiceNo = s(r1.recordset[0].InvoiceNo);
+      }
+
+      // (b) Check open hold-up bill synced by POS into Tbl_HoldUpsCloud (read-only)
+      if (!invoiceNo) {
+        try {
+          const q2 = tx.request();
+          q2.input("table", sql.VarChar(20), input.tableNo);
+          const r2 = await q2.query(`
+            SELECT TOP 1 LTRIM(RTRIM(InvoiceNo)) AS InvoiceNo
+            FROM dbo.Tbl_HoldUpsCloud WITH (NOLOCK)
+            WHERE LTRIM(RTRIM(TabelNo)) = @table
+              AND ISNULL(IsPaid, 0) = 0
+            ORDER BY TxnDateTime DESC;
+          `);
+          if (r2.recordset.length && s(r2.recordset[0].InvoiceNo)) {
+            invoiceNo = s(r2.recordset[0].InvoiceNo);
+          }
+        } catch {
+          /* Tbl_HoldUpsCloud optional */
+        }
+      }
+
+      // (c) If POS already deleted TempQR rows and has not synced Tbl_HoldUpsCloud yet,
+      //     reuse the guest cart's active InvoiceNo unless settled in POS.
+      if (!invoiceNo && input.existingInvoiceNo) {
+        const settled = await isInvoiceSettled(tx, input.existingInvoiceNo);
+        if (!settled) {
+          invoiceNo = input.existingInvoiceNo;
+        }
+      }
+
+      // (d) Brand-new table order -> fresh INV serial
+      if (!invoiceNo) {
+        invoiceNo = await generateInvoiceNo(tx, invoiceMax, input.locCode);
+      }
+    }
+
+    /* 5) OrderNo — ALWAYS generated fresh from Tbl_Serials ('ODN')
+          even when adding items to an existing InvoiceNo! */
+    const orderNo = await generateOrderNo(tx, orderNoMax, input.locCode);
+
+    /* 6) RowLine — check current MAX(RowLine) in Tbl_HoldUpsCloudTempQR
+          (rows are deleted by POS as it imports them, so start from
+          ISNULL(MAX(RowLine), 0) + 1 and increment by 1 per item). */
+    const maxRowRes = await tx.request().query(`
+      SELECT ISNULL(MAX(RowLine), 0) AS MaxRowLine
+      FROM dbo.Tbl_HoldUpsCloudTempQR WITH (TABLOCKX, HOLDLOCK);
+    `);
+    let nextRowLine = Math.floor(n(maxRowRes.recordset[0]?.MaxRowLine));
+
+    const locValue = fit(TARGET_TABLE, "LocCode", input.locCode);
+    const tableValue = fit(TARGET_TABLE, "TabelNo", resolvedTableNo);
+    const orderNoValue = fit(TARGET_TABLE, "OrderNo", orderNo);
+    const userIdValue = fit(TARGET_TABLE, "UserID", "QR");
+    const userNameValue = fit(TARGET_TABLE, "UserName", "QR");
+    const aorValue = fit(TARGET_TABLE, "AOR", "A");
+    const grpValue = fit(TARGET_TABLE, "TabelGrpID", input.takeaway ? "" : tableGrpId);
+    const mgrIdValue = fit(TARGET_TABLE, "MgrID", "");
+    const orderTypeValue = fit(TARGET_TABLE, "OrderType", input.takeaway ? "TA" : "DI");
+    const voidRemarkValue = fit(TARGET_TABLE, "VoidRemark", "");
+    const invoiceValue = fit(TARGET_TABLE, "InvoiceNo", invoiceNo);
+    const cusNameValue = fit(TARGET_TABLE, "CusName", input.customerName);
     const cusCodeValue = fit(
-      "Tbl_HoldUpsCloud",
+      TARGET_TABLE,
       "CusCode",
       input.customerCode || normalisePhone(input.customerPhone) || input.customerPhone
     );
-    const cusNameValue = fit("Tbl_HoldUpsCloud", "CusName", input.customerName);
-    const orderTypeValue = fit(
-      "Tbl_HoldUpsCloud",
-      "OrderType",
-      input.takeaway ? "TA" : "DI"
-    );
-    const grpValue = fit("Tbl_HoldUpsCloud", "TabelGrpID", tableGrpId);
 
-    /* 3) Table / Takeaway serial + Invoice number
-       • dine-in (DI) → TabelNo = table number; InvoiceNo = table's open invoice or fresh INV
-       • takeaway (TA) → TabelNo = new TA-0001 from Tbl_Serials ('TA');
-                         InvoiceNo = new INV-YYYYMMDD-NNN from Tbl_Serials ('INV'), same as DI */
-    let resolvedTableNo = input.tableNo;
-    if (input.takeaway) {
-      resolvedTableNo = await generateTakeawayNo(tx, tableMax);
-      invoiceNo = await generateInvoiceNo(tx, invoiceMax);
-    } else {
-      const invReq = tx.request();
-      invReq.input("table", sql.VarChar(20), input.tableNo);
-      const invRes = await invReq.query(`
-        SELECT TOP 1 LTRIM(RTRIM(InvoiceNo)) AS InvoiceNo
-        FROM dbo.Tbl_HoldUpsCloud WITH (UPDLOCK, HOLDLOCK)
-        WHERE LTRIM(RTRIM(TabelNo)) = @table AND ISNULL(IsPaid, 0) = 0
-        ORDER BY TxnDateTime DESC;
-      `);
-      invoiceNo = invRes.recordset.length
-        ? s(invRes.recordset[0].InvoiceNo)
-        : await generateInvoiceNo(tx, invoiceMax);
-    }
-    const tableValue = fit("Tbl_HoldUpsCloud", "TabelNo", resolvedTableNo);
-    const invoiceValue = fit("Tbl_HoldUpsCloud", "InvoiceNo", invoiceNo);
-
-    /* 4) Additive writes: bill line = final qty, activity = delta */
+    /* 7) Save ONLY into dbo.Tbl_HoldUpsCloudTempQR */
     for (const line of priced) {
-      const itemValue = fit("Tbl_HoldUpsCloud", "ItemCode", line.itemId);
-      const remarkValue = fit("Tbl_HoldUpsCloud", "ItemRemarks", line.remark ?? "");
+      nextRowLine += 1;
+      const itemValue = fit(TARGET_TABLE, "ItemCode", line.itemId);
+      const remarkValue = fit(TARGET_TABLE, "ItemRemarks", line.remark ?? "");
 
-      const find = tx.request();
-      find.input("table", sql.VarChar(20), tableValue);
-      find.input("inv", sql.VarChar(50), invoiceValue);
-      find.input("item", sql.VarChar(50), itemValue);
-      find.input("remark", sql.VarChar(200), remarkValue);
-      const found = await find.query(`
-        SELECT QTY FROM dbo.Tbl_HoldUpsCloud WITH (UPDLOCK, HOLDLOCK)
-        WHERE LTRIM(RTRIM(TabelNo)) = @table AND InvoiceNo = @inv
-          AND ItemCode = @item AND ISNULL(ItemRemarks, '') = @remark;
-      `);
-      const existingQty = found.recordset.length ? n(found.recordset[0].QTY) : 0;
-      const finalQty = existingQty + line.quantity;
+      const ins = tx.request();
+      ins.input("locCode", sql.Char(10), locValue);
+      ins.input("table", sql.Char(10), tableValue);
+      ins.input("orderNo", sql.Char(10), orderNoValue);
+      ins.input("userId", sql.Char(10), userIdValue);
+      ins.input("userName", sql.VarChar(50), userNameValue);
+      ins.input("aor", sql.Char(1), aorValue);
+      ins.input("item", sql.Char(10), itemValue);
+      ins.input("qty", sql.Float, line.quantity);
+      ins.input("remark", sql.VarChar(500), remarkValue);
+      ins.input("grp", sql.Char(10), grpValue);
+      ins.input("lpx", sql.Float, input.takeaway ? 0 : input.localPax);
+      ins.input("fpx", sql.Float, input.takeaway ? 0 : input.foreignPax);
+      ins.input("mgrId", sql.Char(10), mgrIdValue);
+      ins.input("orderType", sql.VarChar(5), orderTypeValue);
+      ins.input("price", sql.Float, line.price);
+      ins.input("voidRemark", sql.VarChar(200), voidRemarkValue);
+      ins.input("inv", sql.VarChar(50), invoiceValue);
+      ins.input("isPaid", sql.Bit, 0);
+      ins.input("cusName", sql.VarChar(200), cusNameValue);
+      ins.input("cusCode", sql.Char(10), cusCodeValue);
+      ins.input("rowLine", sql.Float, nextRowLine);
 
-      if (found.recordset.length) {
-        const upd = tx.request();
-        upd.input("qty", sql.Float, finalQty);
-        upd.input("table", sql.VarChar(20), tableValue);
-        upd.input("inv", sql.VarChar(50), invoiceValue);
-        upd.input("item", sql.VarChar(50), itemValue);
-        upd.input("remark", sql.VarChar(200), remarkValue);
-        await upd.query(`
-          UPDATE dbo.Tbl_HoldUpsCloud SET QTY = @qty
-          WHERE LTRIM(RTRIM(TabelNo)) = @table AND InvoiceNo = @inv
-            AND ItemCode = @item AND ISNULL(ItemRemarks, '') = @remark;
-        `);
-      } else {
-        const ins = tx.request();
-        ins.input("table", sql.VarChar(20), tableValue);
-        ins.input("inv", sql.VarChar(50), invoiceValue);
-        ins.input("item", sql.VarChar(50), itemValue);
-        ins.input("qty", sql.Float, finalQty);
-        ins.input("price", sql.Float, line.price);
-        ins.input("remark", sql.VarChar(200), remarkValue);
-        ins.input("grp", sql.Char(10), grpValue);
-        // CusCode = the real Tbl_CustomerMaster code when the phone
-        // matched a customer, otherwise the 10-digit local phone.
-        ins.input("cusCode", sql.VarChar(30), cusCodeValue);
-        ins.input("cusName", sql.VarChar(100), cusNameValue);
-        ins.input("lpx", sql.Int, input.localPax);
-        ins.input("fpx", sql.Int, input.foreignPax);
-        ins.input("orderType", sql.Char(2), orderTypeValue);
-        ins.input("userId", sql.VarChar(20), fit("Tbl_HoldUpsCloud", "UserID", "WEB"));
-        await ins.query(`
-          INSERT INTO dbo.Tbl_HoldUpsCloud (
-            TabelNo, ItemCode, QTY, SalesPrice, ItemRemarks, UserID,
-            TabelGrpID, LPax, FPax, OrderType, InvoiceNo, IsPaid,
-            CusCode, CusName, TxnDateTime
-          ) VALUES (
-            @table, @item, @qty, @price, @remark, @userId,
-            @grp, @lpx, @fpx, @orderType, @inv, 0,
-            @cusCode, @cusName, DATEADD(MINUTE, 330, GETUTCDATE())
-          );
-        `);
-      }
-
-      /* the activity table has its OWN column sizes */
-      const act = tx.request();
-      act.input("table", sql.VarChar(20), fit("Tbl_HoldUpsCloudTemp", "TabelNo", tableValue));
-      act.input("inv", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "InvoiceNo", invoiceValue));
-      act.input("item", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "ItemCode", itemValue));
-      act.input("qty", sql.Float, line.quantity);
-      act.input("price", sql.Float, line.price);
-      act.input("remark", sql.VarChar(200), fit("Tbl_HoldUpsCloudTemp", "ItemRemarks", remarkValue));
-      act.input("grp", sql.Char(10), fit("Tbl_HoldUpsCloudTemp", "TabelGrpID", grpValue));
-      act.input("cusCode", sql.VarChar(30), fit("Tbl_HoldUpsCloudTemp", "CusCode", cusCodeValue));
-      act.input("cusName", sql.VarChar(100), fit("Tbl_HoldUpsCloudTemp", "CusName", cusNameValue));
-      act.input("lpx", sql.Int, input.takeaway ? 0 : input.pax);
-      act.input("orderType", sql.Char(2), orderTypeValue);
-      /* the fixed literals are clamped too — some installs have
-         UserName char(10) / MgrID char(5) on the activity table */
-      act.input("userId", sql.VarChar(20), fit("Tbl_HoldUpsCloudTemp", "UserID", "WEB"));
-      act.input("voidRemark", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "VoidRemark", ""));
-      act.input("mgrId", sql.VarChar(20), fit("Tbl_HoldUpsCloudTemp", "MgrID", ""));
-      act.input("aor", sql.VarChar(5), fit("Tbl_HoldUpsCloudTemp", "AoR", "A"));
-      act.input("userName", sql.VarChar(50), fit("Tbl_HoldUpsCloudTemp", "UserName", "Web Menu"));
-      await act.query(`
-        INSERT INTO dbo.Tbl_HoldUpsCloudTemp (
-          TabelNo, UserID, ItemCode, QTY, ItemRemarks, VoidRemark,
-          TabelGrpID, TxnDateTime, LPax, FPax, SalesPrice, MgrID,
-          OrderType, AoR, UserName, InvoiceNo, CusCode, CusName
+      await ins.query(`
+        INSERT INTO dbo.Tbl_HoldUpsCloudTempQR (
+          LocCode, TabelNo, OrderNo, UserID, UserName, AOR,
+          ItemCode, QTY, ItemRemarks, TabelGrpID, TxnDateTime,
+          LPax, FPax, MgrID, OrderType, SalesPrice, VoidRemark,
+          InvoiceNo, IsPaid, CusName, CusCode, RowLine
         ) VALUES (
-          @table, @userId, @item, @qty, @remark, @voidRemark,
-          @grp, DATEADD(MINUTE, 330, GETUTCDATE()), @lpx, 0, @price, @mgrId,
-          @orderType, @aor, @userName, @inv, @cusCode, @cusName
+          @locCode, @table, @orderNo, @userId, @userName, @aor,
+          @item, @qty, @remark, @grp, DATEADD(MINUTE, 330, GETUTCDATE()),
+          @lpx, @fpx, @mgrId, @orderType, @price, @voidRemark,
+          @inv, @isPaid, @cusName, @cusCode, @rowLine
         );
-      `);
-    }
-
-    /* 5) Mark the dining table occupied (takeaway has no table) */
-    if (!input.takeaway) {
-      const occ = tx.request();
-      occ.input("table", sql.VarChar(10), tableValue);
-      await occ.query(`
-        UPDATE dbo.Tbl_Tables SET Vaccant = 'N'
-        WHERE LTRIM(RTRIM(TableNo)) = @table;
       `);
     }
 
@@ -735,21 +972,29 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       tableNo: tableValue,
       tableGroup: dbTableGroup,
       invoiceNo: invoiceValue,
+      orderNo: orderNoValue,
+      locCode: locValue,
       itemCount: priced.reduce((a, i) => a + i.quantity, 0),
       source: "database",
       orderType: input.takeaway ? "TA" : "DI",
     };
   } catch (err) {
-    try { await tx.rollback(); } catch { /* already rolled back */ }
+    try {
+      await tx.rollback();
+    } catch {
+      /* already rolled back */
+    }
     if (err instanceof OrderError) throw err;
 
-    /* SQL 8152 = a value did not fit its column. Print what was
-       being written so the exact column can be found in one go. */
     const errNumber = (err as { number?: number })?.number;
     if (errNumber === 8152) {
       const dump: string[] = [];
-      for (const [table, cols] of colSizeCache) {
-        dump.push(`  ${table}: ${Object.entries(cols).map(([c, l]) => `${c}=${l}`).join(", ")}`);
+      for (const [table, colsMap] of colSizeCache) {
+        dump.push(
+          `  ${table}: ${Object.entries(colsMap)
+            .map(([c, l]) => `${c}=${l}`)
+            .join(", ")}`
+        );
       }
       console.error(
         "Order confirm error (SQL 8152 — value too long for column):",
@@ -762,10 +1007,10 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
   }
 }
 
-/* ── Existing unpaid bill for a table ──────────────────────────
-   Used by the customer cart to render already-ordered lines as
-   read-only ("ALREADY ON BILL") and to keep quantity steppers
-   from going below what is already on the bill. */
+/* ── Existing unpaid bill for a table (READ-ONLY) ─────────────
+   Reads any open bill synced by POS into Tbl_HoldUpsCloud PLUS any
+   newly submitted QR lines still queued in Tbl_HoldUpsCloudTempQR
+   (before POS imports and deletes them). */
 export interface ExistingBillLine {
   itemCode: string;
   name: string;
@@ -778,36 +1023,94 @@ export interface ExistingBill {
   lines: ExistingBillLine[];
 }
 
-export async function getExistingBill(tableNo: string): Promise<ExistingBill> {
+export async function getExistingBill(
+  tableNo: string,
+  locCode: string = ""
+): Promise<ExistingBill> {
   const table = s(tableNo);
-  /* Takeaway has no table bill — every TA order stands alone. */
+  const loc = s(locCode);
   if (!table || isTakeawayTable(table) || !isDbConfigured())
     return { invoiceNo: "", lines: [] };
+
   const pool = await getPool();
-  const req = pool.request();
-  req.input("table", sql.VarChar(10), table);
-  const res = await req.query(`
-    SELECT LTRIM(RTRIM(h.InvoiceNo)) AS InvoiceNo,
-           LTRIM(RTRIM(h.ItemCode)) AS ItemCode,
-           ISNULL(NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''), LTRIM(RTRIM(h.ItemCode))) AS ItemName,
-           h.QTY, ISNULL(h.ItemRemarks, '') AS ItemRemarks, h.SalesPrice
-    FROM dbo.Tbl_HoldUpsCloud AS h WITH (NOLOCK)
-    LEFT JOIN dbo.Tbl_MenuItems AS m WITH (NOLOCK)
-      ON m.MenuItmId = h.ItemCode
-    WHERE LTRIM(RTRIM(h.TabelNo)) = @table AND ISNULL(h.IsPaid, 0) = 0
-    ORDER BY h.TxnDateTime, h.ItemCode;
-  `);
   const byKey = new Map<string, ExistingBillLine>();
   let invoiceNo = "";
-  for (const r of res.recordset) {
-    if (!invoiceNo) invoiceNo = s(r.InvoiceNo);
-    const key = `${s(r.ItemCode)}|${s(r.ItemRemarks)}`;
-    const prev = byKey.get(key);
-    if (prev) prev.qty += n(r.QTY);
-    else byKey.set(key, {
-      itemCode: s(r.ItemCode), name: s(r.ItemName),
-      qty: n(r.QTY), remark: s(r.ItemRemarks), price: n(r.SalesPrice),
-    });
+
+  // 1) Open hold-up bill synced by POS in Tbl_HoldUpsCloud (if present)
+  try {
+    const req1 = pool.request();
+    req1.input("table", sql.VarChar(20), table);
+    const res1 = await req1.query(`
+      SELECT LTRIM(RTRIM(h.InvoiceNo)) AS InvoiceNo,
+             LTRIM(RTRIM(h.ItemCode)) AS ItemCode,
+             ISNULL(NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''), LTRIM(RTRIM(h.ItemCode))) AS ItemName,
+             h.QTY, ISNULL(h.ItemRemarks, '') AS ItemRemarks, h.SalesPrice
+      FROM dbo.Tbl_HoldUpsCloud AS h WITH (NOLOCK)
+      LEFT JOIN dbo.Tbl_MenuItems AS m WITH (NOLOCK)
+        ON m.MenuItmId = h.ItemCode
+      WHERE LTRIM(RTRIM(h.TabelNo)) = @table AND ISNULL(h.IsPaid, 0) = 0
+      ORDER BY h.TxnDateTime, h.ItemCode;
+    `);
+    for (const r of res1.recordset) {
+      if (!invoiceNo) invoiceNo = s(r.InvoiceNo);
+      if (s(r.InvoiceNo) !== invoiceNo) continue;
+      const key = `${s(r.ItemCode)}|${s(r.ItemRemarks)}`;
+      const prev = byKey.get(key);
+      if (prev) prev.qty += n(r.QTY);
+      else {
+        byKey.set(key, {
+          itemCode: s(r.ItemCode),
+          name: s(r.ItemName),
+          qty: n(r.QTY),
+          remark: s(r.ItemRemarks),
+          price: n(r.SalesPrice),
+        });
+      }
+    }
+  } catch {
+    /* Tbl_HoldUpsCloud optional */
   }
-  return { invoiceNo, lines: [...byKey.values()].filter((l) => l.itemCode && l.qty > 0) };
+
+  // 2) Pending QR lines still waiting in Tbl_HoldUpsCloudTempQR
+  try {
+    const req2 = pool.request();
+    req2.input("table", sql.VarChar(20), table);
+    req2.input("loc", sql.VarChar(20), loc);
+    const res2 = await req2.query(`
+      SELECT LTRIM(RTRIM(q.InvoiceNo)) AS InvoiceNo,
+             LTRIM(RTRIM(q.ItemCode)) AS ItemCode,
+             ISNULL(NULLIF(LTRIM(RTRIM(m.MenuItmDes)), ''), LTRIM(RTRIM(q.ItemCode))) AS ItemName,
+             q.QTY, ISNULL(q.ItemRemarks, '') AS ItemRemarks, q.SalesPrice
+      FROM dbo.Tbl_HoldUpsCloudTempQR AS q WITH (NOLOCK)
+      LEFT JOIN dbo.Tbl_MenuItems AS m WITH (NOLOCK)
+        ON m.MenuItmId = q.ItemCode
+      WHERE LTRIM(RTRIM(q.TabelNo)) = @table
+        AND (@loc = '' OR LTRIM(RTRIM(q.LocCode)) = @loc)
+        AND ISNULL(q.IsPaid, 0) = 0
+      ORDER BY q.RowLine, q.TxnDateTime;
+    `);
+    for (const r of res2.recordset) {
+      if (!invoiceNo) invoiceNo = s(r.InvoiceNo);
+      if (s(r.InvoiceNo) !== invoiceNo) continue;
+      const key = `${s(r.ItemCode)}|${s(r.ItemRemarks)}`;
+      const prev = byKey.get(key);
+      if (prev) prev.qty += n(r.QTY);
+      else {
+        byKey.set(key, {
+          itemCode: s(r.ItemCode),
+          name: s(r.ItemName),
+          qty: n(r.QTY),
+          remark: s(r.ItemRemarks),
+          price: n(r.SalesPrice),
+        });
+      }
+    }
+  } catch {
+    /* Tbl_HoldUpsCloudTempQR not created yet */
+  }
+
+  return {
+    invoiceNo,
+    lines: [...byKey.values()].filter((l) => l.itemCode && l.qty > 0),
+  };
 }

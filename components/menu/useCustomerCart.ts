@@ -51,11 +51,14 @@ export interface GuestDetails {
   cusCode: string;
 }
 
-const guestStorageKey = (table: string) => `mnu-guest:v2:${table}`;
+const guestStorageKey = (table: string, locCode = "") =>
+  locCode ? `mnu-guest:v2:${locCode}:${table}` : `mnu-guest:v2:${table}`;
 
 interface Options {
   table: string;
   tableGroup?: string;
+  /** Location code from the scanned QR (Tbl_LocationMaster.LocCode). */
+  locCode?: string;
   /** Signed table token from the QR (?t=…) — required by the
    *  guarded /api/order/* endpoints in production. */
   token?: string;
@@ -64,11 +67,12 @@ interface Options {
   takeaway?: boolean;
 }
 
-const storageKey = (table: string) => `mnu-cart:v1:${table}`;
+const storageKey = (table: string, locCode = "") =>
+  locCode ? `mnu-cart:v1:${locCode}:${table}` : `mnu-cart:v1:${table}`;
 
-function readStore(table: string): CartStore | null {
+function readStore(table: string, locCode = ""): CartStore | null {
   try {
-    const raw = localStorage.getItem(storageKey(table));
+    const raw = localStorage.getItem(storageKey(table, locCode));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CartStore;
     if (!parsed || !Array.isArray(parsed.lines)) return null;
@@ -78,16 +82,23 @@ function readStore(table: string): CartStore | null {
   }
 }
 
-function writeStore(table: string, store: CartStore | null) {
+function writeStore(table: string, store: CartStore | null, locCode = "") {
   try {
-    if (!store) localStorage.removeItem(storageKey(table));
-    else localStorage.setItem(storageKey(table), JSON.stringify(store));
+    if (!store) localStorage.removeItem(storageKey(table, locCode));
+    else localStorage.setItem(storageKey(table, locCode), JSON.stringify(store));
   } catch {
     /* storage full / private mode — cart still works in memory */
   }
 }
 
-export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway = false }: Options) {
+export function useCustomerCart({
+  table,
+  tableGroup,
+  locCode = "",
+  token,
+  itemsById,
+  takeaway = false,
+}: Options) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [baseline, setBaseline] = useState<CartStore["baseline"]>({});
   const [invoiceNo, setInvoiceNo] = useState("");
@@ -114,7 +125,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
     let alive = true;
     (async () => {
       try {
-        const raw = localStorage.getItem(guestStorageKey(table));
+        const raw = localStorage.getItem(guestStorageKey(table, locCode));
         if (raw && alive) {
           const g = JSON.parse(raw) as Partial<GuestDetails>;
           setGuest({
@@ -133,16 +144,16 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
     return () => {
       alive = false;
     };
-  }, [table]);
+  }, [table, locCode]);
 
   useEffect(() => {
     if (!table || !guestHydrated) return;
     try {
-      localStorage.setItem(guestStorageKey(table), JSON.stringify(guest));
+      localStorage.setItem(guestStorageKey(table, locCode), JSON.stringify(guest));
     } catch {
       /* storage full / private mode — guest details still work in memory */
     }
-  }, [table, guest, guestHydrated]);
+  }, [table, locCode, guest, guestHydrated]);
 
   const setGuestDetails = useCallback((patch: Partial<GuestDetails>) => {
     setGuest((prev) => ({
@@ -183,7 +194,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
         setLines([]);
         setBaseline({});
         setInvoiceNo("");
-        writeStore(table, null);
+        writeStore(table, null, locCode);
         setHydrated(true);
       });
       return () => {
@@ -198,6 +209,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
         // Guarded endpoint — the table token proves the guest scanned
         // this table's QR (required in production).
         const qs = new URLSearchParams({ table });
+        if (locCode) qs.set("loc", locCode);
         if (token) qs.set("t", token);
         const res = await fetch(`/api/order/existing?${qs.toString()}`, {
           cache: "no-store",
@@ -234,7 +246,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
         remark: v.remark,
       }));
 
-      const saved = readStore(table);
+      const saved = readStore(table, locCode);
       // A saved cart from a previous (already settled) bill must not survive.
       const usable = saved && (!serverInvoice || !saved.invoiceNo || saved.invoiceNo === serverInvoice);
 
@@ -260,13 +272,13 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
     return () => {
       alive = false;
     };
-  }, [table, token, takeaway]);
+  }, [table, locCode, token, takeaway]);
 
   /* ── 2. persist on every change ──────────────────────────── */
   useEffect(() => {
     if (!table || !hydrated) return;
-    writeStore(table, { lines, baseline, invoiceNo });
-  }, [table, lines, baseline, invoiceNo, hydrated]);
+    writeStore(table, { lines, baseline, invoiceNo }, locCode);
+  }, [table, locCode, lines, baseline, invoiceNo, hydrated]);
 
   const baselineQtyOf = useCallback((key: string) => baseline[key]?.qty ?? 0, [baseline]);
 
@@ -438,6 +450,8 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
         body: JSON.stringify({
           tableNo: table,
           tableGroup: tableGroup || undefined,
+          locCode: locCode || undefined,
+          existingInvoiceNo: !takeaway && invoiceNo ? invoiceNo : undefined,
           t: token || undefined,
           orderType: takeaway ? "TA" : "DI",
           localPax: takeaway ? undefined : guest.localPax || undefined,
@@ -452,11 +466,13 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || "Order could not be saved. Please try again.");
       }
-      const data = json.data as ConfirmResult & { invoiceNo?: string };
+      const data = json.data as ConfirmResult & { invoiceNo?: string; orderNo?: string; locCode?: string };
       const result: ConfirmResult = {
         tableNo: data.tableNo ?? table,
         tableGroup: data.tableGroup ?? tableGroup ?? "",
         invoiceNo: data.invoiceNo ?? "",
+        orderNo: data.orderNo ?? "",
+        locCode: data.locCode ?? locCode,
         itemCount: data.itemCount ?? 0,
         source: data.source ?? "database",
         orderType: data.orderType ?? (takeaway ? "TA" : "DI"),
@@ -468,7 +484,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
         setLines([]);
         setBaseline({});
         setInvoiceNo("");
-        writeStore(table, null);
+        writeStore(table, null, locCode);
       } else {
         // Dine-in → confirmed cart becomes the table's read-only baseline.
         const nextBaseline: CartStore["baseline"] = { ...baseline };
@@ -492,7 +508,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
       inFlightRef.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, guest, lines, newLines, table, tableGroup, token, takeaway]);
+  }, [baseline, confirming, guest, invoiceNo, lines, locCode, newLines, table, tableGroup, token, takeaway]);
 
   const resetAll = useCallback(
     (clearGuest = false) => {
@@ -501,7 +517,7 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
       setInvoiceNo("");
       setLastResult(null);
       setConfirmError(null);
-      writeStore(table, null);
+      writeStore(table, null, locCode);
       if (clearGuest) {
         setGuest({
           localPax: 0,
@@ -511,13 +527,13 @@ export function useCustomerCart({ table, tableGroup, token, itemsById, takeaway 
           cusCode: "",
         });
         try {
-          if (table) localStorage.removeItem(guestStorageKey(table));
+          if (table) localStorage.removeItem(guestStorageKey(table, locCode));
         } catch {
           /* ignore storage errors */
         }
       }
     },
-    [table]
+    [table, locCode]
   );
 
   return {

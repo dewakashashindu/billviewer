@@ -1,6 +1,6 @@
 // ============================================================
 // LOCATION: app/api/order/existing/route.ts
-// GET /api/order/existing?table=05&t=<signed token>
+// GET /api/order/existing?table=05&loc=001&t=<signed token>
 //
 // The table's current unpaid bill (read-only baseline for the
 // cart) — the customer sees "already on your bill" lines and
@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
     const tableNo = (params.get("table") ?? "").trim();
+    const locCode = (params.get("loc") ?? "").trim();
     const token = params.get("t") ?? "";
 
     if (!tableNo) {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
     }
 
-    const bill = await getExistingBill(tableNo);
+    const bill = await getExistingBill(tableNo, locCode);
     return NextResponse.json({ ok: true, data: bill });
   } catch (error) {
     console.error("Order existing route error:", error);

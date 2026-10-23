@@ -39,12 +39,18 @@ type View = "welcome" | "guest" | "home" | "group" | "cart" | "success";
 export default function MenuClient({
   table,
   tableGroup,
+  locCode = "",
+  locationName = "",
   token,
   invalidLink = false,
   isTakeaway = false,
 }: {
   table: string;
   tableGroup: string;
+  /** Location code embedded in the QR (Tbl_LocationMaster.LocCode). */
+  locCode?: string;
+  /** Location display name (Tbl_LocationMaster.LocDes). */
+  locationName?: string;
   /** Signed table token (minted server-side or from a legacy ?t= URL). */
   token?: string;
   /** The ?id= link could not be decrypted — show the scan screen. */
@@ -132,6 +138,7 @@ export default function MenuClient({
   const cart = useCustomerCart({
     table,
     tableGroup: resolvedGroup || tableGroup,
+    locCode,
     token,
     itemsById,
     takeaway: isTakeaway,
@@ -298,6 +305,7 @@ export default function MenuClient({
         <WelcomeScreen
           table={table}
           tableGroup={resolvedGroup || tableGroup}
+          locationName={locationName}
           takeaway={isTakeaway}
           opening={opening}
           onOpenMenu={() => void openMenu()}

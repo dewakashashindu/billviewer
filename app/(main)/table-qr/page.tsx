@@ -23,6 +23,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   getTablesDataAction,
+  type TableLocationRow,
   type TableGroupRow,
   type TableRowData,
 } from "@/app/actions/tables";
@@ -102,6 +103,7 @@ function QrCard({
   tableNo,
   name,
   group,
+  locationName,
   url,
   widthIn,
   heightIn,
@@ -111,6 +113,7 @@ function QrCard({
   tableNo: string;
   name: string;
   group: string;
+  locationName?: string;
   url: string;
   widthIn: number;
   heightIn: number;
@@ -235,9 +238,11 @@ function QrCard({
           textTransform: "uppercase",
           color: MID,
           lineHeight: 1.2,
+          maxWidth: "100%",
+          overflowWrap: "anywhere",
         }}
       >
-        {RESTAURANT_INFO.name}
+        {(locationName ?? "").trim() || RESTAURANT_INFO.name}
       </div>
 
       <div
@@ -360,9 +365,12 @@ function QrCard({
               textTransform: "uppercase",
               color: MID,
               lineHeight: 1.2,
+              textAlign: "center",
+              maxWidth: "100%",
+              overflowWrap: "anywhere",
             }}
           >
-            {RESTAURANT_INFO.name}
+            {(locationName ?? "").trim() || RESTAURANT_INFO.name}
           </div>
           {qrBlock}
           <div
@@ -459,6 +467,8 @@ function ScaleBox({ width, height, children }: { width: number; height: number; 
 }
 
 export default function TableQrPage() {
+  const [locations, setLocations] = useState<TableLocationRow[]>([]);
+  const [selectedLocCode, setSelectedLocCode] = useState<string>("");
   const [groups, setGroups] = useState<TableGroupRow[]>([]);
   const [tables, setTables] = useState<TableRowData[]>([]);
   const [source, setSource] = useState<"database" | "mock" | null>(null);
@@ -519,6 +529,9 @@ export default function TableQrPage() {
       .then((r) => {
         if (!alive) return;
         if (r.success && r.data) {
+          const locs = r.data.locations ?? [];
+          setLocations(locs);
+          setSelectedLocCode((prev) => prev || locs[0]?.locCode || "");
           setGroups(r.data.groups);
           setTables(r.data.tables);
           setSource(r.data.source);
@@ -532,6 +545,12 @@ export default function TableQrPage() {
       alive = false;
     };
   }, []);
+
+  const selectedLocation = useMemo(
+    () => locations.find((l) => l.locCode === selectedLocCode) ?? locations[0] ?? null,
+    [locations, selectedLocCode]
+  );
+  const selectedLocName = selectedLocation?.locName ?? "";
 
   /* ── persist card names ── */
   useEffect(() => {
@@ -568,7 +587,7 @@ export default function TableQrPage() {
 
   /* ── encrypted customer links (server-side key) ──
      The URL is never shown in the UI — it is only encoded into the
-     QR SVG. Re-run when the table list changes. */
+     QR SVG. Re-run when the table list or selected location changes. */
   useEffect(() => {
     const list = [...tables, ...customTables];
     if (!list.length) return;
@@ -576,14 +595,17 @@ export default function TableQrPage() {
     const handle = setTimeout(async () => {
       if (alive) setSigning(true);
       try {
+        const locCode = selectedLocation?.locCode ?? selectedLocCode;
         const res = await fetch("/api/order/qr", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            locCode,
             tables: list.map((t) => ({
               tableNo: t.tableNo,
               tableGroup: t.groupId || t.tableGroup,
               takeaway: t.takeaway === true,
+              locCode,
             })),
           }),
         });
@@ -618,7 +640,7 @@ export default function TableQrPage() {
       alive = false;
       clearTimeout(handle);
     };
-  }, [tables, customTables]);
+  }, [tables, customTables, selectedLocCode, selectedLocation]);
 
   function toggle(t: TableRowData, on: boolean) {
     setSelected((prev) => {
@@ -950,15 +972,36 @@ export default function TableQrPage() {
 
       {/* ── 1) Tables ── */}
       <div style={card}>
-        <p style={sectionTitle}>1 · Tables</p>
+        <p style={sectionTitle}>1 · Location &amp; Tables</p>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
             gap: 14,
           }}
         >
+          <div>
+            <label style={lbl}>Location</label>
+            <select
+              style={input}
+              value={selectedLocation?.locCode ?? selectedLocCode}
+              onChange={(e) => setSelectedLocCode(e.target.value)}
+            >
+              {locations.length === 0 ? (
+                <option value="">Default ({RESTAURANT_INFO.name})</option>
+              ) : (
+                locations.map((loc) => (
+                  <option key={loc.locCode} value={loc.locCode}>
+                    {loc.locName}
+                    {loc.locCode && loc.locCode !== loc.locName
+                      ? ` (${loc.locCode})`
+                      : ""}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
           <div>
             <label style={lbl}>Table Group</label>
             <select
@@ -1397,6 +1440,7 @@ export default function TableQrPage() {
                       ? groupOf(previewKey)
                       : groups[0]?.groupName ?? "Main Dining"
                   }
+                  locationName={selectedLocName}
                   url={previewUrl}
                   widthIn={widthIn}
                   heightIn={heightIn}
@@ -1527,6 +1571,7 @@ export default function TableQrPage() {
                         tableNo={t.tableNo}
                         name={nameOf(t) || t.tableNo}
                         group={groupOf(t)}
+                        locationName={selectedLocName}
                         url={qrUrls[key] ?? ""}
                         widthIn={widthIn}
                         heightIn={heightIn}
@@ -1579,6 +1624,7 @@ export default function TableQrPage() {
                   tableNo={t.tableNo}
                   name={nameOf(t) || t.tableNo}
                   group={groupOf(t)}
+                  locationName={selectedLocName}
                   url={qrUrls[key] ?? ""}
                   widthIn={widthIn}
                   heightIn={heightIn}

@@ -3,23 +3,12 @@
 // POST /api/order/qr  (staff only — session required)
 //
 // Body:
-//   { tables: [{ tableNo, tableGroup, takeaway? }] }
+//   { locCode?: string, tables: [{ tableNo, tableGroup, takeaway?, locCode? }] }
 //
 // Returns one customer URL per table:
-//   { tableNo, id, url, exists }
+//   { tableNo, tableGroup, locCode, id, url, exists }
 //
 //   url = <QR_MENU_BASE_URL>?id=<encrypted>
-//
-// The base URL is hardcoded in config/qr.config.ts — it is never
-// taken from (or shown to) the browser. The id is AES-encrypted
-// server-side from the table number + table group, so nothing
-// readable ends up in the URL and the HMAC secret never leaves
-// the server.
-//
-// Each table number is also checked against Tbl_Tables (when the
-// DB is configured) and returned as `exists` — a QR printed for
-// a table the POS doesn't know fails with "Table not found" when
-// the guest tries to order, so staff should see it here instead.
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
@@ -42,35 +31,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const defaultLocCode = String(body.locCode ?? "").trim();
+
     const urls: {
       tableNo: string;
       tableGroup: string;
+      locCode: string;
       id: string | null;
       url: string;
       takeaway: boolean;
     }[] = body.tables
       .filter((t: { tableNo?: string }) => t && String(t.tableNo ?? "").trim())
       .slice(0, 500)
-      .map((t: { tableNo: string; tableGroup?: string; takeaway?: boolean }) => {
-        const takeaway =
-          t.takeaway === true || String(t.tableNo ?? "").trim().toUpperCase() === TAKEAWAY_TABLE_NO;
-        const tableNo = takeaway ? TAKEAWAY_TABLE_NO : String(t.tableNo).trim();
-        const tableGroup = takeaway ? "" : String(t.tableGroup ?? "").trim();
+      .map(
+        (t: {
+          tableNo: string;
+          tableGroup?: string;
+          takeaway?: boolean;
+          locCode?: string;
+        }) => {
+          const takeaway =
+            t.takeaway === true ||
+            String(t.tableNo ?? "").trim().toUpperCase() === TAKEAWAY_TABLE_NO;
+          const tableNo = takeaway ? TAKEAWAY_TABLE_NO : String(t.tableNo).trim();
+          const tableGroup = takeaway ? "" : String(t.tableGroup ?? "").trim();
+          const locCode = String(t.locCode ?? defaultLocCode).trim();
 
-        /* Takeaway QR — one encrypted id ("TAK:TA") shared by every
-           printed TA card; the order type is decided server-side from
-           the table number, never from the browser. */
-        const id = takeaway ? encryptTakeawayId() : encryptTableId(tableNo, tableGroup);
-        const url = id
-          ? `${QR_MENU_BASE_URL}?id=${encodeURIComponent(id)}`
-          : `${QR_MENU_BASE_URL}?table=${encodeURIComponent(tableNo)}`;
+          const id = takeaway
+            ? encryptTakeawayId(locCode)
+            : encryptTableId(tableNo, tableGroup, locCode);
+          const fallbackParams = new URLSearchParams({ table: tableNo });
+          if (locCode) fallbackParams.set("loc", locCode);
+          const url = id
+            ? `${QR_MENU_BASE_URL}?id=${encodeURIComponent(id)}`
+            : `${QR_MENU_BASE_URL}?${fallbackParams.toString()}`;
 
-        return { tableNo, tableGroup, id, url, takeaway };
-      });
+          return { tableNo, tableGroup, locCode, id, url, takeaway };
+        }
+      );
 
-    /* ── validate table numbers against the POS (Tbl_Tables) ──
-       Fail open: if the check itself errors, report every table as
-       existing rather than blocking QR generation. */
+    /* ── validate table numbers against the POS (Tbl_Tables) ── */
     const existsByKey: Record<string, boolean> = {};
     if (isDbConfigured() && urls.length) {
       try {
@@ -101,15 +101,11 @@ export async function POST(request: NextRequest) {
       data: {
         urls: urls.map((u) => ({
           ...u,
-          // Takeaway bars are not POS tables — never flag them.
           exists: u.takeaway ? true : existsByKey[u.tableNo.trim().toUpperCase()] ?? true,
         })),
       },
     });
   } catch (error) {
-    /* requireSession() throws FIRST — report it as 401, not 500.
-       (500 hid the fact that this endpoint was being called without
-       a session, and made the auth failure look like a server bug.) */
     if (error instanceof UnauthorizedError) {
       return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
     }
