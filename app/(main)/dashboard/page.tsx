@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { useRouter } from "next/navigation";
 import {
   getDashboardPerformanceAction,
   type PerfAmountItem,
@@ -10,8 +9,6 @@ import {
   type PerfFamilyItem,
   type PerfLocationOption,
 } from "@/app/actions/dashboard";
-
-const iso = (d: Date) => d.toISOString().split("T")[0];
 
 function shiftIsoDays(baseIso: string, deltaDays: number): string {
   const m = baseIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -54,6 +51,44 @@ const fmtShort = (v: number) =>
     : Math.abs(v) >= 1000
       ? `${(v / 1000).toFixed(1)}k`
       : v.toFixed(0);
+
+/* ── Smooth Count-Up Component for Top Stat Cards ── */
+function AnimatedStatValue({
+  value,
+  formatter,
+  animTrigger,
+}: {
+  value: number | null;
+  formatter: (n: number) => string;
+  animTrigger: string;
+}) {
+  const [display, setDisplay] = useState<number>(0);
+
+  useEffect(() => {
+    if (value == null || !Number.isFinite(value)) return;
+    let raf = 0;
+    const duration = 1050;
+    const start = performance.now();
+    const target = value;
+
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(target * eased);
+      if (p < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        setDisplay(target);
+      }
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, animTrigger]);
+
+  if (value == null) return <>—</>;
+  return <>{formatter(display)}</>;
+}
 
 /* ── inline SVG icons (same exact icons as before) ── */
 const iconStyle = { marginBottom: 8, display: "block" } as const;
@@ -125,36 +160,29 @@ const IBar = () => (
     <line x1="2" y1="20" x2="22" y2="20" />
   </svg>
 );
-const IFolder = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="#684830"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={iconStyle}
-  >
-    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-  </svg>
-);
 
-/* ── Donut Chart Component (pure SVG) ── */
+/* ── Animated Donut Chart Component (Clockwise Sweep + Stretching Legend Bars) ── */
 function DonutBreakdown({
   items,
+  animKey,
   centerLabel = "TOTAL",
   valueFormatter = fmtNum,
   tooltipFormatter = fmtRs,
   centerValueFormatter = fmtShort,
 }: {
   items: PerfAmountItem[];
+  animKey: string;
   centerLabel?: string;
   valueFormatter?: (v: number) => string;
   tooltipFormatter?: (v: number) => string;
   centerValueFormatter?: (v: number) => string;
 }) {
+  const reactId = useId();
+  const safeId = useMemo(
+    () => `donut-sweep-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    [reactId]
+  );
+
   const clean = useMemo(() => (items ?? []).filter((x) => x.amt > 0), [items]);
   const total = useMemo(
     () => clean.reduce((sum, x) => sum + x.amt, 0),
@@ -175,6 +203,7 @@ function DonutBreakdown({
 
   return (
     <div
+      key={animKey}
       style={{
         display: "flex",
         alignItems: "center",
@@ -189,37 +218,56 @@ function DonutBreakdown({
         viewBox="0 0 128 128"
         style={{ flexShrink: 0 }}
       >
-        {clean.map((it, idx) => {
-          const frac = it.amt / total;
-          const color = COLORS[idx % COLORS.length];
-          if (frac >= 0.9999) {
-            return (
-              <circle key={it.name} cx={C} cy={C} r={R} fill={color}>
-                <title>{`${it.name}: ${tooltipFormatter(it.amt)} (100%)`}</title>
-              </circle>
-            );
-          }
-          const a0 = acc * 2 * Math.PI - Math.PI / 2;
-          acc += frac;
-          const a1 = acc * 2 * Math.PI - Math.PI / 2;
-          const large = frac > 0.5 ? 1 : 0;
-          const x0 = C + R * Math.cos(a0);
-          const y0 = C + R * Math.sin(a0);
-          const x1 = C + R * Math.cos(a1);
-          const y1 = C + R * Math.sin(a1);
-          const d = `M ${C} ${C} L ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} Z`;
-          return (
-            <path
-              key={it.name}
-              d={d}
-              fill={color}
+        <defs>
+          <mask id={safeId}>
+            <circle
+              cx={C}
+              cy={C}
+              r={43.5}
+              fill="none"
               stroke="#fff"
-              strokeWidth={1.5}
-            >
-              <title>{`${it.name}: ${tooltipFormatter(it.amt)} (${(frac * 100).toFixed(1)}%)`}</title>
-            </path>
-          );
-        })}
+              strokeWidth={30}
+              transform={`rotate(-90 ${C} ${C})`}
+              pathLength={100}
+              className="perf-anim-donut-mask"
+            />
+          </mask>
+        </defs>
+
+        <g mask={`url(#${safeId})`}>
+          {clean.map((it, idx) => {
+            const frac = it.amt / total;
+            const color = COLORS[idx % COLORS.length];
+            if (frac >= 0.9999) {
+              return (
+                <circle key={it.name} cx={C} cy={C} r={R} fill={color}>
+                  <title>{`${it.name}: ${tooltipFormatter(it.amt)} (100%)`}</title>
+                </circle>
+              );
+            }
+            const a0 = acc * 2 * Math.PI - Math.PI / 2;
+            acc += frac;
+            const a1 = acc * 2 * Math.PI - Math.PI / 2;
+            const large = frac > 0.5 ? 1 : 0;
+            const x0 = C + R * Math.cos(a0);
+            const y0 = C + R * Math.sin(a0);
+            const x1 = C + R * Math.cos(a1);
+            const y1 = C + R * Math.sin(a1);
+            const d = `M ${C} ${C} L ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} Z`;
+            return (
+              <path
+                key={it.name}
+                d={d}
+                fill={color}
+                stroke="#fff"
+                strokeWidth={1.5}
+              >
+                <title>{`${it.name}: ${tooltipFormatter(it.amt)} (${(frac * 100).toFixed(1)}%)`}</title>
+              </path>
+            );
+          })}
+        </g>
+
         <circle cx={C} cy={C} r={31} fill="#fff" />
         <text
           x={C}
@@ -323,11 +371,13 @@ function DonutBreakdown({
                 }}
               >
                 <div
+                  className="perf-anim-hbar"
                   style={{
                     height: "100%",
                     width: `${pct}%`,
                     background: color,
                     borderRadius: 99,
+                    animationDelay: `${160 + idx * 95}ms`,
                   }}
                 />
               </div>
@@ -339,16 +389,18 @@ function DonutBreakdown({
   );
 }
 
-/* ── Daily Stacked Bar Chart Component (used by Charts #4 & #5) ── */
+/* ── Animated Daily Stacked Bar Chart Component (Charts #4 & #5) ── */
 function DailyStackedChart({
   snapshots,
   seriesKeys,
   seriesColors,
+  animKey,
   getDayMap,
 }: {
   snapshots: PerfDaySnapshot[];
   seriesKeys: string[];
   seriesColors: string[];
+  animKey: string;
   getDayMap: (s: PerfDaySnapshot) => Map<string, number>;
 }) {
   if (!snapshots.length || !seriesKeys.length) {
@@ -376,12 +428,14 @@ function DailyStackedChart({
   const padB = 32;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
+  const baseLineY = padT + plotH;
   const colW = plotW / Math.max(snapshots.length, 1);
   const maxLabels = Math.max(6, Math.floor(plotW / 58));
   const labelEvery = Math.max(1, Math.ceil(snapshots.length / maxLabels));
+  const stepDelay = Math.min(65, Math.floor(680 / Math.max(snapshots.length, 1)));
 
   return (
-    <>
+    <div key={animKey}>
       <div style={st.inlineLegend}>
         {seriesKeys.map((k, idx) => (
           <span key={k} style={st.inlineLegendItem}>
@@ -441,34 +495,42 @@ function DailyStackedChart({
               36,
               Math.max(8, colW * (snapshots.length > 30 ? 0.68 : 0.54))
             );
-            let curBottom = padT + plotH;
+            let curBottom = baseLineY;
             const showLabel =
               i % labelEvery === 0 || i === dayRows.length - 1;
 
             return (
               <g key={row.sn.dateIso}>
-                {row.values.map((val, sIdx) => {
-                  if (val <= 0) return null;
-                  const segH = (val / maxSum) * plotH;
-                  const y = curBottom - segH;
-                  curBottom = y;
-                  const isTop = row.values
-                    .slice(sIdx + 1)
-                    .every((later) => later <= 0);
-                  return (
-                    <rect
-                      key={seriesKeys[sIdx]}
-                      x={xCenter - barW / 2}
-                      y={y}
-                      width={barW}
-                      height={Math.max(1.5, segH)}
-                      rx={isTop ? 3 : 0}
-                      fill={seriesColors[sIdx % seriesColors.length]}
-                    >
-                      <title>{`${row.sn.businessDay || row.sn.dateIso}\n${seriesKeys[sIdx]}: ${fmtRs(val)}`}</title>
-                    </rect>
-                  );
-                })}
+                <g
+                  className="perf-anim-vbar"
+                  style={{
+                    transformOrigin: `${xCenter}px ${baseLineY}px`,
+                    animationDelay: `${i * stepDelay}ms`,
+                  }}
+                >
+                  {row.values.map((val, sIdx) => {
+                    if (val <= 0) return null;
+                    const segH = (val / maxSum) * plotH;
+                    const y = curBottom - segH;
+                    curBottom = y;
+                    const isTop = row.values
+                      .slice(sIdx + 1)
+                      .every((later) => later <= 0);
+                    return (
+                      <rect
+                        key={seriesKeys[sIdx]}
+                        x={xCenter - barW / 2}
+                        y={y}
+                        width={barW}
+                        height={Math.max(1.5, segH)}
+                        rx={isTop ? 3 : 0}
+                        fill={seriesColors[sIdx % seriesColors.length]}
+                      >
+                        <title>{`${row.sn.businessDay || row.sn.dateIso}\n${seriesKeys[sIdx]}: ${fmtRs(val)}`}</title>
+                      </rect>
+                    );
+                  })}
+                </g>
                 {showLabel && (
                   <text
                     x={xCenter}
@@ -486,7 +548,7 @@ function DailyStackedChart({
           })}
         </svg>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -583,10 +645,6 @@ function mergeSnapshots(
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const now = new Date();
-  const monthStart = iso(new Date(now.getFullYear(), now.getMonth(), 1));
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [locations, setLocations] = useState<PerfLocationOption[]>([]);
@@ -705,6 +763,9 @@ export default function DashboardPage() {
     });
   }, [locSnapshots, normFrom, normTo]);
 
+  /* Key that re-triggers smooth stretch/sweep/draw animations when filters load or change */
+  const animKey = `${selectedLoc}|${normFrom}|${normTo}|${rangeSnapshots.length}`;
+
   const activeLocObj = useMemo(
     () =>
       locations.find(
@@ -822,22 +883,96 @@ export default function DashboardPage() {
     selectedLoc,
   ]);
 
+  const isSingleDay = normFrom === normTo && rangeSnapshots.length === 1;
+  const periodSubtext = activeData
+    ? isSingleDay
+      ? `Business Date: ${rangeSnapshots[0].businessDay || rangeSnapshots[0].dateIso}`
+      : `${rangeSnapshots[0].label} – ${rangeSnapshots[rangeSnapshots.length - 1].label} (${rangeSnapshots.length} days)`
+    : "Selected date range";
+
   return (
     <div style={{ padding: "28px 26px 48px", fontFamily: "Inter, sans-serif" }}>
       <style>{`
+        @keyframes perfCardFadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes perfBarGrowUp {
+          from { transform: scaleY(0); opacity: 0.35; }
+          to   { transform: scaleY(1); opacity: 1; }
+        }
+        @keyframes perfBarStretchRight {
+          from { transform: scaleX(0); }
+          to   { transform: scaleX(1); }
+        }
+        @keyframes perfLineDraw {
+          from { stroke-dashoffset: 1; }
+          to   { stroke-dashoffset: 0; }
+        }
+        @keyframes perfDotPop {
+          0%   { opacity: 0; transform: scale(0); }
+          70%  { opacity: 1; transform: scale(1.18); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes perfDonutSweep {
+          from { stroke-dashoffset: 101; }
+          to   { stroke-dashoffset: 0; }
+        }
+        @keyframes perfLabelFade {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .perf-anim-card {
+          animation: perfCardFadeUp 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .perf-anim-vbar {
+          animation: perfBarGrowUp 1.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .perf-anim-hbar {
+          transform-origin: left center;
+          animation: perfBarStretchRight 1.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .perf-anim-line {
+          stroke-dasharray: 1;
+          stroke-dashoffset: 1;
+          animation: perfLineDraw 1.55s cubic-bezier(0.22, 1, 0.36, 1) 0.18s forwards;
+        }
+        .perf-anim-dot {
+          transform-box: fill-box;
+          transform-origin: center center;
+          animation: perfDotPop 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .perf-anim-donut-mask {
+          stroke-dasharray: 101;
+          stroke-dashoffset: 101;
+          animation: perfDonutSweep 1.42s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
+        }
+        .perf-anim-val-lbl {
+          animation: perfLabelFade 0.6s ease 0.72s both;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .perf-anim-card, .perf-anim-vbar, .perf-anim-hbar,
+          .perf-anim-line, .perf-anim-dot, .perf-anim-donut-mask, .perf-anim-val-lbl {
+            animation-duration: 0.01s !important;
+            animation-delay: 0s !important;
+          }
+        }
+
         .perf-row-2-1 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; margin-bottom: 14px; }
         .perf-row-3   { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
         .perf-row-eq2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
-        .perf-row-2   { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin-bottom: 28px; }
+        .perf-row-2   { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin-bottom: 8px; }
         @media (max-width: 1080px) {
           .perf-row-2-1, .perf-row-3, .perf-row-eq2, .perf-row-2 { grid-template-columns: 1fr; }
         }
       `}</style>
 
       {/* ═══════════════════════════════════════════════════════════
-          1) UNCHANGED HEADER + 4 STAT CARDS
+          1) HEADER + 4 PERIOD-ACCURATE STAT CARDS
           ═══════════════════════════════════════════════════════════ */}
-      <div style={{ marginBottom: 26 }}>
+      <div style={{ marginBottom: 22 }}>
         <h1
           style={{
             margin: 0,
@@ -859,39 +994,57 @@ export default function DashboardPage() {
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
           gap: 14,
-          marginBottom: 26,
+          marginBottom: 20,
         }}
       >
         {[
           {
-            label: "Today's Bills",
-            value: activeData ? String(activeData.billCount) : "—",
+            label: "Total Bills",
+            numValue: activeData ? activeData.billCount : null,
+            formatter: fmtInt,
+            sub: periodSubtext,
             Icon: IBill,
           },
           {
-            label: "Today's Sales",
-            value: activeData ? fmtRs(activeData.salesVolume) : "—",
+            label: "Total Sales",
+            numValue: activeData ? activeData.salesVolume : null,
+            formatter: fmtRs,
+            sub: activeData
+              ? isSingleDay
+                ? "Gross sales (incl. SC & tax)"
+                : `Gross sales across ${rangeSnapshots.length} days`
+              : "Gross sales volume (incl. tax)",
             Icon: IMoney,
           },
           {
-            label: "This Month Sales",
-            value: activeData ? fmtRs(activeData.mtdTotal) : "—",
+            label: "Net Sales (Excl. Tax)",
+            numValue: activeData ? activeData.salesWithoutTax : null,
+            formatter: fmtRs,
+            sub: activeData
+              ? `Tax & SC: ${fmtRs(Math.max(0, activeData.salesVolume - activeData.salesWithoutTax))}`
+              : "Sales without SC & taxes",
             Icon: IChartUp,
           },
           {
             label: "Avg / Bill",
-            value: activeData ? fmtRs(activeData.spendBill) : "—",
+            numValue: activeData ? activeData.spendBill : null,
+            formatter: fmtRs,
+            sub: activeData
+              ? `Avg ${activeData.avgPax.toFixed(2)} guests / bill`
+              : "Average spend per bill",
             Icon: IBar,
           },
-        ].map((c) => (
+        ].map((c, idx) => (
           <div
             key={c.label}
+            className="perf-anim-card"
             style={{
               border: "1px solid #E4D6BF",
               borderRadius: 14,
               padding: "18px 18px 16px",
               background: "#fff",
               boxShadow: "0 1px 3px rgba(114,86,60,0.04)",
+              animationDelay: `${idx * 75}ms`,
             }}
           >
             <c.Icon />
@@ -913,9 +1066,24 @@ export default function DashboardPage() {
                 fontSize: 24,
                 fontWeight: 700,
                 color: "#45301D",
+                fontVariantNumeric: "tabular-nums",
               }}
             >
-              {c.value}
+              <AnimatedStatValue
+                value={c.numValue}
+                formatter={c.formatter}
+                animTrigger={animKey}
+              />
+            </p>
+            <p
+              style={{
+                margin: "4px 0 0",
+                fontSize: 11,
+                color: "#907860",
+                fontWeight: 500,
+              }}
+            >
+              {c.sub}
             </p>
           </div>
         ))}
@@ -1040,7 +1208,7 @@ export default function DashboardPage() {
             borderRadius: 14,
             padding: "32px 20px",
             textAlign: "center",
-            marginBottom: 26,
+            marginBottom: 20,
             color: "#6B543E",
             fontSize: 13.5,
           }}
@@ -1058,7 +1226,7 @@ export default function DashboardPage() {
             borderRadius: 14,
             padding: "28px 20px",
             textAlign: "center",
-            marginBottom: 26,
+            marginBottom: 20,
             color: "#6B543E",
             fontSize: 13.5,
           }}
@@ -1080,7 +1248,10 @@ export default function DashboardPage() {
         <>
           {/* ROW 1: Daily Sales Volume Trend + Service Mode Donut */}
           <div className="perf-row-2-1">
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "80ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>Daily Sales Volume Trend</h3>
@@ -1115,6 +1286,7 @@ export default function DashboardPage() {
 
               {trendStats && (
                 <div
+                  key={`sales-trend-${animKey}`}
                   style={{
                     width: "100%",
                     overflowX: "auto",
@@ -1132,20 +1304,23 @@ export default function DashboardPage() {
                     const padB = 32;
                     const plotW = W - padL - padR;
                     const plotH = H - padT - padB;
+                    const baseLineY = padT + plotH;
                     const colW = plotW / Math.max(pts.length, 1);
                     const maxLabels = Math.max(6, Math.floor(plotW / 58));
                     const labelEvery = Math.max(
                       1,
                       Math.ceil(pts.length / maxLabels)
                     );
+                    const stepDelay = Math.min(
+                      65,
+                      Math.floor(680 / Math.max(pts.length, 1))
+                    );
 
                     const linePoints = pts
                       .map((p, i) => {
                         const x = padL + colW * i + colW / 2;
                         const y =
-                          padT +
-                          plotH -
-                          (p.salesVolume / trendStats.max) * plotH;
+                          baseLineY - (p.salesVolume / trendStats.max) * plotH;
                         return `${x},${y}`;
                       })
                       .join(" ");
@@ -1188,9 +1363,11 @@ export default function DashboardPage() {
 
                         {pts.length > 1 && (
                           <polyline
+                            pathLength={1}
+                            className="perf-anim-line"
                             fill="none"
                             stroke="#B49B7E"
-                            strokeWidth={pts.length > 35 ? 1.5 : 2}
+                            strokeWidth={pts.length > 35 ? 1.6 : 2.2}
                             points={linePoints}
                           />
                         )}
@@ -1205,24 +1382,33 @@ export default function DashboardPage() {
                             3,
                             (p.salesVolume / trendStats.max) * plotH
                           );
-                          const y = padT + plotH - barH;
+                          const y = baseLineY - barH;
                           const showLabel =
                             i % labelEvery === 0 || i === pts.length - 1;
 
                           return (
                             <g key={p.dateIso}>
-                              <rect
-                                x={xCenter - barW / 2}
-                                y={y}
-                                width={barW}
-                                height={barH}
-                                rx={barW > 14 ? 5 : 3}
-                                fill="#684830"
+                              <g
+                                className="perf-anim-vbar"
+                                style={{
+                                  transformOrigin: `${xCenter}px ${baseLineY}px`,
+                                  animationDelay: `${i * stepDelay}ms`,
+                                }}
                               >
-                                <title>{`${p.businessDay || p.dateIso}\nSales: ${fmtRs(p.salesVolume)}\nBills: ${p.billCount}`}</title>
-                              </rect>
+                                <rect
+                                  x={xCenter - barW / 2}
+                                  y={y}
+                                  width={barW}
+                                  height={barH}
+                                  rx={barW > 14 ? 5 : 3}
+                                  fill="#684830"
+                                >
+                                  <title>{`${p.businessDay || p.dateIso}\nSales: ${fmtRs(p.salesVolume)}\nBills: ${p.billCount}`}</title>
+                                </rect>
+                              </g>
                               {pts.length <= 12 && (
                                 <text
+                                  className="perf-anim-val-lbl"
                                   x={xCenter}
                                   y={y - 5}
                                   textAnchor="middle"
@@ -1256,40 +1442,61 @@ export default function DashboardPage() {
             </div>
 
             {/* Service Mode Collection */}
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "140ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>Service Mode Collection</h3>
                   <p style={st.cardSub}>Dining vs Takeaway revenue split</p>
                 </div>
               </div>
-              <DonutBreakdown items={activeData.serviceModes} />
+              <DonutBreakdown
+                items={activeData.serviceModes}
+                animKey={`sm-${animKey}`}
+              />
             </div>
           </div>
 
           {/* ROW 2: Pay Mode + Main Group + Sales vs Taxes */}
           <div className="perf-row-3">
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "180ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>Pay Mode Wise Collection</h3>
                   <p style={st.cardSub}>Cash, Cards &amp; Vouchers</p>
                 </div>
               </div>
-              <DonutBreakdown items={activeData.payModes} />
+              <DonutBreakdown
+                items={activeData.payModes}
+                animKey={`pm-${animKey}`}
+              />
             </div>
 
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "230ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>Main Group Sales</h3>
                   <p style={st.cardSub}>Food, Beverage &amp; Other</p>
                 </div>
               </div>
-              <DonutBreakdown items={activeData.mainGroups} />
+              <DonutBreakdown
+                items={activeData.mainGroups}
+                animKey={`mg-${animKey}`}
+              />
             </div>
 
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "280ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>
@@ -1300,14 +1507,20 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <DonutBreakdown items={activeData.taxes} />
+              <DonutBreakdown
+                items={activeData.taxes}
+                animKey={`tx-${animKey}`}
+              />
             </div>
           </div>
 
-          {/* ROW 3 (ADDED #1 & #2): Daily Bills & Guest Trend + Local vs Foreign Guest Split */}
+          {/* ROW 3 (#1 & #2): Daily Bills & Guest Trend + Local vs Foreign Guest Split */}
           <div className="perf-row-2-1">
             {/* Added Chart #1: Daily Bills & Guest (Pax) Trend */}
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "320ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>
@@ -1348,6 +1561,7 @@ export default function DashboardPage() {
               </div>
 
               <div
+                key={`bp-trend-${animKey}`}
                 style={{ width: "100%", overflowX: "auto", paddingBottom: 2 }}
               >
                 {(() => {
@@ -1365,18 +1579,22 @@ export default function DashboardPage() {
                   const padB = 32;
                   const plotW = W - padL - padR;
                   const plotH = H - padT - padB;
+                  const baseLineY = padT + plotH;
                   const colW = plotW / Math.max(pts.length, 1);
                   const maxLabels = Math.max(6, Math.floor(plotW / 58));
                   const labelEvery = Math.max(
                     1,
                     Math.ceil(pts.length / maxLabels)
                   );
+                  const stepDelay = Math.min(
+                    65,
+                    Math.floor(680 / Math.max(pts.length, 1))
+                  );
 
                   const paxLine = pts
                     .map((p, i) => {
                       const xc = padL + colW * i + colW / 2;
-                      const yp =
-                        padT + plotH - (p.pax.total / maxBP) * plotH;
+                      const yp = baseLineY - (p.pax.total / maxBP) * plotH;
                       return `${xc},${yp}`;
                     })
                     .join(" ");
@@ -1419,6 +1637,8 @@ export default function DashboardPage() {
 
                       {pts.length > 1 && (
                         <polyline
+                          pathLength={1}
+                          className="perf-anim-line"
                           fill="none"
                           stroke="#B86B2B"
                           strokeWidth={pts.length > 35 ? 1.6 : 2.2}
@@ -1436,25 +1656,35 @@ export default function DashboardPage() {
                           3,
                           (p.billCount / maxBP) * plotH
                         );
-                        const yb = padT + plotH - bh;
-                        const yp =
-                          padT + plotH - (p.pax.total / maxBP) * plotH;
+                        const yb = baseLineY - bh;
+                        const yp = baseLineY - (p.pax.total / maxBP) * plotH;
                         const showLabel =
                           i % labelEvery === 0 || i === pts.length - 1;
+                        const dly = i * stepDelay;
 
                         return (
                           <g key={p.dateIso}>
-                            <rect
-                              x={xc - bw / 2}
-                              y={yb}
-                              width={bw}
-                              height={bh}
-                              rx={bw > 12 ? 4 : 2.5}
-                              fill="#684830"
+                            <g
+                              className="perf-anim-vbar"
+                              style={{
+                                transformOrigin: `${xc}px ${baseLineY}px`,
+                                animationDelay: `${dly}ms`,
+                              }}
                             >
-                              <title>{`${p.businessDay || p.dateIso}\nClosed Bills: ${p.billCount}\nGuests (Pax): ${p.pax.total}`}</title>
-                            </rect>
+                              <rect
+                                x={xc - bw / 2}
+                                y={yb}
+                                width={bw}
+                                height={bh}
+                                rx={bw > 12 ? 4 : 2.5}
+                                fill="#684830"
+                              >
+                                <title>{`${p.businessDay || p.dateIso}\nClosed Bills: ${p.billCount}\nGuests (Pax): ${p.pax.total}`}</title>
+                              </rect>
+                            </g>
                             <circle
+                              className="perf-anim-dot"
+                              style={{ animationDelay: `${300 + dly}ms` }}
                               cx={xc}
                               cy={yp}
                               r={pts.length > 35 ? 2.8 : 3.6}
@@ -1486,7 +1716,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Added Chart #2: Local vs Foreign Guest Distribution */}
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "360ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>
@@ -1500,6 +1733,7 @@ export default function DashboardPage() {
               </div>
               <DonutBreakdown
                 items={paxDonutItems}
+                animKey={`pax-${animKey}`}
                 centerLabel="PAX"
                 valueFormatter={(v) => `${fmtInt(v)} pax`}
                 tooltipFormatter={(v) => `${fmtInt(v)} Guests`}
@@ -1508,10 +1742,13 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ROW 4 (ADDED #4 & #5): Daily Dining vs Takeaway Mix + Daily Food vs Beverage Mix */}
+          {/* ROW 4 (#4 & #5): Daily Dining vs Takeaway Mix + Daily Food vs Beverage Mix */}
           <div className="perf-row-eq2">
             {/* Added Chart #4: Daily Dining vs Takeaway Mix (Stacked) */}
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "400ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>
@@ -1526,6 +1763,7 @@ export default function DashboardPage() {
                 snapshots={rangeSnapshots}
                 seriesKeys={serviceModeSeries}
                 seriesColors={["#684830", "#C4A784", "#907860", "#45301D"]}
+                animKey={`sm-stack-${animKey}`}
                 getDayMap={(sn) => {
                   const mp = new Map<string, number>();
                   for (const sm of sn.serviceModes) {
@@ -1538,7 +1776,10 @@ export default function DashboardPage() {
             </div>
 
             {/* Added Chart #5: Daily Food vs Beverage Mix Trend (Stacked) */}
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "440ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>
@@ -1553,6 +1794,7 @@ export default function DashboardPage() {
                 snapshots={rangeSnapshots}
                 seriesKeys={mainGroupSeries}
                 seriesColors={["#45301D", "#907860", "#D9C7AC", "#B49B7E"]}
+                animKey={`mg-stack-${animKey}`}
                 getDayMap={(sn) => {
                   const mp = new Map<string, number>();
                   for (const mg of sn.mainGroups) {
@@ -1567,7 +1809,10 @@ export default function DashboardPage() {
 
           {/* ROW 5: Family Sales Ranking + Cashier & Operational Summary */}
           <div className="perf-row-2">
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "480ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>Family Group Sales Ranking</h3>
@@ -1607,6 +1852,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div
+                  key={`fam-${animKey}-${famMode}`}
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -1662,12 +1908,13 @@ export default function DashboardPage() {
                           </div>
                           <div style={st.hbarTrack}>
                             <div
+                              className="perf-anim-hbar"
                               style={{
                                 height: "100%",
                                 width: `${pct}%`,
                                 background: barColor,
                                 borderRadius: 6,
-                                transition: "width 0.25s ease",
+                                animationDelay: `${140 + idx * 75}ms`,
                               }}
                             />
                           </div>
@@ -1680,20 +1927,24 @@ export default function DashboardPage() {
             </div>
 
             {/* Cashier Collection & Operational Summary */}
-            <div style={st.chartCard}>
+            <div
+              className="perf-anim-card"
+              style={{ ...st.chartCard, animationDelay: "520ms" }}
+            >
               <div style={st.cardHead}>
                 <div>
                   <h3 style={st.cardTitle}>
                     Cashier Collection &amp; Operational Summary
                   </h3>
                   <p style={st.cardSub}>
-                    Cashier totals, pax, averages, discounts &amp; MTD
+                    Cashier totals, pax, averages, discounts &amp; bills
                   </p>
                 </div>
               </div>
 
               {activeData.cashiers.length > 0 && (
                 <div
+                  key={`cash-${animKey}`}
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -1706,7 +1957,7 @@ export default function DashboardPage() {
                       ...activeData.cashiers.map((c) => c.amt),
                       1
                     );
-                    return activeData.cashiers.map((c) => (
+                    return activeData.cashiers.map((c, idx) => (
                       <div
                         key={c.name}
                         style={{
@@ -1731,11 +1982,13 @@ export default function DashboardPage() {
                         </div>
                         <div style={st.hbarTrack}>
                           <div
+                            className="perf-anim-hbar"
                             style={{
                               height: "100%",
                               width: `${Math.max(4, (c.amt / maxC) * 100)}%`,
                               background: "#684830",
                               borderRadius: 6,
+                              animationDelay: `${160 + idx * 80}ms`,
                             }}
                           />
                         </div>
@@ -1792,14 +2045,17 @@ export default function DashboardPage() {
                 </div>
 
                 <div style={st.opsTile}>
-                  <div style={st.opsK}>Bills &amp; MTD Average</div>
+                  <div style={st.opsK}>Bills &amp; Avg / Day</div>
                   <div style={st.opsV}>
                     {activeData.billCount} Closed Bills
                   </div>
                   <div style={st.opsSub}>
                     Unclosed: {activeData.unclosedCount} (
-                    {fmtRs(activeData.unclosedAmt)}) · MTD Avg:{" "}
-                    {fmtRs(activeData.mtdAvg)}
+                    {fmtRs(activeData.unclosedAmt)}) · Avg/Day:{" "}
+                    {fmtRs(
+                      activeData.salesVolume /
+                        Math.max(1, rangeSnapshots.length)
+                    )}
                   </div>
                 </div>
               </div>
@@ -1807,85 +2063,6 @@ export default function DashboardPage() {
           </div>
         </>
       )}
-
-      {/* ═══════════════════════════════════════════════════════════
-          3) UNCHANGED QUICK LINKS AT BOTTOM
-          ═══════════════════════════════════════════════════════════ */}
-      <h2
-        style={{
-          margin: "0 0 12px",
-          fontSize: 15,
-          fontWeight: 700,
-          color: "#45301D",
-        }}
-      >
-        Quick Links
-      </h2>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: 14,
-        }}
-      >
-        <button
-          onClick={() =>
-            router.push(
-              `/reports/transaction-summary?from=${monthStart}&to=${iso(now)}`
-            )
-          }
-          style={{
-            textAlign: "left",
-            border: "1px solid #E4D6BF",
-            borderRadius: 14,
-            padding: "18px 18px 16px",
-            background: "linear-gradient(135deg,#FCF7F3,#fff)",
-            cursor: "pointer",
-          }}
-        >
-          <IBar />
-          <p
-            style={{
-              margin: "8px 0 0",
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#45301D",
-            }}
-          >
-            Transaction Summary By Date
-          </p>
-          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B543E" }}>
-            Daily sales, pax &amp; tax summary — this month
-          </p>
-        </button>
-
-        <button
-          onClick={() => router.push("/reports")}
-          style={{
-            textAlign: "left",
-            border: "1px solid #E4D6BF",
-            borderRadius: 14,
-            padding: "18px 18px 16px",
-            background: "linear-gradient(135deg,#FCF7F3,#fff)",
-            cursor: "pointer",
-          }}
-        >
-          <IFolder />
-          <p
-            style={{
-              margin: "8px 0 0",
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#45301D",
-            }}
-          >
-            All Reports
-          </p>
-          <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B543E" }}>
-            Browse the full reports catalogue
-          </p>
-        </button>
-      </div>
     </div>
   );
 }
