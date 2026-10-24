@@ -164,7 +164,11 @@ import PerformanceReport, {
   PerformancePdfDocument,
   type PerformanceReportData,
 } from "@/components/reports/PerformanceReport";
-import { getMainLocationsAction } from "@/app/actions/reports";
+import {
+  getLocationsAction,
+  getMainLocationsAction,
+} from "@/app/actions/reports";
+import type { DateRangeFilterSpec } from "@/components/DateRangeModal";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -226,6 +230,148 @@ function ErrorBlock({ message }: { message: string }) {
   );
 }
 
+// ── shared on-screen Location + Extra Filter (Bill Type / Order Mode / Pay Mode) switcher bar ──
+function ReportFilterBar({
+  locations,
+  selectedLoc,
+  onSelectLoc,
+  extraFilter,
+  extraValue,
+  onExtraChange,
+}: {
+  locations: { code: string; name: string }[];
+  selectedLoc: string;
+  onSelectLoc: (code: string) => void;
+  extraFilter?: DateRangeFilterSpec;
+  extraValue?: string;
+  onExtraChange?: (val: string) => void;
+}) {
+  if (locations.length === 0 && !extraFilter) return null;
+
+  const pillStyle = (active: boolean): React.CSSProperties => ({
+    height: 32,
+    padding: "0 13px",
+    borderRadius: 8,
+    border: active ? "1px solid #45301D" : "1px solid #DECBB0",
+    background: active
+      ? "linear-gradient(135deg,#45301D 0%,#684830 100%)"
+      : "#FCF7F3",
+    color: active ? "#ffffff" : "#684830",
+    fontSize: 12,
+    fontWeight: active ? 700 : 600,
+    fontFamily: "Inter, sans-serif",
+    cursor: "pointer",
+    boxShadow: active ? "0 2px 6px rgba(69,48,29,0.18)" : "none",
+    transition: "all 0.14s ease",
+    whiteSpace: "nowrap",
+  });
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: "#7C6148",
+    marginRight: 2,
+    whiteSpace: "nowrap",
+  };
+
+  return (
+    <div style={{ padding: "12px 24px 0", fontFamily: "Inter, sans-serif" }}>
+      <div
+        style={{
+          padding: "10px 14px",
+          background: "#FFFFFF",
+          border: "1px solid #E4D6BF",
+          borderRadius: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(114,86,60,0.04)",
+        }}
+      >
+        {locations.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={labelStyle}>Location:</span>
+            <button
+              type="button"
+              onClick={() => onSelectLoc("")}
+              style={pillStyle(selectedLoc === "")}
+            >
+              All Locations
+            </button>
+            {locations.map((l) => {
+              const active = selectedLoc === l.code;
+              return (
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => onSelectLoc(l.code)}
+                  style={pillStyle(active)}
+                >
+                  {l.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {locations.length > 0 && extraFilter && (
+          <div
+            style={{
+              width: 1,
+              height: 24,
+              background: "#E4D6BF",
+              flexShrink: 0,
+            }}
+          />
+        )}
+
+        {extraFilter && onExtraChange && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={labelStyle}>{extraFilter.label}:</span>
+            <button
+              type="button"
+              onClick={() => onExtraChange("")}
+              style={pillStyle(!extraValue)}
+            >
+              All
+            </button>
+            {extraFilter.options.map((opt) => {
+              const active = extraValue === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onExtraChange(opt.value)}
+                  style={pillStyle(active)}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DynamicReportPage() {
   const params = useParams();
   const router = useRouter();
@@ -268,6 +414,22 @@ export default function DynamicReportPage() {
   const [cashSel, setCashSel] = useState("");
   const [perfLocs, setPerfLocs] = useState<{ code: string; name: string }[]>([]);
   const [perfCompare, setPerfCompare] = useState(false);
+  const [allLocs, setAllLocs] = useState<{ code: string; name: string }[]>([]);
+
+  // Load main outlets once so every report page can switch All Locations / Loc 1 / Loc 2 on screen
+  useEffect(() => {
+    let alive = true;
+    getLocationsAction()
+      .then((res) => {
+        if (alive && res?.success && Array.isArray(res.data)) {
+          setAllLocs(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (reportId !== "performance-report") return;
@@ -420,12 +582,45 @@ export default function DynamicReportPage() {
     setEndDate(t);
   };
 
+  const extraFilter = config.filter;
+  const extraValue =
+    extraFilter?.param === "om"
+      ? orderMode
+      : extraFilter?.param === "bt"
+        ? billType
+        : extraFilter?.param === "pm"
+          ? payMode
+          : "";
+  const handleExtraChange = (val: string) => {
+    if (!extraFilter) return;
+    if (extraFilter.param === "om") setOrderMode(val);
+    else if (extraFilter.param === "bt") setBillType(val);
+    else if (extraFilter.param === "pm") setPayMode(val);
+  };
+
+  const filterBarNode =
+    config.render !== "performance-report" ? (
+      <ReportFilterBar
+        locations={allLocs}
+        selectedLoc={loc}
+        onSelectLoc={setLoc}
+        extraFilter={extraFilter}
+        extraValue={extraValue}
+        onExtraChange={handleExtraChange}
+      />
+    ) : null;
+
   // ── Sales Summary (custom render — SAME toolbar/loading/error/chart) ──
   if (config.render === "sales-summary") {
-    // ✅ alut analytics dashboard — fetch karapu data ekemn hadanawa
-    const chartsSum = buildReportCharts(reportId, filteredSummary);
+    const hasSumData =
+      !loading &&
+      !error &&
+      Boolean(filteredSummary && (filteredSummary.locationGroups?.length ?? 0) > 0);
+    const chartsSum = hasSumData
+      ? buildReportCharts(reportId, filteredSummary)
+      : [];
 
-    const pdfDoc = filteredSummary ? (
+    const pdfDoc = hasSumData && filteredSummary ? (
       <SalesSummaryPdfDocument
         title={config.title}
         printDate={printDate}
@@ -450,16 +645,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, steward, mode..."
           pdfDocument={pdfDoc}
           pdfFileName={`sales-summary-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsSum.length > 0}
+          chartSupported={hasSumData && chartsSum.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsSum.length > 0 ? (
+          ) : chartMode && hasSumData && chartsSum.length > 0 ? (
             <ReportChartsView charts={chartsSum} title={config.title} />
           ) : filteredSummary ? (
             <SalesSummaryReport report={filteredSummary} />
@@ -477,11 +673,16 @@ export default function DynamicReportPage() {
     const filteredDetails = details
       ? filterSalesDetails(details, search)
       : null;
+    const hasDetData =
+      !loading &&
+      !error &&
+      Boolean(filteredDetails && (filteredDetails.locationGroups?.length ?? 0) > 0);
 
-    // ✅ alut analytics dashboard — bills+items data ekemn aggregate
-    const chartsDet = buildReportCharts(reportId, filteredDetails);
+    const chartsDet = hasDetData
+      ? buildReportCharts(reportId, filteredDetails)
+      : [];
 
-    const pdfDocDetails = filteredDetails ? (
+    const pdfDocDetails = hasDetData && filteredDetails ? (
       <SalesDetailsPdfDocument
         title={config.title}
         printDate={printDate}
@@ -505,16 +706,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, item, steward..."
           pdfDocument={pdfDocDetails}
           pdfFileName={`sales-details-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsDet.length > 0}
+          chartSupported={hasDetData && chartsDet.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsDet.length > 0 ? (
+          ) : chartMode && hasDetData && chartsDet.length > 0 ? (
             <ReportChartsView charts={chartsDet} title={config.title} />
           ) : filteredDetails ? (
             <SalesDetailsReport report={filteredDetails} />
@@ -532,8 +734,13 @@ export default function DynamicReportPage() {
     const filteredCats = catSum
       ? filterCategorySummary(catSum, search)
       : null;
-    const chartsCats = filteredCats ? buildReportCharts(reportId, filteredCats) : [];
-    const pdfDocCat = filteredCats ? (
+    const hasCatsData =
+      !loading &&
+      !error &&
+      Boolean(filteredCats && (filteredCats.locationGroups?.length ?? 0) > 0);
+    const chartsCats =
+      hasCatsData && filteredCats ? buildReportCharts(reportId, filteredCats) : [];
+    const pdfDocCat = hasCatsData && filteredCats ? (
       <CategorySummaryPdfDocument
         title={config.title}
         printDate={printDate}
@@ -556,16 +763,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search category, item..."
           pdfDocument={pdfDocCat}
           pdfFileName={`category-summary-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsCats.length > 0}
+          chartSupported={hasCatsData && chartsCats.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsCats.length > 0 ? (
+          ) : chartMode && hasCatsData && chartsCats.length > 0 ? (
             <ReportChartsView charts={chartsCats} title={config.title} />
           ) : filteredCats ? (
             <CategorySummaryReport report={filteredCats} />
@@ -583,8 +791,15 @@ export default function DynamicReportPage() {
     const filteredCatDet = catDet
       ? filterCategoryDetail(catDet, search)
       : null;
-    const chartsCatDet = filteredCatDet ? buildReportCharts(reportId, filteredCatDet) : [];
-    const pdfDocCatDet = filteredCatDet ? (
+    const hasCatDetData =
+      !loading &&
+      !error &&
+      Boolean(filteredCatDet && (filteredCatDet.locationGroups?.length ?? 0) > 0);
+    const chartsCatDet =
+      hasCatDetData && filteredCatDet
+        ? buildReportCharts(reportId, filteredCatDet)
+        : [];
+    const pdfDocCatDet = hasCatDetData && filteredCatDet ? (
       <CategoryDetailPdfDocument
         title={config.title}
         printDate={printDate}
@@ -607,16 +822,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, item, steward..."
           pdfDocument={pdfDocCatDet}
           pdfFileName={`category-detail-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsCatDet.length > 0}
+          chartSupported={hasCatDetData && chartsCatDet.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsCatDet.length > 0 ? (
+          ) : chartMode && hasCatDetData && chartsCatDet.length > 0 ? (
             <ReportChartsView charts={chartsCatDet} title={config.title} />
           ) : filteredCatDet ? (
             <CategoryDetailReport report={filteredCatDet} />
@@ -632,8 +848,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as PaymentSummaryData)
       : null;
     const filteredPays = payData ? filterPayments(payData, search) : null;
-    const chartsPays = filteredPays ? buildReportCharts(reportId, filteredPays) : [];
-    const pdfDocPays = filteredPays ? (
+    const hasPayData =
+      !loading &&
+      !error &&
+      Boolean(filteredPays && (filteredPays.locationGroups?.length ?? 0) > 0);
+    const chartsPays =
+      hasPayData && filteredPays ? buildReportCharts(reportId, filteredPays) : [];
+    const pdfDocPays = hasPayData && filteredPays ? (
       <PaymentSummaryPdfDocument
         title={config.title}
         printDate={printDate}
@@ -656,16 +877,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, payment mode, casher..."
           pdfDocument={pdfDocPays}
           pdfFileName={`payment-summary-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsPays.length > 0}
+          chartSupported={hasPayData && chartsPays.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsPays.length > 0 ? (
+          ) : chartMode && hasPayData && chartsPays.length > 0 ? (
             <ReportChartsView charts={chartsPays} title={config.title} />
           ) : filteredPays ? (
             <PaymentSummaryReport report={filteredPays} />
@@ -681,8 +903,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as BillPayModeGridData)
       : null;
     const filteredGrid = gridData ? filterPayGrid(gridData, search) : null;
-    const chartsGrid = filteredGrid ? buildReportCharts(reportId, filteredGrid) : [];
-    const pdfDocGrid = filteredGrid ? (
+    const hasGridData =
+      !loading &&
+      !error &&
+      Boolean(filteredGrid && (filteredGrid.locationGroups?.length ?? 0) > 0);
+    const chartsGrid =
+      hasGridData && filteredGrid ? buildReportCharts(reportId, filteredGrid) : [];
+    const pdfDocGrid = hasGridData && filteredGrid ? (
       <BillPayModeGridPdfDocument
         title={config.title}
         printDate={printDate}
@@ -705,16 +932,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, pay mode..."
           pdfDocument={pdfDocGrid}
           pdfFileName={`bill-paymode-grid-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsGrid.length > 0}
+          chartSupported={hasGridData && chartsGrid.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         {(gridData as unknown as { cashiers?: Array<{ id: string; des: string }> } | null)?.cashiers?.length ? (
           <div
             style={{
               display: "flex",
               gap: 8,
-              padding: "10px 4px 0",
+              padding: "10px 24px 0",
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
               color: "#684830",
@@ -749,7 +977,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsGrid.length > 0 ? (
+          ) : chartMode && hasGridData && chartsGrid.length > 0 ? (
             <ReportChartsView charts={chartsGrid} title={config.title} />
           ) : filteredGrid ? (
             <BillPayModeGridReport report={filteredGrid} />
@@ -765,8 +993,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as TxnSummaryData)
       : null;
     const filteredTxn = txnData ? filterTxnSummary(txnData, search) : null;
-    const chartsTxn = filteredTxn ? buildReportCharts(reportId, filteredTxn) : [];
-    const pdfDocTxn = filteredTxn ? (
+    const hasTxnData =
+      !loading &&
+      !error &&
+      Boolean(filteredTxn && (filteredTxn.locationGroups?.length ?? 0) > 0);
+    const chartsTxn =
+      hasTxnData && filteredTxn ? buildReportCharts(reportId, filteredTxn) : [];
+    const pdfDocTxn = hasTxnData && filteredTxn ? (
       <ReportPdfDocument
         title={config.title}
         from={fmtDMonY(startDate)}
@@ -788,16 +1021,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search date, location..."
           pdfDocument={pdfDocTxn}
           pdfFileName={`transaction-summary-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsTxn.length > 0}
+          chartSupported={hasTxnData && chartsTxn.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsTxn.length > 0 ? (
+          ) : chartMode && hasTxnData && chartsTxn.length > 0 ? (
             <ReportChartsView charts={chartsTxn} title={config.title} />
           ) : filteredTxn ? (
             <TransactionSummaryReport report={filteredTxn} />
@@ -813,8 +1047,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as StewardData)
       : null;
     const filteredStw = stwData ? filterSteward(stwData, search) : null;
-    const chartsStw = filteredStw ? buildReportCharts(reportId, filteredStw) : [];
-    const pdfDocStw = filteredStw ? (
+    const hasStwData =
+      !loading &&
+      !error &&
+      Boolean(filteredStw && (filteredStw.stewards?.length ?? 0) > 0);
+    const chartsStw =
+      hasStwData && filteredStw ? buildReportCharts(reportId, filteredStw) : [];
+    const pdfDocStw = hasStwData && filteredStw ? (
       <ReportPdfDocument
         title={config.title}
         from={fmtDMonY(startDate)}
@@ -836,16 +1075,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search steward, location, date..."
           pdfDocument={pdfDocStw}
           pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsStw.length > 0}
+          chartSupported={hasStwData && chartsStw.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsStw.length > 0 ? (
+          ) : chartMode && hasStwData && chartsStw.length > 0 ? (
             <ReportChartsView charts={chartsStw} title={config.title} />
           ) : filteredStw ? (
             <StewardSummaryReport report={filteredStw} />
@@ -861,8 +1101,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as TaxVatData)
       : null;
     const filteredTv = tvData ? filterTaxVat(tvData, search) : null;
-    const chartsTv = filteredTv ? buildReportCharts(reportId, filteredTv) : [];
-    const pdfDocTv = filteredTv ? (
+    const hasTvData =
+      !loading &&
+      !error &&
+      Boolean(filteredTv && (filteredTv.locationGroups?.length ?? 0) > 0);
+    const chartsTv =
+      hasTvData && filteredTv ? buildReportCharts(reportId, filteredTv) : [];
+    const pdfDocTv = hasTvData && filteredTv ? (
       <TaxVatPdfDocument
         title={config.title}
         printDate={printDate}
@@ -885,16 +1130,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, date..."
           pdfDocument={pdfDocTv}
           pdfFileName={`tax-vat-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsTv.length > 0}
+          chartSupported={hasTvData && chartsTv.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsTv.length > 0 ? (
+          ) : chartMode && hasTvData && chartsTv.length > 0 ? (
             <ReportChartsView charts={chartsTv} title={config.title} />
           ) : filteredTv ? (
             <TaxVatReport report={filteredTv} />
@@ -910,8 +1156,15 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as VoidData)
       : null;
     const filteredVoid = voidData ? filterVoid(voidData, search) : null;
-    const chartsVoid = filteredVoid ? buildReportCharts(reportId, filteredVoid) : [];
-    const pdfDocVoid = filteredVoid ? (
+    const hasVoidData =
+      !loading &&
+      !error &&
+      Boolean(filteredVoid && (filteredVoid.locationGroups?.length ?? 0) > 0);
+    const chartsVoid =
+      hasVoidData && filteredVoid
+        ? buildReportCharts(reportId, filteredVoid)
+        : [];
+    const pdfDocVoid = hasVoidData && filteredVoid ? (
       <VoidPdfDocument
         title={config.title}
         printDate={printDate}
@@ -934,16 +1187,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, item, cashier..."
           pdfDocument={pdfDocVoid}
           pdfFileName={`void-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsVoid.length > 0}
+          chartSupported={hasVoidData && chartsVoid.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsVoid.length > 0 ? (
+          ) : chartMode && hasVoidData && chartsVoid.length > 0 ? (
             <ReportChartsView charts={chartsVoid} title={config.title} />
           ) : filteredVoid ? (
             <VoidReport report={filteredVoid} />
@@ -959,8 +1213,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as PaxData)
       : null;
     const filteredPax = paxData ? filterPax(paxData, search) : null;
-    const chartsPax = filteredPax ? buildReportCharts(reportId, filteredPax) : [];
-    const pdfDocPax = filteredPax ? (
+    const hasPaxData =
+      !loading &&
+      !error &&
+      Boolean(filteredPax && (filteredPax.locationGroups?.length ?? 0) > 0);
+    const chartsPax =
+      hasPaxData && filteredPax ? buildReportCharts(reportId, filteredPax) : [];
+    const pdfDocPax = hasPaxData && filteredPax ? (
       <PaxCountPdfDocument
         title={config.title}
         printDate={printDate}
@@ -983,16 +1242,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search bill no, date..."
           pdfDocument={pdfDocPax}
           pdfFileName={`pax-count-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsPax.length > 0}
+          chartSupported={hasPaxData && chartsPax.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsPax.length > 0 ? (
+          ) : chartMode && hasPaxData && chartsPax.length > 0 ? (
             <ReportChartsView charts={chartsPax} title={config.title} />
           ) : filteredPax ? (
             <PaxCountReport report={filteredPax} />
@@ -1006,8 +1266,13 @@ export default function DynamicReportPage() {
   if (config.render === "cash-inout") {
     const cioData = objectData ? (objectData as unknown as CioData) : null;
     const filteredCIO = cioData ? filterCio(cioData, search) : null;
-    const chartsCIO = filteredCIO ? buildReportCharts(reportId, filteredCIO) : [];
-    const pdfDocCIO = filteredCIO ? (
+    const hasCioData =
+      !loading &&
+      !error &&
+      Boolean(filteredCIO && (filteredCIO.locationGroups?.length ?? 0) > 0);
+    const chartsCIO =
+      hasCioData && filteredCIO ? buildReportCharts(reportId, filteredCIO) : [];
+    const pdfDocCIO = hasCioData && filteredCIO ? (
       <CashInOutPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1030,16 +1295,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search txn, category, remarks, user..."
           pdfDocument={pdfDocCIO}
           pdfFileName={`cash-inout-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsCIO.length > 0}
+          chartSupported={hasCioData && chartsCIO.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         {cioData && cioData.categories.length > 0 ? (
           <div
             style={{
               display: "flex",
               gap: 8,
-              padding: "10px 4px 0",
+              padding: "10px 24px 0",
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
               color: "#684830",
@@ -1074,7 +1340,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsCIO.length > 0 ? (
+          ) : chartMode && hasCioData && chartsCIO.length > 0 ? (
             <ReportChartsView charts={chartsCIO} title={config.title} />
           ) : filteredCIO ? (
             <CashInOutReport report={filteredCIO} />
@@ -1088,8 +1354,13 @@ export default function DynamicReportPage() {
   if (config.render === "kot-bot") {
     const kotData = objectData ? (objectData as unknown as KotData) : null;
     const filteredKOT = kotData ? filterKot(kotData, search) : null;
-    const chartsKOT = filteredKOT ? buildReportCharts(reportId, filteredKOT) : [];
-    const pdfDocKOT = filteredKOT ? (
+    const hasKotData =
+      !loading &&
+      !error &&
+      Boolean(filteredKOT && (filteredKOT.locations?.length ?? 0) > 0);
+    const chartsKOT =
+      hasKotData && filteredKOT ? buildReportCharts(reportId, filteredKOT) : [];
+    const pdfDocKOT = hasKotData && filteredKOT ? (
       <KotBotPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1112,15 +1383,16 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search ordno, item, user, remark..."
           pdfDocument={pdfDocKOT}
           pdfFileName={`kot-bot-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsKOT.length > 0}
+          chartSupported={hasKotData && chartsKOT.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div
           style={{
             display: "flex",
             gap: 8,
-            padding: "10px 4px 0",
+            padding: "10px 24px 0",
             fontFamily: "Inter, sans-serif",
             fontSize: 12,
             color: "#684830",
@@ -1160,7 +1432,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsKOT.length > 0 ? (
+          ) : chartMode && hasKotData && chartsKOT.length > 0 ? (
             <ReportChartsView charts={chartsKOT} title={config.title} />
           ) : filteredKOT ? (
             <KotBotReport report={filteredKOT} />
@@ -1177,31 +1449,42 @@ export default function DynamicReportPage() {
     const cadData = !isCph && objectData ? (objectData as unknown as CadData) : null;
     const filteredCPH = cphData ? filterCph(cphData, search) : null;
     const filteredCAD = cadData ? filterCad(cadData, search) : null;
-    const chartsCR = filteredCPH
-      ? buildReportCharts(reportId, filteredCPH)
-      : filteredCAD
-        ? buildReportCharts(reportId, filteredCAD)
-        : [];
+    const hasCrData =
+      !loading &&
+      !error &&
+      Boolean(
+        (filteredCPH && (filteredCPH.locationGroups?.length ?? 0) > 0) ||
+          (filteredCAD && (filteredCAD.locationGroups?.length ?? 0) > 0)
+      );
+    const chartsCR = hasCrData
+      ? filteredCPH
+        ? buildReportCharts(reportId, filteredCPH)
+        : filteredCAD
+          ? buildReportCharts(reportId, filteredCAD)
+          : []
+      : [];
     const custList = cphData ? cphData.customers : cadData ? cadData.customers : [];
-    const pdfDocCR = filteredCPH ? (
-      <PaymentHistoryPdfDocument
-        title={config.title}
-        printDate={printDate}
-        printTime={printTime}
-        from={fmtDMonY(startDate)}
-        to={fmtDMonY(endDate)}
-        data={filteredCPH}
-      />
-    ) : filteredCAD ? (
-      <AccountDetailPdfDocument
-        title={config.title}
-        printDate={printDate}
-        printTime={printTime}
-        from={fmtDMonY(startDate)}
-        to={fmtDMonY(endDate)}
-        data={filteredCAD}
-      />
-    ) : undefined;
+    const pdfDocCR = hasCrData
+      ? filteredCPH ? (
+          <PaymentHistoryPdfDocument
+            title={config.title}
+            printDate={printDate}
+            printTime={printTime}
+            from={fmtDMonY(startDate)}
+            to={fmtDMonY(endDate)}
+            data={filteredCPH}
+          />
+        ) : filteredCAD ? (
+          <AccountDetailPdfDocument
+            title={config.title}
+            printDate={printDate}
+            printTime={printTime}
+            from={fmtDMonY(startDate)}
+            to={fmtDMonY(endDate)}
+            data={filteredCAD}
+          />
+        ) : undefined
+      : undefined;
     return (
       <>
         <ReportToolbar
@@ -1215,16 +1498,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search customer, bill, invoice..."
           pdfDocument={pdfDocCR}
           pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsCR.length > 0}
+          chartSupported={hasCrData && chartsCR.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         {custList.length > 0 ? (
           <div
             style={{
               display: "flex",
               gap: 8,
-              padding: "10px 4px 0",
+              padding: "10px 24px 0",
               fontFamily: "Inter, sans-serif",
               fontSize: 12,
               color: "#684830",
@@ -1259,7 +1543,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsCR.length > 0 ? (
+          ) : chartMode && hasCrData && chartsCR.length > 0 ? (
             <ReportChartsView charts={chartsCR} title={config.title} />
           ) : filteredCPH ? (
             <PaymentHistoryReport report={filteredCPH} />
@@ -1275,8 +1559,13 @@ export default function DynamicReportPage() {
   if (config.render === "item-movement") {
     const imvData = objectData ? (objectData as unknown as ImvData) : null;
     const filteredIMV = imvData ? filterImv(imvData, search) : null;
-    const chartsIMV = filteredIMV ? buildReportCharts(reportId, filteredIMV) : [];
-    const pdfDocIMV = filteredIMV ? (
+    const hasImvData =
+      !loading &&
+      !error &&
+      Boolean(filteredIMV && (filteredIMV.locationGroups?.length ?? 0) > 0);
+    const chartsIMV =
+      hasImvData && filteredIMV ? buildReportCharts(reportId, filteredIMV) : [];
+    const pdfDocIMV = hasImvData && filteredIMV ? (
       <ItemMovementPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1299,15 +1588,16 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search item code or name..."
           pdfDocument={pdfDocIMV}
           pdfFileName={`item-movement-${imvMode}-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsIMV.length > 0}
+          chartSupported={hasImvData && chartsIMV.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div
           style={{
             display: "flex",
             gap: 18,
-            padding: "10px 4px 0",
+            padding: "10px 24px 0",
             fontFamily: "Inter, sans-serif",
             fontSize: 12,
             color: "#684830",
@@ -1349,7 +1639,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsIMV.length > 0 ? (
+          ) : chartMode && hasImvData && chartsIMV.length > 0 ? (
             <ReportChartsView charts={chartsIMV} title={config.title} />
           ) : filteredIMV ? (
             <ItemMovementReport report={filteredIMV} />
@@ -1363,8 +1653,13 @@ export default function DynamicReportPage() {
   if (config.render === "mii" || config.render === "mii-date") {
     const miiData = objectData ? (objectData as unknown as MiiData) : null;
     const filteredMII = miiData ? filterMii(miiData, search) : null;
-    const chartsMII = filteredMII ? buildReportCharts(reportId, filteredMII) : [];
-    const pdfDocMII = filteredMII ? (
+    const hasMiiData =
+      !loading &&
+      !error &&
+      Boolean(filteredMII && (filteredMII.locationGroups?.length ?? 0) > 0);
+    const chartsMII =
+      hasMiiData && filteredMII ? buildReportCharts(reportId, filteredMII) : [];
+    const pdfDocMII = hasMiiData && filteredMII ? (
       <MenuItemIssuePdfDocument
         title={config.title}
         printDate={printDate}
@@ -1388,15 +1683,16 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search item code, name, dept..."
           pdfDocument={pdfDocMII}
           pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsMII.length > 0}
+          chartSupported={hasMiiData && chartsMII.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div
           style={{
             display: "flex",
             gap: 16,
-            padding: "10px 4px 0",
+            padding: "10px 24px 0",
             fontFamily: "Inter, sans-serif",
             fontSize: 12,
             color: "#684830",
@@ -1420,7 +1716,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsMII.length > 0 ? (
+          ) : chartMode && hasMiiData && chartsMII.length > 0 ? (
             <ReportChartsView charts={chartsMII} title={config.title} />
           ) : filteredMII ? (
             config.render === "mii-date" ? (
@@ -1438,15 +1734,21 @@ export default function DynamicReportPage() {
   if (config.render === "billtype") {
     const btData = objectData ? (objectData as unknown as BillTypeData) : null;
     const filteredBT = btData ? filterBillType(btData, search) : null;
-    const chartsBT = filteredBT ? buildReportCharts(reportId, filteredBT) : [];
-    const pdfDocBT = filteredBT ? (
+    const hasBtData =
+      !loading &&
+      !error &&
+      Boolean(filteredBT && (filteredBT.locationGroups?.length ?? 0) > 0);
+    const chartsBT =
+      hasBtData && filteredBT ? buildReportCharts(reportId, filteredBT) : [];
+    const pdfDocBT = hasBtData && filteredBT ? (
       <BillTypePdfDocument title={config.title} printDate={printDate} printTime={printTime} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} data={filteredBT} />
     ) : undefined;
     return (
       <>
-        <ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search bill type..." pdfDocument={pdfDocBT} pdfFileName={`payment-billtype-${startDate}_to_${endDate}.pdf`} chartSupported={chartsBT.length > 0} chartMode={chartMode} onChartToggle={() => setChartMode((c) => !c)} />
+        <ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search bill type..." pdfDocument={pdfDocBT} pdfFileName={`payment-billtype-${startDate}_to_${endDate}.pdf`} chartSupported={hasBtData && chartsBT.length > 0} chartMode={chartMode} onChartToggle={() => setChartMode((c) => !c)} />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
-          {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} /> : chartMode && chartsBT.length > 0 ? <ReportChartsView charts={chartsBT} title={config.title} /> : filteredBT ? <BillTypeReport report={filteredBT} /> : null}
+          {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} /> : chartMode && hasBtData && chartsBT.length > 0 ? <ReportChartsView charts={chartsBT} title={config.title} /> : filteredBT ? <BillTypeReport report={filteredBT} /> : null}
         </div>
       </>
     );
@@ -1456,15 +1758,21 @@ export default function DynamicReportPage() {
   if (config.render === "cashier-collection") {
     const ccData = objectData ? (objectData as unknown as CcData) : null;
     const filteredCC = ccData ? filterCc(ccData, search) : null;
-    const chartsCC = filteredCC ? buildReportCharts(reportId, filteredCC) : [];
-    const pdfDocCC = filteredCC ? (
+    const hasCcData =
+      !loading &&
+      !error &&
+      Boolean(filteredCC && (filteredCC.locationGroups?.length ?? 0) > 0);
+    const chartsCC =
+      hasCcData && filteredCC ? buildReportCharts(reportId, filteredCC) : [];
+    const pdfDocCC = hasCcData && filteredCC ? (
       <CashierCollectionPdfDocument title={config.title} printDate={printDate} printTime={printTime} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} data={filteredCC} />
     ) : undefined;
     return (
       <>
-        <ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search cashier or bill no..." pdfDocument={pdfDocCC} pdfFileName={`cashier-collection-${startDate}_to_${endDate}.pdf`} chartSupported={chartsCC.length > 0} chartMode={chartMode} onChartToggle={() => setChartMode((c) => !c)} />
+        <ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search cashier or bill no..." pdfDocument={pdfDocCC} pdfFileName={`cashier-collection-${startDate}_to_${endDate}.pdf`} chartSupported={hasCcData && chartsCC.length > 0} chartMode={chartMode} onChartToggle={() => setChartMode((c) => !c)} />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
-          {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} /> : chartMode && chartsCC.length > 0 ? <ReportChartsView charts={chartsCC} title={config.title} /> : filteredCC ? <CashierCollectionReport report={filteredCC} /> : null}
+          {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} /> : chartMode && hasCcData && chartsCC.length > 0 ? <ReportChartsView charts={chartsCC} title={config.title} /> : filteredCC ? <CashierCollectionReport report={filteredCC} /> : null}
         </div>
       </>
     );
@@ -1474,15 +1782,21 @@ export default function DynamicReportPage() {
   if (config.render === "cashier-breakdown") {
     const cbdData = objectData ? (objectData as unknown as CbdData) : null;
     const filteredCBD = cbdData ? filterCbd(cbdData, search) : null;
-    const chartsCBD = filteredCBD ? buildReportCharts(reportId, filteredCBD) : [];
-    const pdfDocCBD = filteredCBD ? (
+    const hasCbdData =
+      !loading &&
+      !error &&
+      Boolean(filteredCBD && (filteredCBD.locationGroups?.length ?? 0) > 0);
+    const chartsCBD =
+      hasCbdData && filteredCBD ? buildReportCharts(reportId, filteredCBD) : [];
+    const pdfDocCBD = hasCbdData && filteredCBD ? (
       <CashierBreakdownPdfDocument title={config.title} printDate={printDate} printTime={printTime} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} data={filteredCBD} />
     ) : undefined;
     return (
       <>
-        <ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search cashier or mode..." pdfDocument={pdfDocCBD} pdfFileName={`payment-breakdown-${startDate}_to_${endDate}.pdf`} chartSupported={chartsCBD.length > 0} chartMode={chartMode} onChartToggle={() => setChartMode((c) => !c)} />
+        <ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search cashier or mode..." pdfDocument={pdfDocCBD} pdfFileName={`payment-breakdown-${startDate}_to_${endDate}.pdf`} chartSupported={hasCbdData && chartsCBD.length > 0} chartMode={chartMode} onChartToggle={() => setChartMode((c) => !c)} />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
-          {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} /> : chartMode && chartsCBD.length > 0 ? <ReportChartsView charts={chartsCBD} title={config.title} /> : filteredCBD ? <CashierBreakdownReport report={filteredCBD} /> : null}
+          {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} /> : chartMode && hasCbdData && chartsCBD.length > 0 ? <ReportChartsView charts={chartsCBD} title={config.title} /> : filteredCBD ? <CashierBreakdownReport report={filteredCBD} /> : null}
         </div>
       </>
     );
@@ -1494,8 +1808,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as HourlySalesData)
       : null;
     const filteredHR = hrData ? filterHourly(hrData, search) : null;
-    const chartsHR = filteredHR ? buildReportCharts(reportId, filteredHR) : [];
-    const pdfDocHR = filteredHR ? (
+    const hasHrData =
+      !loading &&
+      !error &&
+      Boolean(filteredHR && (filteredHR.locationGroups?.length ?? 0) > 0);
+    const chartsHR =
+      hasHrData && filteredHR ? buildReportCharts(reportId, filteredHR) : [];
+    const pdfDocHR = hasHrData && filteredHR ? (
       <HourlySalesPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1518,16 +1837,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search hour or location..."
           pdfDocument={pdfDocHR}
           pdfFileName={`hourly-sales-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsHR.length > 0}
+          chartSupported={hasHrData && chartsHR.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsHR.length > 0 ? (
+          ) : chartMode && hasHrData && chartsHR.length > 0 ? (
             <ReportChartsView charts={chartsHR} title={config.title} />
           ) : filteredHR ? (
             <HourlySalesReport report={filteredHR} />
@@ -1543,8 +1863,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as CreditSummaryData)
       : null;
     const filteredCS = csData ? filterCreditSummary(csData, search) : null;
-    const chartsCS = filteredCS ? buildReportCharts(reportId, filteredCS) : [];
-    const pdfDocCS = filteredCS ? (
+    const hasCsData =
+      !loading &&
+      !error &&
+      Boolean(filteredCS && (filteredCS.locationGroups?.length ?? 0) > 0);
+    const chartsCS =
+      hasCsData && filteredCS ? buildReportCharts(reportId, filteredCS) : [];
+    const pdfDocCS = hasCsData && filteredCS ? (
       <CreditSummaryPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1567,16 +1892,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search customer code or name..."
           pdfDocument={pdfDocCS}
           pdfFileName={`credit-summary-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsCS.length > 0}
+          chartSupported={hasCsData && chartsCS.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsCS.length > 0 ? (
+          ) : chartMode && hasCsData && chartsCS.length > 0 ? (
             <ReportChartsView charts={chartsCS} title={config.title} />
           ) : filteredCS ? (
             <CreditSummaryReport report={filteredCS} />
@@ -1592,8 +1918,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as CreditHistoryData)
       : null;
     const filteredCH = chData ? filterCreditHistory(chData, search) : null;
-    const chartsCH = filteredCH ? buildReportCharts(reportId, filteredCH) : [];
-    const pdfDocCH = filteredCH ? (
+    const hasChData =
+      !loading &&
+      !error &&
+      Boolean(filteredCH && (filteredCH.locationGroups?.length ?? 0) > 0);
+    const chartsCH =
+      hasChData && filteredCH ? buildReportCharts(reportId, filteredCH) : [];
+    const pdfDocCH = hasChData && filteredCH ? (
       <CreditHistoryPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1616,16 +1947,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search customer code or name..."
           pdfDocument={pdfDocCH}
           pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsCH.length > 0}
+          chartSupported={hasChData && chartsCH.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsCH.length > 0 ? (
+          ) : chartMode && hasChData && chartsCH.length > 0 ? (
             <ReportChartsView charts={chartsCH} title={config.title} />
           ) : filteredCH ? (
             <CreditHistoryReport report={filteredCH} />
@@ -1641,8 +1973,13 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as OpenTablesData)
       : null;
     const filteredOpen = openData ? filterOpen(openData, search) : null;
-    const chartsOpen = filteredOpen ? buildReportCharts(reportId, filteredOpen) : [];
-    const pdfDocOpen = filteredOpen ? (
+    const hasOpenData =
+      !loading &&
+      !error &&
+      Boolean(filteredOpen && (filteredOpen.sections?.length ?? 0) > 0);
+    const chartsOpen =
+      hasOpenData && filteredOpen ? buildReportCharts(reportId, filteredOpen) : [];
+    const pdfDocOpen = hasOpenData && filteredOpen ? (
       <OpenTablesPdfDocument
         title={config.title}
         printDate={printDate}
@@ -1665,16 +2002,17 @@ export default function DynamicReportPage() {
           searchPlaceholder="Search table, item, cashier..."
           pdfDocument={pdfDocOpen}
           pdfFileName={`open-tables-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsOpen.length > 0}
+          chartSupported={hasOpenData && chartsOpen.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsOpen.length > 0 ? (
+          ) : chartMode && hasOpenData && chartsOpen.length > 0 ? (
             <ReportChartsView charts={chartsOpen} title={config.title} />
           ) : filteredOpen ? (
             <OpenTablesReport report={filteredOpen} />
@@ -1690,8 +2028,15 @@ export default function DynamicReportPage() {
       ? (objectData as unknown as TraceData)
       : null;
     const filteredTrace = traceData ? filterTrace(traceData, search) : null;
-    const chartsTrace = filteredTrace ? buildReportCharts(reportId, filteredTrace) : [];
-    const pdfDocTrace = filteredTrace ? (
+    const hasTraceData =
+      !loading &&
+      !error &&
+      Boolean(filteredTrace && (filteredTrace.locationGroups?.length ?? 0) > 0);
+    const chartsTrace =
+      hasTraceData && filteredTrace
+        ? buildReportCharts(reportId, filteredTrace)
+        : [];
+    const pdfDocTrace = hasTraceData && filteredTrace ? (
       <TracePdfDocument
         title={config.title}
         printDate={printDate}
@@ -1714,16 +2059,17 @@ export default function DynamicReportPage() {
           searchPlaceholder={reportId === "invoice-trace" ? "Type invoice number..." : "Search bill no, ref, action..."}
           pdfDocument={pdfDocTrace}
           pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-          chartSupported={chartsTrace.length > 0}
+          chartSupported={hasTraceData && chartsTrace.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
         />
+        {filterBarNode}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsTrace.length > 0 ? (
+          ) : chartMode && hasTraceData && chartsTrace.length > 0 ? (
             <ReportChartsView charts={chartsTrace} title={config.title} />
           ) : filteredTrace ? (
             <TraceReport report={filteredTrace} invoiceHint={reportId === "invoice-trace"} />
@@ -1741,10 +2087,21 @@ export default function DynamicReportPage() {
     const filteredPerf = perfData
       ? filterPerformanceReport(perfData, search)
       : null;
-    const chartsPerf = filteredPerf
-      ? buildReportCharts(reportId, filteredPerf)
-      : [];
-    const pdfDocPerf = filteredPerf ? (
+    const hasPerfData =
+      !loading &&
+      !error &&
+      Boolean(
+        filteredPerf &&
+          ((filteredPerf.sections ?? []).some((s) => (s.rows?.length ?? 0) > 0) ||
+            (filteredPerf.locationReports ?? []).some((lr) =>
+              (lr.sections ?? []).some((s) => (s.rows?.length ?? 0) > 0)
+            ))
+      );
+    const chartsPerf =
+      hasPerfData && filteredPerf
+        ? buildReportCharts(reportId, filteredPerf)
+        : [];
+    const pdfDocPerf = hasPerfData && filteredPerf ? (
       <PerformancePdfDocument data={filteredPerf} />
     ) : undefined;
 
@@ -1950,7 +2307,7 @@ export default function DynamicReportPage() {
             <LoadingBlock />
           ) : error ? (
             <ErrorBlock message={error} />
-          ) : chartMode && chartsPerf.length > 0 ? (
+          ) : chartMode && hasPerfData && chartsPerf.length > 0 ? (
             <ReportChartsView charts={chartsPerf} title={config.title} />
           ) : filteredPerf ? (
             <PerformanceReport report={filteredPerf} />
@@ -1961,7 +2318,8 @@ export default function DynamicReportPage() {
   }
 
   // ── Generic reports (Transaction Summary etc.) ──
-  const pdfDoc = (
+  const hasGenericData = !loading && !error && filteredRows.length > 0;
+  const pdfDoc = hasGenericData ? (
     <ReportPdfDocument
       title={config.title}
       from={fmtDMonY(startDate)}
@@ -1969,7 +2327,7 @@ export default function DynamicReportPage() {
       columns={config.columns}
       data={filteredRows}
     />
-  );
+  ) : undefined;
 
   return (
     <>
@@ -1984,17 +2342,18 @@ export default function DynamicReportPage() {
         searchPlaceholder="Search..."
         pdfDocument={pdfDoc}
         pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
-        chartSupported={chartsRows.length > 0}
+        chartSupported={hasGenericData && chartsRows.length > 0}
         chartMode={chartMode}
         onChartToggle={() => setChartMode((c) => !c)}
       />
+      {filterBarNode}
       <div id="report-zoom-area" style={{ flex: 1 }}>
         {loading ? (
           <LoadingBlock />
         ) : error ? (
           <ErrorBlock message={error} />
-        ) : chartMode && chartsRows.length > 0 ? (
-            <ReportChartsView charts={chartsRows} title={config.title} />
+        ) : chartMode && hasGenericData && chartsRows.length > 0 ? (
+          <ReportChartsView charts={chartsRows} title={config.title} />
         ) : (
           <DynamicReportTable
             columns={config.columns}

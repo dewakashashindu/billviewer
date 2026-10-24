@@ -730,14 +730,57 @@ export async function getLocationsAction() {
       };
     }
     const pool = await getPool();
-    const res = await pool.request().query(`
-      SELECT
-        LTRIM(RTRIM(LocCode)) AS code,
-        ISNULL(NULLIF(LTRIM(RTRIM(LocDes)), ''), LTRIM(RTRIM(LocCode))) AS name
-      FROM Tbl_LocationMaster WITH (NOLOCK)
-      ORDER BY LTRIM(RTRIM(LocCode));
-    `);
-    return { success: true, data: res.recordset as { code: string; name: string }[] };
+    const res = await pool
+      .request()
+      .query(`SELECT * FROM Tbl_LocationMaster WITH (NOLOCK);`)
+      .catch(() =>
+        pool.request().query(`SELECT * FROM dbo.Tbl_LocationMaster WITH (NOLOCK);`)
+      );
+    const rawRows = (res.recordset ?? []) as Record<string, unknown>[];
+    if (rawRows.length === 0) {
+      return { success: true, data: [] as { code: string; name: string }[] };
+    }
+    const keys = Object.keys(rawRows[0]);
+    const findKey = (cands: string[]) =>
+      cands
+        .map((c) => keys.find((k) => k.toLowerCase() === c.toLowerCase()))
+        .find(Boolean);
+    const codeKey = findKey(["LocCode", "Code", "Loc"]) ?? keys[0];
+    const nameKey = findKey(["LocDes", "LocName", "Description", "Name"]);
+    const subKey = findKey(["SubLoc", "SUBLOC", "IsSubLoc", "SubLocation", "Sub_Loc"]);
+
+    const isSubFlag = (v: unknown): boolean => {
+      if (v === true || v === 1) return true;
+      const str = String(v ?? "").trim().toLowerCase();
+      return str === "1" || str === "true" || str === "y" || str === "yes";
+    };
+
+    const allList: { code: string; name: string }[] = [];
+    const mainList: { code: string; name: string }[] = [];
+    const seenAll = new Set<string>();
+    const seenMain = new Set<string>();
+
+    for (const r of rawRows) {
+      const code = String(r[codeKey] ?? "").trim();
+      if (!code) continue;
+      const rawName = nameKey ? String(r[nameKey] ?? "").trim() : "";
+      const name = rawName || code;
+      const up = code.toUpperCase();
+      if (!seenAll.has(up)) {
+        seenAll.add(up);
+        allList.push({ code, name });
+      }
+      const isSub = subKey ? isSubFlag(r[subKey]) : false;
+      if (!isSub && !seenMain.has(up)) {
+        seenMain.add(up);
+        mainList.push({ code, name });
+      }
+    }
+
+    const chosen = mainList.length > 0 ? mainList : allList;
+    chosen.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+
+    return { success: true, data: chosen };
   } catch (error) {
     console.error("Locations Action Error:", error);
     return actionError(error);
@@ -749,51 +792,7 @@ export async function getLocationsAction() {
 // (Performance Report location tabs + Compare mode)
 // ============================================================
 export async function getMainLocationsAction() {
-  try {
-    await requireSession();
-
-    if (!isDbConfigured()) {
-      return {
-        success: false,
-        error: "Database not configured (DB_* env vars missing)",
-      };
-    }
-    const pool = await getPool();
-    const locCols = await viewColumnsGeneric(pool, "Tbl_LocationMaster");
-    const lcCol = pickCol(locCols, ["LocCode", "Code", "Loc"]) ?? "LocCode";
-    const ldCol = pickCol(locCols, ["LocDes", "LocName", "Description"]);
-    const subCol = pickCol(locCols, [
-      "SubLoc",
-      "SUBLOC",
-      "IsSubLoc",
-      "SubLocation",
-      "Sub_Loc",
-    ]);
-
-    const res = await pool.request().query(`
-      SELECT
-        LTRIM(RTRIM([${lcCol}])) AS code,
-        ${
-          ldCol
-            ? `ISNULL(NULLIF(LTRIM(RTRIM([${ldCol}])), ''), LTRIM(RTRIM([${lcCol}])))`
-            : `LTRIM(RTRIM([${lcCol}]))`
-        } AS name
-      FROM dbo.Tbl_LocationMaster WITH (NOLOCK)
-      ${
-        subCol
-          ? `WHERE ISNULL(LTRIM(RTRIM(CAST([${subCol}] AS varchar(20)))), '0') IN ('0', 'false', 'False', 'FALSE', 'N', 'n', '')`
-          : ""
-      }
-      ORDER BY LTRIM(RTRIM([${lcCol}]));
-    `);
-    return {
-      success: true,
-      data: res.recordset as { code: string; name: string }[],
-    };
-  } catch (error) {
-    console.error("Main Locations Action Error:", error);
-    return actionError(error);
-  }
+  return getLocationsAction();
 }
 
 // ============================================================

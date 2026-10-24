@@ -8,7 +8,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import DateRangeModal, { type DateRangeFilterSpec } from "./DateRangeModal";
-import { IconFileText } from "./reports/ReportIcons";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 
 /* ── Icons ── */
@@ -335,29 +334,54 @@ const SHELL_CSS = `
   .sh-group-btn.row-mode:hover { color:#45301D; }
   .sh-group-btn.row-mode.active { color:#684830; }
 
+  .sh-cat-block { margin-top:6px; }
+
   .sh-cat-btn {
-    width:100%; border:none; background:transparent; cursor:pointer;
-    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600;
+    width:100%;
+    border:1px solid #E2D2BA;
+    background:#F3E8D8;
+    cursor:pointer;
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:700;
+    letter-spacing:0.15px;
     display:flex; align-items:center; justify-content:space-between;
-    height:34px; border-radius:7px; padding:0 10px 0 26px;
-    color:rgba(69,48,29,0.66);
-    transition:background 0.13s,color 0.13s;
+    height:34px; border-radius:8px; padding:0 10px 0 12px;
+    color:#45301D;
+    transition:all 0.14s ease;
     text-align:left;
   }
-  .sh-cat-btn:hover { background:rgba(104,72,48,0.07); color:#45301D; }
+  .sh-cat-btn:hover { background:#EADBC5; border-color:#D2BC9C; color:#382514; }
+  .sh-cat-btn.has-active {
+    background:linear-gradient(135deg,#EFE1CC 0%,#E7D4B8 100%);
+    border-color:#C7AE8B;
+    color:#382514;
+    box-shadow:inset 3px 0 0 #684830;
+  }
+
+  .sh-leaf-list {
+    display:flex; flex-direction:column; gap:2px;
+    padding:4px 0 3px 10px;
+    margin-left:8px;
+    border-left:1.5px solid #E6D8C3;
+  }
 
   .sh-leaf-btn {
     width:100%; border:none; background:transparent; cursor:pointer;
     font-family:'Inter',sans-serif; font-size:12px; font-weight:500;
-    display:flex; align-items:center; gap:9px;
-    height:34px; border-radius:8px;
-    padding:0 10px 0 12px;
+    display:flex; align-items:center;
+    min-height:31px; border-radius:7px;
+    padding:5px 10px;
     color:#6B543E;
     transition:background 0.13s,color 0.13s;
     text-align:left;
+    line-height:1.25;
   }
-  .sh-leaf-btn:hover { background:rgba(104,72,48,0.07); color:#45301D; }
-  .sh-leaf-btn.active { background:rgba(104,72,48,0.09); color:#684830; }
+  .sh-leaf-btn:hover { background:rgba(104,72,48,0.08); color:#45301D; }
+  .sh-leaf-btn.active {
+    background:linear-gradient(135deg,#45301D 0%,#684830 100%);
+    color:#ffffff;
+    font-weight:600;
+    box-shadow:0 2px 6px rgba(69,48,29,0.18);
+  }
 
   .sh-children { overflow:hidden; transition:max-height 0.28s cubic-bezier(.4,0,.2,1), opacity 0.22s ease; }
 
@@ -510,6 +534,27 @@ export default function AppShell({
     filter?: DateRangeFilterSpec;
   } | null>(null);
 
+  // Auto-expand the category containing the currently active report
+  useEffect(() => {
+    if (!pathname.startsWith("/reports/")) return;
+    const reportsNav = NAV.find((n) => n.key === "reports");
+    if (!reportsNav?.children) return;
+    for (const cat of reportsNav.children) {
+      if (
+        cat.children.some(
+          (leaf) => leaf.reportId && pathname === `/reports/${leaf.reportId}`
+        )
+      ) {
+        setExpanded((prev) =>
+          prev.reports && prev[cat.key]
+            ? prev
+            : { ...prev, reports: true, [cat.key]: true }
+        );
+        break;
+      }
+    }
+  }, [pathname]);
+
   useEffect(() => {
     if (currentUser) {
       setUserInfo(currentUser);
@@ -557,7 +602,7 @@ export default function AppShell({
   }
 
   /* ─────────── DESKTOP SIDEBAR ─────────── */
-  const W = open ? 216 : 64;
+  const W = open ? 232 : 64;
 
   const sidebar = (
     <aside
@@ -687,7 +732,7 @@ export default function AppShell({
                   className="sh-children"
                   style={{
                     maxHeight: isExpanded
-                      ? `${item.children.length * 320}px`
+                      ? `${item.children.length * 420}px`
                       : "0px",
                     opacity: isExpanded ? 1 : 0,
                   }}
@@ -695,106 +740,79 @@ export default function AppShell({
                   <div style={{ paddingBottom: 4 }}>
                     {item.children.map((cat: Category) => {
                       const catExpanded = !!expanded[cat.key];
+                      const hasActiveLeaf = cat.children.some(
+                        (leaf) =>
+                          leaf.reportId != null &&
+                          pathname === `/reports/${leaf.reportId}`
+                      );
                       return (
-                        <div key={cat.key}>
+                        <div key={cat.key} className="sh-cat-block">
                           <button
-                            className="sh-cat-btn"
+                            className={`sh-cat-btn ${hasActiveLeaf ? "has-active" : ""}`}
                             onClick={() => toggle(cat.key)}
                           >
                             <span
                               style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
                               }}
                             >
-                              <span
-                                style={{
-                                  width: 4,
-                                  height: 4,
-                                  borderRadius: "50%",
-                                  background: "rgba(104,72,48,0.30)",
-                                  flexShrink: 0,
-                                }}
-                              />
-                              <span style={{ whiteSpace: "nowrap" }}>
-                                {cat.label}
-                              </span>
+                              {cat.label}
                             </span>
                             <span
                               style={{
                                 display: "flex",
                                 alignItems: "center",
-                                opacity: 0.45,
+                                opacity: 0.65,
+                                flexShrink: 0,
                               }}
                             >
                               {catExpanded ? <IChevDown /> : <IChevRight />}
                             </span>
                           </button>
 
-                          {/* Leaves */}
+                          {/* Leaves (clean text rows without document icons) */}
                           <div
                             className="sh-children"
                             style={{
                               maxHeight: catExpanded
-                                ? `${cat.children.length * 36}px`
+                                ? `${cat.children.length * 42 + 12}px`
                                 : "0px",
                               opacity: catExpanded ? 1 : 0,
                             }}
                           >
-                            {cat.children.map((leaf) => {
-                              const active =
-                                leaf.reportId != null &&
-                                pathname === `/reports/${leaf.reportId}`;
-                              return (
-                                <button
-                                  key={leaf.key}
-                                  className={`sh-leaf-btn ${active ? "active" : ""}`}
-                                  onClick={() =>
-                                    openReport(leaf.label, leaf.reportId)
-                                  }
-                                  title={
-                                    leaf.reportId
-                                      ? leaf.label
-                                      : `${leaf.label} (coming soon)`
-                                  }
-                                >
-                                  <span
-                                    style={{
-                                      width: 21,
-                                      height: 21,
-                                      borderRadius: 6,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      flexShrink: 0,
-                                      border: `1px solid ${
-                                        active
-                                          ? "rgba(104,72,48,0.35)"
-                                          : "rgba(104,72,48,0.18)"
-                                      }`,
-                                      background: active
-                                        ? "rgba(104,72,48,0.10)"
-                                        : "rgba(104,72,48,0.05)",
-                                      color: active
-                                        ? "#684830"
-                                        : "#6B543E",
-                                    }}
+                            <div className="sh-leaf-list">
+                              {cat.children.map((leaf) => {
+                                const active =
+                                  leaf.reportId != null &&
+                                  pathname === `/reports/${leaf.reportId}`;
+                                return (
+                                  <button
+                                    key={leaf.key}
+                                    className={`sh-leaf-btn ${active ? "active" : ""}`}
+                                    onClick={() =>
+                                      openReport(leaf.label, leaf.reportId)
+                                    }
+                                    title={
+                                      leaf.reportId
+                                        ? leaf.label
+                                        : `${leaf.label} (coming soon)`
+                                    }
                                   >
-                                    <IconFileText size={11} strokeWidth={2} />
-                                  </span>
-                                  <span
-                                    style={{
-                                      whiteSpace: "nowrap",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                    }}
-                                  >
-                                    {leaf.label}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                                    <span
+                                      style={{
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                      }}
+                                    >
+                                      {leaf.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       );

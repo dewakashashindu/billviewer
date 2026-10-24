@@ -186,6 +186,13 @@ export default function ReportToolbar({
     }
   }, [zoom]);
 
+  // Close share menu automatically if pdfDocument disappears (e.g. empty data)
+  useEffect(() => {
+    if (!pdfDocument && shareOpen) {
+      setShareOpen(false);
+    }
+  }, [pdfDocument, shareOpen]);
+
   // outside click — share menu close
   useEffect(() => {
     if (!shareOpen) return;

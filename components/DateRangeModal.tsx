@@ -256,7 +256,7 @@ export default function DateRangeModal({
           </div>
         ) : (
           <div style={{ padding: "18px 20px 20px" }}>
-            {/* Presets */}
+            {/* Presets — highlight whichever preset matches selected dates */}
             <div
               style={{
                 display: "flex",
@@ -265,29 +265,39 @@ export default function DateRangeModal({
                 marginBottom: 16,
               }}
             >
-              {presets.map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() => {
-                    const [f, t] = p.get();
-                    setFrom(f);
-                    setTo(t);
-                    setErr(null);
-                  }}
-                  style={{
-                    border: "1px solid #E4D6BF",
-                    background: "#FCF7F3",
-                    color: "#684830",
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    padding: "6px 11px",
-                    borderRadius: 999,
-                    cursor: "pointer",
-                  }}
-                >
-                  {p.label}
-                </button>
-              ))}
+              {presets.map((p) => {
+                const [pf, pt] = p.get();
+                const active = isPerf ? pf === from : pf === from && pt === to;
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => {
+                      setFrom(pf);
+                      setTo(isPerf ? pf : pt);
+                      setErr(null);
+                    }}
+                    style={{
+                      border: active ? "1px solid transparent" : "1px solid #E4D6BF",
+                      background: active
+                        ? "linear-gradient(135deg,#45301D 0%,#684830 100%)"
+                        : "#FCF7F3",
+                      color: active ? "#ffffff" : "#684830",
+                      fontSize: 11.5,
+                      fontWeight: active ? 700 : 600,
+                      padding: "6px 12px",
+                      borderRadius: 999,
+                      cursor: "pointer",
+                      boxShadow: active
+                        ? "0 2px 6px rgba(69,48,29,0.22)"
+                        : "none",
+                      transition: "all 0.14s ease",
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Location (hidden for Performance Report — location tabs are inside the report) */}
@@ -362,6 +372,7 @@ export default function DateRangeModal({
                     cursor: "pointer",
                   }}
                 >
+                  <option value="">All {filter.label}s</option>
                   {filter.options.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
