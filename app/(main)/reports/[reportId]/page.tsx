@@ -280,14 +280,13 @@ function ReportFilterBar({
     <div style={{ padding: "12px 24px 0", fontFamily: "Inter, sans-serif" }}>
       <div
         style={{
-          padding: "10px 14px",
+          padding: "11px 14px",
           background: "#FFFFFF",
           border: "1px solid #E4D6BF",
           borderRadius: 12,
           display: "flex",
-          alignItems: "center",
-          gap: 16,
-          flexWrap: "wrap",
+          flexDirection: "column",
+          gap: 10,
           boxShadow: "0 1px 3px rgba(114,86,60,0.04)",
         }}
       >
@@ -327,10 +326,9 @@ function ReportFilterBar({
         {locations.length > 0 && extraFilter && (
           <div
             style={{
-              width: 1,
-              height: 24,
-              background: "#E4D6BF",
-              flexShrink: 0,
+              width: "100%",
+              height: 1,
+              background: "#EFE5D6",
             }}
           />
         )}

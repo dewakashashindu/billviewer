@@ -318,108 +318,163 @@ const SHELL_CSS = `
   .sh-grip:hover { background:linear-gradient(180deg,#907860 0%,#45301D 100%); width:15px; }
   .sh-grip-line { width:5px; height:1.5px; border-radius:99px; background:rgba(255,255,255,0.5); }
 
+  /* Level 1 — Main Topics (Light Brown Highlighted!) */
   .sh-group-btn {
-    width:100%; border:none; background:transparent; cursor:pointer;
+    width:100%; cursor:pointer;
     font-family:'Inter',sans-serif;
     display:flex; align-items:center;
     border-radius:9px;
-    transition:background 0.15s,color 0.15s;
+    transition:background 0.15s ease,border-color 0.15s ease,color 0.15s ease;
   }
-  .sh-group-btn:hover { background:rgba(104,72,48,0.07); }
-  .sh-group-btn.active { background:rgba(104,72,48,0.12); }
-  .sh-group-btn.icon-mode { width:44px; height:44px; justify-content:center; padding:0; color:rgba(69,48,29,0.55); }
-  .sh-group-btn.icon-mode:hover { color:#45301D; }
-  .sh-group-btn.icon-mode.active { color:#684830; }
-  .sh-group-btn.row-mode { height:40px; padding:0 10px; gap:10px; color:rgba(69,48,29,0.62); }
-  .sh-group-btn.row-mode:hover { color:#45301D; }
-  .sh-group-btn.row-mode.active { color:#684830; }
-
-  .sh-cat-block { margin-top:6px; }
-
-  .sh-cat-btn {
-    width:100%;
-    border:1px solid #E2D2BA;
-    background:#F3E8D8;
-    cursor:pointer;
-    font-family:'Inter',sans-serif; font-size:12px; font-weight:700;
-    letter-spacing:0.15px;
-    display:flex; align-items:center; justify-content:space-between;
-    height:34px; border-radius:8px; padding:0 10px 0 12px;
-    color:#45301D;
-    transition:all 0.14s ease;
-    text-align:left;
+  .sh-group-btn.icon-mode {
+    width:44px; height:44px; justify-content:center; padding:0;
+    border:1px solid #DECBB0; background:#F1E5D4; color:#45301D;
   }
-  .sh-cat-btn:hover { background:#EADBC5; border-color:#D2BC9C; color:#382514; }
-  .sh-cat-btn.has-active {
-    background:linear-gradient(135deg,#EFE1CC 0%,#E7D4B8 100%);
-    border-color:#C7AE8B;
-    color:#382514;
+  .sh-group-btn.icon-mode:hover { background:#EAD9C2; border-color:#CEB696; }
+  .sh-group-btn.icon-mode.active {
+    background:#E6D3B8; border-color:#C5AA87; color:#352211;
     box-shadow:inset 3px 0 0 #684830;
   }
+  .sh-group-btn.row-mode {
+    height:39px; padding:0 12px; gap:10px;
+    border:1px solid #DECBB0;
+    background:#F1E5D4;
+    color:#45301D;
+    font-weight:700;
+  }
+  .sh-group-btn.row-mode:hover {
+    background:#EAD9C2;
+    border-color:#CEB696;
+    color:#352211;
+  }
+  .sh-group-btn.row-mode.active {
+    background:#E6D3B8;
+    border-color:#C5AA87;
+    color:#352211;
+    box-shadow:inset 3.5px 0 0 #684830;
+  }
 
-  .sh-leaf-list {
+  /* Level 2 — Sub Topics (NO background highlight — indented tree + bold text) */
+  .sh-lvl2-list {
+    margin:4px 0 4px 14px;
+    padding-left:10px;
+    border-left:1.5px solid #DFCEB7;
     display:flex; flex-direction:column; gap:2px;
-    padding:4px 0 3px 10px;
-    margin-left:8px;
-    border-left:1.5px solid #E6D8C3;
   }
-
-  .sh-leaf-btn {
-    width:100%; border:none; background:transparent; cursor:pointer;
-    font-family:'Inter',sans-serif; font-size:12px; font-weight:500;
-    display:flex; align-items:center;
-    min-height:31px; border-radius:7px;
-    padding:5px 10px;
-    color:#6B543E;
-    transition:background 0.13s,color 0.13s;
+  .sh-cat-btn {
+    width:100%;
+    border:none;
+    border-bottom:1px dashed rgba(196,173,143,0.45);
+    background:transparent;
+    cursor:pointer;
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:700;
+    display:flex; align-items:center; gap:6px;
+    min-height:31px; padding:5px 6px 5px 2px;
+    color:#5C422B;
+    transition:color 0.13s ease;
     text-align:left;
-    line-height:1.25;
   }
-  .sh-leaf-btn:hover { background:rgba(104,72,48,0.08); color:#45301D; }
+  .sh-cat-btn:hover { color:#2E1E0F; }
+  .sh-cat-btn.has-active { color:#352211; }
+  .sh-cat-chev {
+    width:14px; display:inline-flex; align-items:center; justify-content:center;
+    color:#8A6E53; flex-shrink:0;
+  }
+  .sh-cat-btn.has-active .sh-cat-chev { color:#45301D; }
+
+  /* Level 3 — Report Names (NO background highlight — tree branch tick + regular text) */
+  .sh-lvl3-list {
+    margin:2px 0 6px 7px;
+    padding-left:13px;
+    border-left:1.5px solid #E7DAC7;
+    display:flex; flex-direction:column; gap:1px;
+  }
+  .sh-leaf-btn {
+    position:relative;
+    width:100%; border:none; background:transparent; cursor:pointer;
+    font-family:'Inter',sans-serif; font-size:11.5px; font-weight:400;
+    display:flex; align-items:center; gap:5px;
+    padding:5.5px 6px;
+    color:#7D654E;
+    transition:color 0.13s ease;
+    text-align:left;
+    line-height:1.3;
+  }
+  .sh-leaf-btn::before {
+    content:"";
+    position:absolute;
+    left:-13px;
+    top:50%;
+    width:10px;
+    height:1.5px;
+    background:#E7DAC7;
+  }
+  .sh-leaf-btn:hover { color:#352211; }
   .sh-leaf-btn.active {
-    background:linear-gradient(135deg,#45301D 0%,#684830 100%);
-    color:#ffffff;
-    font-weight:600;
-    box-shadow:0 2px 6px rgba(69,48,29,0.18);
+    color:#352211;
+    font-weight:700;
+  }
+  .sh-leaf-btn.active::before {
+    background:#684830;
+    height:2px;
   }
 
   .sh-children { overflow:hidden; transition:max-height 0.28s cubic-bezier(.4,0,.2,1), opacity 0.22s ease; }
 
   .sh-desktop { display:flex; flex-direction:column; }
 
-  .sh-mob-nav {
+  /* Mobile Top 3-Bars Hamburger Button (hidden on desktop) */
+  .sh-mob-hamburger {
     display:none;
-    position:fixed; bottom:0; left:0; right:0; z-index:100;
+    width:36px; height:36px;
+    border-radius:9px;
+    border:1px solid #DECBB0;
+    background:#ffffff;
+    color:#45301D;
+    align-items:center; justify-content:center;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .sh-mob-hamburger:hover { background:#F4EAD9; }
+
+  /* Mobile Slide-Out Sidebar Drawer (NO bottom bar!) */
+  .sh-mob-backdrop {
+    display:none;
+    position:fixed; inset:0; z-index:110;
+    background:rgba(44,30,18,0.46);
+    opacity:0; pointer-events:none;
+    transition:opacity 0.22s ease;
+  }
+  .sh-mob-backdrop.open { opacity:1; pointer-events:auto; }
+
+  .sh-mob-drawer {
+    display:none;
+    position:fixed; top:0; left:0; bottom:0; z-index:120;
+    width:82vw; max-width:300px;
     background:#FCF7F3;
-    height:64px;
-    align-items:center; justify-content:center;
-    gap:8px;
-    border-top:1px solid #E4D6BF;
-    box-shadow:0 -4px 20px rgba(104,72,48,0.15);
+    border-right:1px solid #E4D6BF;
+    box-shadow:10px 0 32px rgba(44,30,18,0.22);
+    flex-direction:column;
+    transform:translateX(-102%);
+    transition:transform 0.25s cubic-bezier(0.22,1,0.36,1);
   }
-  .sh-mob-btn {
-    display:flex; flex-direction:column;
-    align-items:center; justify-content:center;
-    gap:3px; padding:6px 22px;
-    border:none; background:transparent;
-    color:rgba(69,48,29,0.55); cursor:pointer;
-    border-radius:8px; transition:all 0.18s;
-  }
-  .sh-mob-btn.active { color:#fff; background:#684830; }
-  .sh-mob-lbl { font-size:9px; font-weight:600; letter-spacing:0.02em; font-family:'Inter',sans-serif; white-space:nowrap; }
+  .sh-mob-drawer.open { transform:translateX(0); }
 
   @media(max-width:767px) {
     .sh-desktop { display:none !important; }
-    .sh-mob-nav { display:flex !important; }
-    .sh-main-body { padding-bottom:72px !important; }
+    .sh-mob-hamburger { display:inline-flex !important; }
+    .sh-mob-backdrop { display:block !important; }
+    .sh-mob-drawer { display:flex !important; }
   }
 `;
 
-/* ── UserBar — content area top-right: logged-in user + sign-out ── */
+/* ── UserBar — mobile 3-bars button on left + logged-in user & sign-out on right ── */
 function UserBar({
   user,
+  onOpenMobileMenu,
 }: {
   user: ShellUserInfo | null;
+  onOpenMobileMenu: () => void;
 }) {
   const router = useRouter();
   const name = user?.userName || user?.loginName || "";
@@ -438,75 +493,101 @@ function UserBar({
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "flex-end",
+        justifyContent: "space-between",
         gap: 10,
         padding: "10px 18px 0",
         flexShrink: 0,
       }}
     >
-      {name && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <span
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg,#684830 0%,#45301D 100%)",
-              color: "#fff",
-              fontSize: 11,
-              fontWeight: 800,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              textTransform: "uppercase",
-            }}
+      <div>
+        <button
+          type="button"
+          className="sh-mob-hamburger"
+          onClick={onOpenMobileMenu}
+          title="Open menu"
+          aria-label="Open menu"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
           >
-            {name.trim().charAt(0) || "U"}
-          </span>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#684830" }}>
-            {name}
-          </span>
-          {user && (
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {name && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <span
               style={{
-                fontSize: 10,
-                fontWeight: 700,
-                padding: "2px 7px",
-                borderRadius: 999,
-                background: user.isAdmin ? "#F0E8D8" : "#F8F4EE",
-                border: "1px solid #E4D6BF",
-                color: user.isAdmin ? "#45301D" : "#6B543E",
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg,#684830 0%,#45301D 100%)",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 800,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 textTransform: "uppercase",
-                letterSpacing: 0.3,
               }}
             >
-              {user.isAdmin ? "Admin" : "User"}
+              {name.trim().charAt(0) || "U"}
             </span>
-          )}
-        </span>
-      )}
-      <button
-        onClick={logout}
-        title="Sign out"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 30,
-          height: 30,
-          border: "1px solid #E4D6BF",
-          borderRadius: 8,
-          background: "#fff",
-          color: "#6B543E",
-          cursor: "pointer",
-        }}
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          <polyline points="16 17 21 12 16 7" />
-          <line x1="21" y1="12" x2="9" y2="12" />
-        </svg>
-      </button>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#684830" }}>
+              {name}
+            </span>
+            {user && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "2px 7px",
+                  borderRadius: 999,
+                  background: user.isAdmin ? "#F0E8D8" : "#F8F4EE",
+                  border: "1px solid #E4D6BF",
+                  color: user.isAdmin ? "#45301D" : "#6B543E",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.3,
+                }}
+              >
+                {user.isAdmin ? "Admin" : "User"}
+              </span>
+            )}
+          </span>
+        )}
+        <button
+          onClick={logout}
+          title="Sign out"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 30,
+            height: 30,
+            border: "1px solid #E4D6BF",
+            borderRadius: 8,
+            background: "#fff",
+            color: "#6B543E",
+            cursor: "pointer",
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
@@ -524,6 +605,7 @@ export default function AppShell({
     currentUser ?? null
   );
   const [open, setOpen] = useState(true);
+  const [mobOpen, setMobOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     reports: true,
     "cat-performance": true,
@@ -533,6 +615,11 @@ export default function AppShell({
     reportId?: string;
     filter?: DateRangeFilterSpec;
   } | null>(null);
+
+  // Close mobile drawer automatically on route change
+  useEffect(() => {
+    setMobOpen(false);
+  }, [pathname]);
 
   // Auto-expand the category containing the currently active report
   useEffect(() => {
@@ -590,6 +677,7 @@ export default function AppShell({
   }
 
   function openReport(label: string, reportId?: string) {
+    setMobOpen(false);
     if (!reportId) {
       setModal({ title: label }); // coming-soon mode
       return;
@@ -601,8 +689,207 @@ export default function AppShell({
     });
   }
 
+  /* ─────────── SHARED 3-LEVEL TREE RENDERER (Desktop + Mobile Drawer) ─────────── */
+  function renderNavTree(fullMode: boolean) {
+    return (
+      <div
+        className="sh-nav-scroll"
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+          padding: fullMode ? "12px 10px 26px" : "10px 0",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: fullMode ? "stretch" : "center",
+          gap: 7,
+        }}
+      >
+        {visibleNav.map((item) => {
+          const isDirect = !item.children;
+          const activeItem = isDirect
+            ? pathname.startsWith(item.path ?? "#")
+            : pathname.startsWith("/reports");
+          const isExpanded = !!expanded[item.key];
+
+          if (!fullMode) {
+            return (
+              <button
+                key={item.key}
+                title={item.label}
+                className={`sh-group-btn icon-mode ${activeItem ? "active" : ""}`}
+                onClick={() => {
+                  if (isDirect && item.path) router.push(item.path);
+                  else {
+                    setOpen(true);
+                    setExpanded((p) => ({ ...p, [item.key]: true }));
+                  }
+                }}
+              >
+                {item.icon}
+              </button>
+            );
+          }
+
+          return (
+            <div key={item.key}>
+              {/* Level 1 — Main Topic (Light Brown Highlighted!) */}
+              <button
+                className={`sh-group-btn row-mode ${activeItem ? "active" : ""}`}
+                onClick={() => {
+                  if (isDirect && item.path) {
+                    setMobOpen(false);
+                    router.push(item.path);
+                  } else {
+                    toggle(item.key);
+                  }
+                }}
+                style={{ justifyContent: "space-between" }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      width: 18,
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.icon}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </span>
+                {!isDirect && (
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      opacity: 0.72,
+                    }}
+                  >
+                    {isExpanded ? <IChevDown /> : <IChevRight />}
+                  </span>
+                )}
+              </button>
+
+              {/* Level 2 — Sub Topics (NO background highlight — indented tree + bold text) */}
+              {!isDirect && item.children && (
+                <div
+                  className="sh-children"
+                  style={{
+                    maxHeight: isExpanded
+                      ? `${item.children.length * 460}px`
+                      : "0px",
+                    opacity: isExpanded ? 1 : 0,
+                  }}
+                >
+                  <div className="sh-lvl2-list">
+                    {item.children.map((cat: Category) => {
+                      const catExpanded = !!expanded[cat.key];
+                      const hasActiveLeaf = cat.children.some(
+                        (leaf) =>
+                          leaf.reportId != null &&
+                          pathname === `/reports/${leaf.reportId}`
+                      );
+                      return (
+                        <div key={cat.key}>
+                          <button
+                            className={`sh-cat-btn ${hasActiveLeaf ? "has-active" : ""}`}
+                            onClick={() => toggle(cat.key)}
+                          >
+                            <span className="sh-cat-chev">
+                              {catExpanded ? <IChevDown /> : <IChevRight />}
+                            </span>
+                            <span
+                              style={{
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {cat.label}
+                            </span>
+                          </button>
+
+                          {/* Level 3 — Report Names (NO background highlight — tree branch tick + regular text) */}
+                          <div
+                            className="sh-children"
+                            style={{
+                              maxHeight: catExpanded
+                                ? `${cat.children.length * 42 + 12}px`
+                                : "0px",
+                              opacity: catExpanded ? 1 : 0,
+                            }}
+                          >
+                            <div className="sh-lvl3-list">
+                              {cat.children.map((leaf) => {
+                                const active =
+                                  leaf.reportId != null &&
+                                  pathname === `/reports/${leaf.reportId}`;
+                                return (
+                                  <button
+                                    key={leaf.key}
+                                    className={`sh-leaf-btn ${active ? "active" : ""}`}
+                                    onClick={() =>
+                                      openReport(leaf.label, leaf.reportId)
+                                    }
+                                    title={
+                                      leaf.reportId
+                                        ? leaf.label
+                                        : `${leaf.label} (coming soon)`
+                                    }
+                                  >
+                                    {active && (
+                                      <span
+                                        style={{
+                                          color: "#684830",
+                                          fontWeight: 900,
+                                          fontSize: 12,
+                                          lineHeight: 1,
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        ›
+                                      </span>
+                                    )}
+                                    <span
+                                      style={{
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                      }}
+                                    >
+                                      {leaf.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   /* ─────────── DESKTOP SIDEBAR ─────────── */
-  const W = open ? 232 : 64;
+  const W = open ? 248 : 64;
 
   const sidebar = (
     <aside
@@ -646,184 +933,7 @@ export default function AppShell({
         />
       </div>
 
-      {/* Nav */}
-      <div
-        className="sh-nav-scroll"
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          overflowX: "hidden",
-          padding: open ? "10px 8px" : "10px 0",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: open ? "stretch" : "center",
-          gap: 1,
-        }}
-      >
-        {visibleNav.map((item) => {
-          const isDirect = !item.children;
-          const activeItem = isDirect && pathname.startsWith(item.path ?? "#");
-          const isExpanded = !!expanded[item.key];
-
-          if (!open) {
-            return (
-              <button
-                key={item.key}
-                title={item.label}
-                className={`sh-group-btn icon-mode ${activeItem ? "active" : ""}`}
-                onClick={() => {
-                  if (isDirect && item.path) router.push(item.path);
-                  else {
-                    setOpen(true);
-                    setExpanded({ [item.key]: true });
-                  }
-                }}
-              >
-                {item.icon}
-              </button>
-            );
-          }
-
-          return (
-            <div key={item.key}>
-              {/* Top-level button */}
-              <button
-                className={`sh-group-btn row-mode ${activeItem ? "active" : ""}`}
-                onClick={() => {
-                  if (isDirect && item.path) router.push(item.path);
-                  else toggle(item.key);
-                }}
-                style={{ justifyContent: "space-between" }}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      width: 18,
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.icon}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                </span>
-                {!isDirect && (
-                  <span
-                    style={{ display: "flex", alignItems: "center", opacity: 0.5 }}
-                  >
-                    {isExpanded ? <IChevDown /> : <IChevRight />}
-                  </span>
-                )}
-              </button>
-
-              {/* Categories */}
-              {!isDirect && item.children && (
-                <div
-                  className="sh-children"
-                  style={{
-                    maxHeight: isExpanded
-                      ? `${item.children.length * 420}px`
-                      : "0px",
-                    opacity: isExpanded ? 1 : 0,
-                  }}
-                >
-                  <div style={{ paddingBottom: 4 }}>
-                    {item.children.map((cat: Category) => {
-                      const catExpanded = !!expanded[cat.key];
-                      const hasActiveLeaf = cat.children.some(
-                        (leaf) =>
-                          leaf.reportId != null &&
-                          pathname === `/reports/${leaf.reportId}`
-                      );
-                      return (
-                        <div key={cat.key} className="sh-cat-block">
-                          <button
-                            className={`sh-cat-btn ${hasActiveLeaf ? "has-active" : ""}`}
-                            onClick={() => toggle(cat.key)}
-                          >
-                            <span
-                              style={{
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {cat.label}
-                            </span>
-                            <span
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                opacity: 0.65,
-                                flexShrink: 0,
-                              }}
-                            >
-                              {catExpanded ? <IChevDown /> : <IChevRight />}
-                            </span>
-                          </button>
-
-                          {/* Leaves (clean text rows without document icons) */}
-                          <div
-                            className="sh-children"
-                            style={{
-                              maxHeight: catExpanded
-                                ? `${cat.children.length * 42 + 12}px`
-                                : "0px",
-                              opacity: catExpanded ? 1 : 0,
-                            }}
-                          >
-                            <div className="sh-leaf-list">
-                              {cat.children.map((leaf) => {
-                                const active =
-                                  leaf.reportId != null &&
-                                  pathname === `/reports/${leaf.reportId}`;
-                                return (
-                                  <button
-                                    key={leaf.key}
-                                    className={`sh-leaf-btn ${active ? "active" : ""}`}
-                                    onClick={() =>
-                                      openReport(leaf.label, leaf.reportId)
-                                    }
-                                    title={
-                                      leaf.reportId
-                                        ? leaf.label
-                                        : `${leaf.label} (coming soon)`
-                                    }
-                                  >
-                                    <span
-                                      style={{
-                                        whiteSpace: "nowrap",
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                      }}
-                                    >
-                                      {leaf.label}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {renderNavTree(open)}
 
       {/* Grip */}
       <div className="sh-grip" onClick={() => setOpen((o) => !o)}>
@@ -834,29 +944,57 @@ export default function AppShell({
     </aside>
   );
 
-  /* ─────────── MOBILE BOTTOM NAV ─────────── */
-  const mobileNav = (
-    <nav className="sh-mob-nav">
-      {visibleNav.map((item) => {
-        const active = item.path
-          ? pathname.startsWith(item.path)
-          : pathname.startsWith("/reports");
-        return (
+  /* ─────────── MOBILE SLIDE-OUT DRAWER (Top 3-Bars Trigger ONLY — NO Bottom Bar!) ─────────── */
+  const mobileDrawer = (
+    <>
+      <div
+        className={`sh-mob-backdrop ${mobOpen ? "open" : ""}`}
+        onClick={() => setMobOpen(false)}
+      />
+      <aside className={`sh-mob-drawer ${mobOpen ? "open" : ""}`}>
+        <div
+          style={{
+            padding: "12px 14px 10px",
+            borderBottom: "1px solid #E4D6BF",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexShrink: 0,
+          }}
+        >
+          <Image
+            src="/millamirissa.png"
+            alt="Mila Mirissa"
+            width={120}
+            height={120}
+            style={{ objectFit: "contain", width: 88, height: "auto" }}
+          />
           <button
-            key={item.key}
-            className={`sh-mob-btn ${active ? "active" : ""}`}
-            onClick={() =>
-              item.path
-                ? router.push(item.path)
-                : openReport("Transaction Summary By Date", "transaction-summary")
-            }
+            type="button"
+            onClick={() => setMobOpen(false)}
+            aria-label="Close menu"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: "1px solid #E4D6BF",
+              background: "#ffffff",
+              color: "#45301D",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            {item.icon}
-            <span className="sh-mob-lbl">{item.label}</span>
+            ✕
           </button>
-        );
-      })}
-    </nav>
+        </div>
+
+        {renderNavTree(true)}
+      </aside>
+    </>
   );
 
   return (
@@ -864,9 +1002,9 @@ export default function AppShell({
       <style>{SHELL_CSS}</style>
 
       {sidebar}
-      {mobileNav}
+      {mobileDrawer}
 
-      {/* White content area */}
+      {/* Main content area */}
       <main
         className="sh-main-body"
         style={{
@@ -878,7 +1016,7 @@ export default function AppShell({
           flexDirection: "column",
         }}
       >
-        <UserBar user={userInfo} />
+        <UserBar user={userInfo} onOpenMobileMenu={() => setMobOpen(true)} />
         {children}
       </main>
 
