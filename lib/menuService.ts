@@ -638,22 +638,67 @@ async function generateOrderNo(
   return raw.length <= maxLen ? raw : raw.slice(-maxLen);
 }
 
-/** Check whether an invoice has already been settled/closed in POS. */
+/** Check whether an invoice has already been settled/closed in POS or is older than 1 hour. */
 async function isInvoiceSettled(
   tx: sql.Transaction,
   invoiceNo: string
 ): Promise<boolean> {
   const inv = s(invoiceNo);
   if (!inv) return true;
+
+  // Guard 0: If the invoice embeds YYYYMMDD (INV-YYYYMMDD-NNN) and even
+  // 23:59:59 of that Sri Lanka day was >= 1 hour ago, treat as expired.
+  const dateMatch = /^INV-(\d{4})(\d{2})(\d{2})-/i.exec(inv);
+  if (dateMatch) {
+    const latestPossibleMs = Date.parse(
+      `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T23:59:59+05:30`
+    );
+    if (
+      Number.isFinite(latestPossibleMs) &&
+      Date.now() - latestPossibleMs >= 60 * 60 * 1000
+    ) {
+      return true;
+    }
+  }
+
+  try {
+    const r0 = tx.request();
+    r0.input("inv", sql.VarChar(50), inv);
+    const res0 = await r0.query(`
+      SELECT TOP 1
+        CASE
+          WHEN ISNULL(IsPaid, 0) = 1 THEN 1
+          WHEN TxnDateTime < DATEADD(MINUTE, -60, DATEADD(MINUTE, 330, GETUTCDATE())) THEN 1
+          ELSE 0
+        END AS ExpiredOrPaid
+      FROM dbo.Tbl_HoldUpsCloudTempQR WITH (NOLOCK)
+      WHERE LTRIM(RTRIM(InvoiceNo)) = @inv
+      ORDER BY TxnDateTime ASC;
+    `);
+    if (res0.recordset.length && Number(res0.recordset[0].ExpiredOrPaid) === 1) {
+      return true;
+    }
+  } catch {
+    /* Tbl_HoldUpsCloudTempQR optional */
+  }
+
   try {
     const r1 = tx.request();
     r1.input("inv", sql.VarChar(50), inv);
     const res1 = await r1.query(`
-      SELECT TOP 1 1 AS Hit
+      SELECT TOP 1
+        CASE
+          WHEN ISNULL(IsPaid, 0) = 1 THEN 1
+          WHEN TxnDateTime < DATEADD(MINUTE, -60, DATEADD(MINUTE, 330, GETUTCDATE())) THEN 1
+          ELSE 0
+        END AS ExpiredOrPaid
       FROM dbo.Tbl_HoldUpsCloud WITH (NOLOCK)
-      WHERE LTRIM(RTRIM(InvoiceNo)) = @inv AND ISNULL(IsPaid, 0) = 1;
+      WHERE LTRIM(RTRIM(InvoiceNo)) = @inv
+      ORDER BY TxnDateTime ASC;
     `);
-    if (res1.recordset.length) return true;
+    if (res1.recordset.length && Number(res1.recordset[0].ExpiredOrPaid) === 1) {
+      return true;
+    }
   } catch {
     /* Tbl_HoldUpsCloud optional */
   }
@@ -866,7 +911,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         invoiceNo = await generateInvoiceNo(tx, invoiceMax, input.locCode);
       }
     } else {
-      // (a) Check pending rows still in Tbl_HoldUpsCloudTempQR
+      // (a) Check pending rows still in Tbl_HoldUpsCloudTempQR (within last 1 hour only)
       const q1 = tx.request();
       q1.input("table", sql.VarChar(20), input.tableNo);
       q1.input("loc", sql.VarChar(20), input.locCode);
@@ -876,13 +921,14 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
         WHERE LTRIM(RTRIM(TabelNo)) = @table
           AND (@loc = '' OR LTRIM(RTRIM(LocCode)) = @loc)
           AND ISNULL(IsPaid, 0) = 0
+          AND TxnDateTime >= DATEADD(MINUTE, -60, DATEADD(MINUTE, 330, GETUTCDATE()))
         ORDER BY TxnDateTime DESC, RowLine DESC;
       `);
       if (r1.recordset.length && s(r1.recordset[0].InvoiceNo)) {
         invoiceNo = s(r1.recordset[0].InvoiceNo);
       }
 
-      // (b) Check open hold-up bill synced by POS into Tbl_HoldUpsCloud (read-only)
+      // (b) Check open hold-up bill synced by POS into Tbl_HoldUpsCloud (within last 1 hour only)
       if (!invoiceNo) {
         try {
           const q2 = tx.request();
@@ -892,6 +938,7 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
             FROM dbo.Tbl_HoldUpsCloud WITH (NOLOCK)
             WHERE LTRIM(RTRIM(TabelNo)) = @table
               AND ISNULL(IsPaid, 0) = 0
+              AND TxnDateTime >= DATEADD(MINUTE, -60, DATEADD(MINUTE, 330, GETUTCDATE()))
             ORDER BY TxnDateTime DESC;
           `);
           if (r2.recordset.length && s(r2.recordset[0].InvoiceNo)) {
@@ -1089,7 +1136,7 @@ export async function getExistingBill(
   const byKey = new Map<string, ExistingBillLine>();
   let invoiceNo = "";
 
-  // 1) Open hold-up bill synced by POS in Tbl_HoldUpsCloud (if present)
+  // 1) Open hold-up bill synced by POS in Tbl_HoldUpsCloud (within last 1 hour only)
   try {
     const req1 = pool.request();
     req1.input("table", sql.VarChar(20), table);
@@ -1101,8 +1148,10 @@ export async function getExistingBill(
       FROM dbo.Tbl_HoldUpsCloud AS h WITH (NOLOCK)
       LEFT JOIN dbo.Tbl_MenuItems AS m WITH (NOLOCK)
         ON m.MenuItmId = h.ItemCode
-      WHERE LTRIM(RTRIM(h.TabelNo)) = @table AND ISNULL(h.IsPaid, 0) = 0
-      ORDER BY h.TxnDateTime, h.ItemCode;
+      WHERE LTRIM(RTRIM(h.TabelNo)) = @table
+        AND ISNULL(h.IsPaid, 0) = 0
+        AND h.TxnDateTime >= DATEADD(MINUTE, -60, DATEADD(MINUTE, 330, GETUTCDATE()))
+      ORDER BY h.TxnDateTime DESC, h.ItemCode;
     `);
     for (const r of res1.recordset) {
       if (!invoiceNo) invoiceNo = s(r.InvoiceNo);
@@ -1124,7 +1173,7 @@ export async function getExistingBill(
     /* Tbl_HoldUpsCloud optional */
   }
 
-  // 2) Pending QR lines still waiting in Tbl_HoldUpsCloudTempQR
+  // 2) Pending QR lines still waiting in Tbl_HoldUpsCloudTempQR (within last 1 hour only)
   try {
     const req2 = pool.request();
     req2.input("table", sql.VarChar(20), table);
@@ -1140,7 +1189,8 @@ export async function getExistingBill(
       WHERE LTRIM(RTRIM(q.TabelNo)) = @table
         AND (@loc = '' OR LTRIM(RTRIM(q.LocCode)) = @loc)
         AND ISNULL(q.IsPaid, 0) = 0
-      ORDER BY q.RowLine, q.TxnDateTime;
+        AND q.TxnDateTime >= DATEADD(MINUTE, -60, DATEADD(MINUTE, 330, GETUTCDATE()))
+      ORDER BY q.TxnDateTime DESC, q.RowLine;
     `);
     for (const r of res2.recordset) {
       if (!invoiceNo) invoiceNo = s(r.InvoiceNo);

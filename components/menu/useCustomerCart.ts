@@ -3,23 +3,29 @@
 // ============================================================
 // LOCATION: components/menu/useCustomerCart.ts
 //
-// The web twin of the Expo app's Menu Cart:
-//   • the table's already-ordered lines are READ-ONLY (baseline)
-//   • only the items the guest adds now are editable
-//   • confirm sends ONLY the additions (additive, same as
-//     apiClient.confirmCart in the app) so nothing is billed twice
-//   • the confirmed cart becomes the new baseline ("add more items")
-//
-// Storage: localStorage per table, so a reload never loses the cart.
+// Customer QR Cart with strict 1-Hour (60-minute) TTL:
+//   • Previous order items ("Already on bill" baseline), active
+//     InvoiceNo, and Guest details remain in localStorage ONLY for
+//     1 hour (ONE_HOUR_MS = 60 * 60 * 1000).
+//   • Within 1 hour: confirmed lines stay READ-ONLY (baseline) even
+//     after POS imports and deletes Tbl_HoldUpsCloudTempQR (~1 min),
+//     and newly added lines append to the same InvoiceNo.
+//   • At 1 hour (or for legacy entries without a savedAt timestamp):
+//     localStorage is automatically cleared and any subsequent order
+//     starts completely fresh with a new InvoiceNo.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { lineKey, type CartLine, type ConfirmResult, type ExistingLine, type MenuItem } from "./types";
 
+/** Previous order / localStorage retention window: strictly 1 hour. */
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
 interface CartStore {
   lines: CartLine[];
   baseline: Record<string, { qty: number; name: string; price: number; remark: string }>;
   invoiceNo: string;
+  savedAt: number;
 }
 
 export interface CartRow {
@@ -39,20 +45,155 @@ export interface CartRow {
 
 /** Guest details collected on the form between welcome and menu. */
 export interface GuestDetails {
-  /** Local guests (Tbl_HoldUpsCloud.LPax) — not used for takeaway. */
+  /** Local guests (Tbl_HoldUpsCloudTempQR.LPax) — not used for takeaway. */
   localPax: number;
-  /** Foreign guests (Tbl_HoldUpsCloud.FPax) — not used for takeaway. */
+  /** Foreign guests (Tbl_HoldUpsCloudTempQR.FPax) — not used for takeaway. */
   foreignPax: number;
-  /** Customer name (Tbl_HoldUpsCloud.CusName) — mandatory. */
+  /** Customer name (Tbl_HoldUpsCloudTempQR.CusName) — mandatory. */
   cusName: string;
-  /** Customer phone (Tbl_HoldUpsCloud.CusCode / lookup key) — mandatory. */
+  /** Customer phone (lookup key) — mandatory. */
   cusPhone: string;
   /** Tbl_CustomerMaster.CusCode when the phone is a known customer. */
   cusCode: string;
 }
 
+interface GuestStore extends GuestDetails {
+  savedAt: number;
+}
+
+const EMPTY_GUEST: GuestDetails = {
+  localPax: 0,
+  foreignPax: 0,
+  cusName: "",
+  cusPhone: "",
+  cusCode: "",
+};
+
 const guestStorageKey = (table: string, locCode = "") =>
   locCode ? `mnu-guest:v2:${locCode}:${table}` : `mnu-guest:v2:${table}`;
+
+const storageKey = (table: string, locCode = "") =>
+  locCode ? `mnu-cart:v1:${locCode}:${table}` : `mnu-cart:v1:${table}`;
+
+function isExpired(savedAt: unknown): boolean {
+  const ts = Number(savedAt);
+  if (!Number.isFinite(ts) || ts <= 0) return true;
+  return Date.now() - ts >= ONE_HOUR_MS;
+}
+
+/** Sweep all QR cart/guest keys in localStorage and delete any expired or legacy entries. */
+function purgeExpiredMenuStorage() {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (
+        k.startsWith("mnu-cart:") ||
+        k.startsWith("mnu-guest:") ||
+        k.startsWith("ord-cart:")
+      ) {
+        const raw = localStorage.getItem(k);
+        if (!raw) {
+          keysToRemove.push(k);
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(raw) as { savedAt?: unknown } | null;
+          if (!parsed || typeof parsed !== "object" || isExpired(parsed.savedAt)) {
+            keysToRemove.push(k);
+          }
+        } catch {
+          keysToRemove.push(k);
+        }
+      }
+    }
+    for (const k of keysToRemove) {
+      localStorage.removeItem(k);
+    }
+  } catch {
+    /* private mode / SSR */
+  }
+}
+
+function readStore(table: string, locCode = ""): CartStore | null {
+  if (!table) return null;
+  const key = storageKey(table, locCode);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CartStore> | null;
+    if (!parsed || !Array.isArray(parsed.lines) || isExpired(parsed.savedAt)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      lines: parsed.lines,
+      baseline:
+        parsed.baseline && typeof parsed.baseline === "object" ? parsed.baseline : {},
+      invoiceNo: typeof parsed.invoiceNo === "string" ? parsed.invoiceNo : "",
+      savedAt: Number(parsed.savedAt),
+    };
+  } catch {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+function writeStore(table: string, store: CartStore | null, locCode = "") {
+  if (!table) return;
+  const key = storageKey(table, locCode);
+  try {
+    if (!store) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(store));
+  } catch {
+    /* storage full / private mode — cart still works in memory */
+  }
+}
+
+function readGuestStore(table: string, locCode = ""): GuestStore | null {
+  if (!table) return null;
+  const key = guestStorageKey(table, locCode);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<GuestStore> | null;
+    if (!parsed || typeof parsed !== "object" || isExpired(parsed.savedAt)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      localPax: Math.max(0, Number(parsed.localPax) || 0),
+      foreignPax: Math.max(0, Number(parsed.foreignPax) || 0),
+      cusName: String(parsed.cusName ?? "").slice(0, 100),
+      cusPhone: String(parsed.cusPhone ?? "").slice(0, 30),
+      cusCode: String(parsed.cusCode ?? "").slice(0, 10),
+      savedAt: Number(parsed.savedAt),
+    };
+  } catch {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+function writeGuestStore(table: string, store: GuestStore | null, locCode = "") {
+  if (!table) return;
+  const key = guestStorageKey(table, locCode);
+  try {
+    if (!store) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(store));
+  } catch {
+    /* storage full / private mode */
+  }
+}
 
 interface Options {
   table: string;
@@ -67,30 +208,6 @@ interface Options {
   takeaway?: boolean;
 }
 
-const storageKey = (table: string, locCode = "") =>
-  locCode ? `mnu-cart:v1:${locCode}:${table}` : `mnu-cart:v1:${table}`;
-
-function readStore(table: string, locCode = ""): CartStore | null {
-  try {
-    const raw = localStorage.getItem(storageKey(table, locCode));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CartStore;
-    if (!parsed || !Array.isArray(parsed.lines)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeStore(table: string, store: CartStore | null, locCode = "") {
-  try {
-    if (!store) localStorage.removeItem(storageKey(table, locCode));
-    else localStorage.setItem(storageKey(table, locCode), JSON.stringify(store));
-  } catch {
-    /* storage full / private mode — cart still works in memory */
-  }
-}
-
 export function useCustomerCart({
   table,
   tableGroup,
@@ -103,60 +220,64 @@ export function useCustomerCart({
   const [baseline, setBaseline] = useState<CartStore["baseline"]>({});
   const [invoiceNo, setInvoiceNo] = useState("");
   const [takeawayNo, setTakeawayNo] = useState("");
+  const [savedAt, setSavedAt] = useState<number>(0);
   // storage must not be written until the saved cart + the table's current
   // bill have been read, otherwise the first render wipes the saved cart.
   const [hydrated, setHydrated] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ConfirmResult | null>(null);
-  const inFlightRef = useRef(false); // double-tap guard (like confirmInFlightRef)
+  const inFlightRef = useRef(false);
 
-  /* ── 0. guest details (pax + customer name), persisted per table ── */
-  const [guest, setGuest] = useState<GuestDetails>({
-    localPax: 0,
-    foreignPax: 0,
-    cusName: "",
-    cusPhone: "",
-    cusCode: "",
-  });
+  /* ── 0. guest details (pax + customer name), persisted for 1 hour ── */
+  const [guest, setGuest] = useState<GuestDetails>(EMPTY_GUEST);
+  const [guestSavedAt, setGuestSavedAt] = useState<number>(0);
   const [guestHydrated, setGuestHydrated] = useState(false);
 
   useEffect(() => {
     if (!table) return;
     let alive = true;
-    (async () => {
-      try {
-        const raw = localStorage.getItem(guestStorageKey(table, locCode));
-        if (raw && alive) {
-          const g = JSON.parse(raw) as Partial<GuestDetails>;
-          setGuest({
-            localPax: Math.max(0, Number(g.localPax) || 0),
-            foreignPax: Math.max(0, Number(g.foreignPax) || 0),
-            cusName: String(g.cusName ?? "").slice(0, 100),
-            cusPhone: String(g.cusPhone ?? "").slice(0, 30),
-            cusCode: String(g.cusCode ?? "").slice(0, 10),
-          });
-        }
-      } catch {
-        /* corrupted save — start fresh */
+    purgeExpiredMenuStorage();
+    const g = takeaway ? null : readGuestStore(table, locCode);
+    if (alive) {
+      if (g) {
+        setGuest({
+          localPax: g.localPax,
+          foreignPax: g.foreignPax,
+          cusName: g.cusName,
+          cusPhone: g.cusPhone,
+          cusCode: g.cusCode,
+        });
+        setGuestSavedAt(g.savedAt);
+      } else {
+        setGuest(EMPTY_GUEST);
+        setGuestSavedAt(0);
       }
-      if (alive) setGuestHydrated(true);
-    })();
+      setGuestHydrated(true);
+    }
     return () => {
       alive = false;
     };
-  }, [table, locCode]);
+  }, [table, locCode, takeaway]);
 
   useEffect(() => {
-    if (!table || !guestHydrated) return;
-    try {
-      localStorage.setItem(guestStorageKey(table, locCode), JSON.stringify(guest));
-    } catch {
-      /* storage full / private mode — guest details still work in memory */
+    if (!table || !guestHydrated || takeaway) return;
+    const isEmpty =
+      !guest.cusName.trim() &&
+      !guest.cusPhone.trim() &&
+      guest.localPax === 0 &&
+      guest.foreignPax === 0;
+    if (isEmpty) {
+      writeGuestStore(table, null, locCode);
+      return;
     }
-  }, [table, locCode, guest, guestHydrated]);
+    const ts = guestSavedAt > 0 && !isExpired(guestSavedAt) ? guestSavedAt : Date.now();
+    if (ts !== guestSavedAt) setGuestSavedAt(ts);
+    writeGuestStore(table, { ...guest, savedAt: ts }, locCode);
+  }, [table, locCode, guest, guestSavedAt, guestHydrated, takeaway]);
 
   const setGuestDetails = useCallback((patch: Partial<GuestDetails>) => {
+    setGuestSavedAt((prevTs) => (prevTs > 0 && !isExpired(prevTs) ? prevTs : Date.now()));
     setGuest((prev) => ({
       localPax:
         patch.localPax === undefined
@@ -175,20 +296,21 @@ export function useCustomerCart({
     }));
   }, []);
 
-  /** Form already filled in → skip it next time.
-   *  Dine-in: pax + phone + name · Takeaway: phone + name. */
+  /** Form already filled in (and within 1h) → skip it next time. */
   const hasGuest =
     guestHydrated &&
     guest.cusName.trim().length > 0 &&
     guest.cusPhone.trim().length >= 9 &&
     (takeaway || guest.localPax + guest.foreignPax >= 1);
 
-  /* ── 1. load the table's current unpaid bill ─────────────── */
+  /* ── 1. load the table's current unpaid bill (within last 1 hour) ── */
   useEffect(() => {
     if (!table) return;
     let alive = true;
 
-    /* Takeaway has no table bill — every confirm is its own TA order. */
+    purgeExpiredMenuStorage();
+
+    /* Takeaway has no table bill — every session starts clean. */
     if (takeaway) {
       void Promise.resolve().then(() => {
         if (!alive) return;
@@ -196,6 +318,7 @@ export function useCustomerCart({
         setBaseline({});
         setInvoiceNo("");
         setTakeawayNo("");
+        setSavedAt(0);
         writeStore(table, null, locCode);
         setHydrated(true);
       });
@@ -208,8 +331,6 @@ export function useCustomerCart({
       let serverLines: ExistingLine[] = [];
       let serverInvoice = "";
       try {
-        // Guarded endpoint — the table token proves the guest scanned
-        // this table's QR (required in production).
         const qs = new URLSearchParams({ table });
         if (locCode) qs.set("loc", locCode);
         if (token) qs.set("t", token);
@@ -222,16 +343,16 @@ export function useCustomerCart({
           serverInvoice = String(json.data?.invoiceNo ?? "");
         }
       } catch {
-        /* offline / API error → treat as no existing bill */
+        /* offline / API error → treat as no existing server bill */
       }
 
       if (!alive) return;
 
-      const base: CartStore["baseline"] = {};
+      const serverBase: CartStore["baseline"] = {};
       for (const l of serverLines) {
         const key = lineKey(l.itemCode, l.remark);
-        const prev = base[key];
-        base[key] = {
+        const prev = serverBase[key];
+        serverBase[key] = {
           qty: (prev?.qty ?? 0) + Number(l.qty || 0),
           name: l.name || l.itemCode,
           price: Number(l.price || 0),
@@ -239,7 +360,26 @@ export function useCustomerCart({
         };
       }
 
-      const baseLines: CartLine[] = Object.entries(base).map(([key, v]) => ({
+      const saved = readStore(table, locCode); // returns null & clears if >= 1 hour old
+      const usable = Boolean(
+        saved && (!serverInvoice || !saved.invoiceNo || saved.invoiceNo === serverInvoice)
+      );
+      if (saved && !usable) {
+        // Server has a different active invoice for this table -> drop local store
+        writeStore(table, null, locCode);
+      }
+
+      // Preserve confirmed baseline from localStorage within the 1-hour window
+      // (because POS imports and deletes Tbl_HoldUpsCloudTempQR within ~1 minute).
+      const mergedBase: CartStore["baseline"] = usable && saved ? { ...saved.baseline } : {};
+      for (const [key, sb] of Object.entries(serverBase)) {
+        const existing = mergedBase[key];
+        if (!existing || sb.qty > existing.qty) {
+          mergedBase[key] = { ...sb };
+        }
+      }
+
+      const baseLines: CartLine[] = Object.entries(mergedBase).map(([key, v]) => ({
         key,
         itemId: key.split("|")[0],
         name: v.name,
@@ -248,26 +388,34 @@ export function useCustomerCart({
         remark: v.remark,
       }));
 
-      const saved = readStore(table, locCode);
-      // A saved cart from a previous (already settled) bill must not survive.
-      const usable = saved && (!serverInvoice || !saved.invoiceNo || saved.invoiceNo === serverInvoice);
-
-      const merged: CartLine[] = [];
-      const pushers = usable ? [...saved!.lines] : [];
+      const pushers = usable && saved ? saved.lines.map((l) => ({ ...l })) : [];
       for (const bl of baseLines) {
         const hit = pushers.find((l) => l.key === bl.key);
         if (hit) hit.qty = Math.max(hit.qty, bl.qty);
         else pushers.push({ ...bl });
       }
+      const merged: CartLine[] = [];
       for (const l of pushers) {
-        const b = base[l.key]?.qty ?? 0;
-        if (l.qty < b) l.qty = b; // POS line grew → trust the POS
+        const b = mergedBase[l.key]?.qty ?? 0;
+        if (l.qty < b) l.qty = b;
         if (l.qty > 0) merged.push(l);
       }
 
-      setBaseline(base);
-      setInvoiceNo(serverInvoice || (usable ? saved!.invoiceNo : "") || "");
+      const resolvedInvoice =
+        serverInvoice || (usable && saved ? saved.invoiceNo : "") || "";
+      const hasAnyData =
+        merged.length > 0 || Object.keys(mergedBase).length > 0 || Boolean(resolvedInvoice);
+      const resolvedSavedAt =
+        usable && saved?.savedAt
+          ? saved.savedAt
+          : hasAnyData
+            ? Date.now()
+            : 0;
+
+      setBaseline(mergedBase);
+      setInvoiceNo(resolvedInvoice);
       setLines(merged);
+      setSavedAt(resolvedSavedAt);
       setHydrated(true);
     })();
 
@@ -276,17 +424,84 @@ export function useCustomerCart({
     };
   }, [table, locCode, token, takeaway]);
 
-  /* ── 2. persist on every change (dine-in only) ───────────── */
+  /* ── 2. persist on every change (dine-in only, with 1-hour timestamp) ── */
   useEffect(() => {
     if (!table || !hydrated || takeaway) return;
-    writeStore(table, { lines, baseline, invoiceNo }, locCode);
-  }, [table, locCode, lines, baseline, invoiceNo, hydrated, takeaway]);
+    const isEmpty =
+      lines.length === 0 && Object.keys(baseline).length === 0 && !invoiceNo;
+    if (isEmpty) {
+      writeStore(table, null, locCode);
+      return;
+    }
+    const ts = savedAt > 0 && !isExpired(savedAt) ? savedAt : Date.now();
+    if (ts !== savedAt) setSavedAt(ts);
+    writeStore(table, { lines, baseline, invoiceNo, savedAt: ts }, locCode);
+  }, [table, locCode, lines, baseline, invoiceNo, savedAt, hydrated, takeaway]);
+
+  const resetAll = useCallback(
+    (clearGuest = false) => {
+      setLines([]);
+      setBaseline({});
+      setInvoiceNo("");
+      setTakeawayNo("");
+      setSavedAt(0);
+      setLastResult(null);
+      setConfirmError(null);
+      writeStore(table, null, locCode);
+      if (clearGuest) {
+        setGuest(EMPTY_GUEST);
+        setGuestSavedAt(0);
+        writeGuestStore(table, null, locCode);
+      }
+    },
+    [table, locCode]
+  );
+
+  /* ── 2b. Auto-clear localStorage & memory when 1 hour elapses ── */
+  useEffect(() => {
+    const timestamps = [savedAt, guestSavedAt].filter((t) => t > 0);
+    if (timestamps.length === 0) return;
+
+    const earliest = Math.min(...timestamps);
+    const checkAndExpire = () => {
+      purgeExpiredMenuStorage();
+      if (savedAt > 0 && isExpired(savedAt)) {
+        resetAll(true);
+        return;
+      }
+      if (guestSavedAt > 0 && isExpired(guestSavedAt)) {
+        setGuest(EMPTY_GUEST);
+        setGuestSavedAt(0);
+        writeGuestStore(table, null, locCode);
+      }
+    };
+
+    const remaining = ONE_HOUR_MS - (Date.now() - earliest);
+    if (remaining <= 0) {
+      checkAndExpire();
+      return;
+    }
+
+    const timer = window.setTimeout(checkAndExpire, remaining + 50);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") checkAndExpire();
+    };
+    window.addEventListener("focus", checkAndExpire);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", checkAndExpire);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [savedAt, guestSavedAt, resetAll, table, locCode]);
 
   const baselineQtyOf = useCallback((key: string) => baseline[key]?.qty ?? 0, [baseline]);
 
-  /* ── 3. mutations (guarded like the app: baseline is untouchable) ── */
+  /* ── 3. mutations (guarded: baseline is untouchable within 1h) ── */
   const add = useCallback(
     (item: MenuItem, remark = "") => {
+      setSavedAt((prevTs) => (prevTs > 0 && !isExpired(prevTs) ? prevTs : Date.now()));
       const key = lineKey(item.id, remark);
       setLines((prev) => {
         const hit = prev.find((l) => l.key === key);
@@ -310,12 +525,9 @@ export function useCustomerCart({
     [baseline]
   );
 
-  const inc = useCallback(
-    (key: string) => {
-      setLines((prev) => prev.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l)));
-    },
-    []
-  );
+  const inc = useCallback((key: string) => {
+    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l)));
+  }, []);
 
   const dec = useCallback(
     (key: string) => {
@@ -354,7 +566,6 @@ export function useCustomerCart({
       }
       const existing = prev.find((l) => l.key === newKey && l.key !== oldKey);
       if (existing) {
-        // merge into the row that already has this remark
         return prev
           .map((l) => (l.key === newKey ? { ...l, qty: l.qty + line.qty } : l))
           .filter((l) => l.key !== oldKey);
@@ -371,11 +582,6 @@ export function useCustomerCart({
   }, [baselineQtyOf]);
 
   /* ── 4. derived rows + totals ───────────────────────────── */
-  /* ONE row per line — the already-ordered quantity and the newly
-     added quantity are merged, so a guest never sees the same dish
-     twice ("Pepsi ×1 on bill" + "Pepsi ×2 new" confused everyone).
-     `baseQty` keeps the read-only part; the stepper can only move
-     the difference above it. */
   const rows = useMemo<CartRow[]>(() => {
     const out: CartRow[] = [];
     for (const l of lines) {
@@ -423,7 +629,7 @@ export function useCustomerCart({
     [itemsById]
   );
 
-  /* ── 5. confirm (additive) ──────────────────────────────── */
+  /* ── 5. confirm (additive within 1h; fresh after 1h) ─────── */
   const confirm = useCallback(async (): Promise<ConfirmResult | null> => {
     if (inFlightRef.current || confirming) return null;
     setConfirmError(null);
@@ -431,6 +637,14 @@ export function useCustomerCart({
       setConfirmError("Table number is missing — please scan the table QR again.");
       return null;
     }
+
+    // If the 1-hour window expired right before Confirm was tapped,
+    // drop the old baseline/invoice and send ONLY newLines as a fresh order.
+    const sessionExpired = savedAt > 0 && isExpired(savedAt);
+    const activeInvoiceNo = sessionExpired ? "" : invoiceNo;
+    const activeTakeawayNo = sessionExpired ? "" : takeawayNo;
+    const activeBaseline = sessionExpired ? {} : baseline;
+
     const payloadItems = newLines.map((l) => ({
       itemId: l.itemId,
       quantity: l.qty,
@@ -444,8 +658,6 @@ export function useCustomerCart({
     inFlightRef.current = true;
     setConfirming(true);
     try {
-      // Guarded endpoint — token check + rate limits + server-side
-      // price resolution (same as the /order flow).
       const res = await fetch("/api/order/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -453,8 +665,8 @@ export function useCustomerCart({
           tableNo: table,
           tableGroup: tableGroup || undefined,
           locCode: locCode || undefined,
-          existingInvoiceNo: invoiceNo || undefined,
-          existingTakeawayNo: takeaway && takeawayNo ? takeawayNo : undefined,
+          existingInvoiceNo: activeInvoiceNo || undefined,
+          existingTakeawayNo: takeaway && activeTakeawayNo ? activeTakeawayNo : undefined,
           t: token || undefined,
           orderType: takeaway ? "TA" : "DI",
           localPax: takeaway ? undefined : guest.localPax || undefined,
@@ -469,9 +681,13 @@ export function useCustomerCart({
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || "Order could not be saved. Please try again.");
       }
-      const data = json.data as ConfirmResult & { invoiceNo?: string; orderNo?: string; locCode?: string };
+      const data = json.data as ConfirmResult & {
+        invoiceNo?: string;
+        orderNo?: string;
+        locCode?: string;
+      };
       const result: ConfirmResult = {
-        tableNo: data.tableNo ?? (takeaway && takeawayNo ? takeawayNo : table),
+        tableNo: data.tableNo ?? (takeaway && activeTakeawayNo ? activeTakeawayNo : table),
         tableGroup: data.tableGroup ?? tableGroup ?? "",
         invoiceNo: data.invoiceNo ?? "",
         orderNo: data.orderNo ?? "",
@@ -481,12 +697,19 @@ export function useCustomerCart({
         orderType: data.orderType ?? (takeaway ? "TA" : "DI"),
       };
 
-      // Confirmed cart becomes the read-only baseline so clicking
-      // "Add more items" (for BOTH Dine-In and Takeaway) appends to
-      // the same InvoiceNo / TA serial without re-sending old items.
-      // Clicking "Done" on Takeaway calls resetAll(true) to start fresh.
-      const nextBaseline: CartStore["baseline"] = { ...baseline };
-      for (const l of lines) {
+      // Anchor the 1-hour expiry timer when a new invoice starts;
+      // preserve the anchor when adding items to the same invoice within 1h.
+      const now = Date.now();
+      const nextSavedAt =
+        !activeInvoiceNo || sessionExpired
+          ? now
+          : savedAt > 0 && !isExpired(savedAt)
+            ? savedAt
+            : now;
+
+      const updatedLines = sessionExpired ? [...newLines] : lines;
+      const nextBaseline: CartStore["baseline"] = { ...activeBaseline };
+      for (const l of updatedLines) {
         nextBaseline[l.key] = {
           qty: l.qty,
           name: l.name,
@@ -494,7 +717,13 @@ export function useCustomerCart({
           remark: l.remark,
         };
       }
+
+      if (sessionExpired) {
+        setLines(updatedLines);
+      }
       setBaseline(nextBaseline);
+      setSavedAt(nextSavedAt);
+      setGuestSavedAt(nextSavedAt);
       if (result.invoiceNo) setInvoiceNo(result.invoiceNo);
       if (takeaway && result.tableNo) setTakeawayNo(result.tableNo);
       setLastResult(result);
@@ -506,37 +735,23 @@ export function useCustomerCart({
       inFlightRef.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, guest, invoiceNo, lines, locCode, newLines, table, tableGroup, takeaway, takeawayNo, token]);
-
-  const resetAll = useCallback(
-    (clearGuest = false) => {
-      setLines([]);
-      setBaseline({});
-      setInvoiceNo("");
-      setTakeawayNo("");
-      setLastResult(null);
-      setConfirmError(null);
-      writeStore(table, null, locCode);
-      if (clearGuest) {
-        setGuest({
-          localPax: 0,
-          foreignPax: 0,
-          cusName: "",
-          cusPhone: "",
-          cusCode: "",
-        });
-        try {
-          if (table) localStorage.removeItem(guestStorageKey(table, locCode));
-        } catch {
-          /* ignore storage errors */
-        }
-      }
-    },
-    [table, locCode]
-  );
+  }, [
+    baseline,
+    confirming,
+    guest,
+    invoiceNo,
+    lines,
+    locCode,
+    newLines,
+    savedAt,
+    table,
+    tableGroup,
+    takeaway,
+    takeawayNo,
+    token,
+  ]);
 
   return {
-    // not hydrated yet (and we do have a table) → the cart is still loading
     loadingBaseline: Boolean(table) && !hydrated,
     hydrated,
     guest,

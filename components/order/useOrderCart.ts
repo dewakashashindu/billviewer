@@ -1,16 +1,12 @@
 // ============================================================
 // LOCATION: components/order/useOrderCart.ts
-// The customer cart for the QR ordering flow.
+// The customer cart for the QR ordering flow (strict 1-Hour TTL).
 //
 // Rules:
-//   • the table's already-ordered lines are a READ-ONLY baseline
-//   • the guest can only add on top of them
-//   • the cart survives a reload (localStorage per table)
-//   • confirming sends ONLY the additions, and the confirmed cart
-//     becomes the new baseline ("add more items")
-//
-// POST /api/order/confirm re-reads every price from the database,
-// so the numbers in the browser are never trusted.
+//   • Previous order items (baseline), InvoiceNo, and Guest details
+//     persist in localStorage ONLY for 1 hour (60 minutes).
+//   • At 1 hour (or for legacy entries without savedAt), localStorage
+//     is automatically cleared and subsequent orders go out fresh.
 // ============================================================
 "use client";
 
@@ -24,6 +20,8 @@ import {
   type MenuItem,
 } from "./types";
 
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
 interface CartStore {
   lines: CartLine[];
   baseline: Record<string, { qty: number; name: string; price: number; remark: string }>;
@@ -31,6 +29,7 @@ interface CartStore {
   customerName: string;
   customerPhone: string;
   pax: number;
+  savedAt: number;
 }
 
 export interface GuestDetails {
@@ -48,22 +47,49 @@ interface Options {
 
 const storageKey = (table: string) => `ord-cart:v1:${table}`;
 
+function isExpired(savedAt: unknown): boolean {
+  const ts = Number(savedAt);
+  if (!Number.isFinite(ts) || ts <= 0) return true;
+  return Date.now() - ts >= ONE_HOUR_MS;
+}
+
 function readStore(table: string): CartStore | null {
+  if (!table) return null;
+  const key = storageKey(table);
   try {
-    const raw = localStorage.getItem(storageKey(table));
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CartStore;
-    if (!parsed || !Array.isArray(parsed.lines)) return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<CartStore> | null;
+    if (!parsed || !Array.isArray(parsed.lines) || isExpired(parsed.savedAt)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      lines: parsed.lines,
+      baseline:
+        parsed.baseline && typeof parsed.baseline === "object" ? parsed.baseline : {},
+      invoiceNo: typeof parsed.invoiceNo === "string" ? parsed.invoiceNo : "",
+      customerName: typeof parsed.customerName === "string" ? parsed.customerName : "",
+      customerPhone: typeof parsed.customerPhone === "string" ? parsed.customerPhone : "",
+      pax: Number(parsed.pax) || 2,
+      savedAt: Number(parsed.savedAt),
+    };
   } catch {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 }
 
 function writeStore(table: string, store: CartStore | null) {
+  if (!table) return;
+  const key = storageKey(table);
   try {
-    if (!store) localStorage.removeItem(storageKey(table));
-    else localStorage.setItem(storageKey(table), JSON.stringify(store));
+    if (!store) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(store));
   } catch {
     /* private mode / quota — the cart still works in memory */
   }
@@ -73,6 +99,7 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [baseline, setBaseline] = useState<CartStore["baseline"]>({});
   const [invoiceNo, setInvoiceNo] = useState("");
+  const [savedAt, setSavedAt] = useState<number>(0);
   const [guest, setGuest] = useState<GuestDetails>({ name: "", phone: "", pax: 2 });
   const [hydrated, setHydrated] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -80,7 +107,7 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
   const [lastResult, setLastResult] = useState<ConfirmResult | null>(null);
   const inFlight = useRef(false);
 
-  /* ── 1. load the table's current unpaid bill ───────────────────── */
+  /* ── 1. load the table's current unpaid bill (within last 1 hour) ── */
   useEffect(() => {
     if (!table) return;
     let alive = true;
@@ -104,11 +131,11 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
 
       if (!alive) return;
 
-      const base: CartStore["baseline"] = {};
+      const serverBase: CartStore["baseline"] = {};
       for (const l of serverLines) {
         const key = lineKey(l.itemCode, l.remark);
-        const prev = base[key];
-        base[key] = {
+        const prev = serverBase[key];
+        serverBase[key] = {
           qty: (prev?.qty ?? 0) + Number(l.qty || 0),
           name: l.name || l.itemCode,
           price: Number(l.price || 0),
@@ -116,7 +143,23 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
         };
       }
 
-      const baseLines: CartLine[] = Object.entries(base).map(([key, v]) => ({
+      const saved = readStore(table);
+      const usable = Boolean(
+        saved && (!serverInvoice || !saved.invoiceNo || saved.invoiceNo === serverInvoice)
+      );
+      if (saved && !usable) {
+        writeStore(table, null);
+      }
+
+      const mergedBase: CartStore["baseline"] = usable && saved ? { ...saved.baseline } : {};
+      for (const [key, sb] of Object.entries(serverBase)) {
+        const existing = mergedBase[key];
+        if (!existing || sb.qty > existing.qty) {
+          mergedBase[key] = { ...sb };
+        }
+      }
+
+      const baseLines: CartLine[] = Object.entries(mergedBase).map(([key, v]) => ({
         key,
         itemId: key.split("|")[0],
         name: v.name,
@@ -125,12 +168,7 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
         remark: v.remark,
       }));
 
-      const saved = readStore(table);
-      // A cart saved against a settled bill must not come back.
-      const usable =
-        saved && (!serverInvoice || !saved.invoiceNo || saved.invoiceNo === serverInvoice);
-
-      const pushers = usable ? [...saved!.lines] : [];
+      const pushers = usable && saved ? saved.lines.map((l) => ({ ...l })) : [];
       for (const bl of baseLines) {
         const hit = pushers.find((l) => l.key === bl.key);
         if (hit) hit.qty = Math.max(hit.qty, bl.qty);
@@ -138,21 +176,33 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
       }
       const merged: CartLine[] = [];
       for (const l of pushers) {
-        const b = base[l.key]?.qty ?? 0;
-        if (l.qty < b) l.qty = b; // the POS grew → trust the POS
+        const b = mergedBase[l.key]?.qty ?? 0;
+        if (l.qty < b) l.qty = b;
         if (l.qty > 0) merged.push(l);
       }
 
-      setBaseline(base);
-      setInvoiceNo(serverInvoice || (usable ? saved!.invoiceNo : "") || "");
-      if (usable) {
+      const resolvedInvoice =
+        serverInvoice || (usable && saved ? saved.invoiceNo : "") || "";
+      const hasAnyData =
+        merged.length > 0 || Object.keys(mergedBase).length > 0 || Boolean(resolvedInvoice);
+      const resolvedSavedAt =
+        usable && saved?.savedAt
+          ? saved.savedAt
+          : hasAnyData
+            ? Date.now()
+            : 0;
+
+      setBaseline(mergedBase);
+      setInvoiceNo(resolvedInvoice);
+      if (usable && saved) {
         setGuest({
-          name: saved!.customerName ?? "",
-          phone: saved!.customerPhone ?? "",
-          pax: saved!.pax || 2,
+          name: saved.customerName ?? "",
+          phone: saved.customerPhone ?? "",
+          pax: saved.pax || 2,
         });
       }
       setLines(merged);
+      setSavedAt(resolvedSavedAt);
       setHydrated(true);
     })();
 
@@ -161,9 +211,21 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
     };
   }, [table, token]);
 
-  /* ── 2. persist ────────────────────────────────────────────────── */
+  /* ── 2. persist with 1-hour timestamp ──────────────────────────── */
   useEffect(() => {
     if (!table || !hydrated) return;
+    const isEmpty =
+      lines.length === 0 &&
+      Object.keys(baseline).length === 0 &&
+      !invoiceNo &&
+      !guest.name.trim() &&
+      !guest.phone.trim();
+    if (isEmpty) {
+      writeStore(table, null);
+      return;
+    }
+    const ts = savedAt > 0 && !isExpired(savedAt) ? savedAt : Date.now();
+    if (ts !== savedAt) setSavedAt(ts);
     writeStore(table, {
       lines,
       baseline,
@@ -171,14 +233,52 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
       customerName: guest.name,
       customerPhone: guest.phone,
       pax: guest.pax,
+      savedAt: ts,
     });
-  }, [table, lines, baseline, invoiceNo, guest, hydrated]);
+  }, [table, lines, baseline, invoiceNo, guest, savedAt, hydrated]);
+
+  const resetAll = useCallback(() => {
+    setLines([]);
+    setBaseline({});
+    setInvoiceNo("");
+    setSavedAt(0);
+    setGuest({ name: "", phone: "", pax: 2 });
+    setLastResult(null);
+    writeStore(table, null);
+  }, [table]);
+
+  /* ── 2b. Auto-clear localStorage when 1 hour elapses ───────────── */
+  useEffect(() => {
+    if (savedAt <= 0) return;
+    const checkAndExpire = () => {
+      if (isExpired(savedAt)) {
+        resetAll();
+      }
+    };
+    const remaining = ONE_HOUR_MS - (Date.now() - savedAt);
+    if (remaining <= 0) {
+      checkAndExpire();
+      return;
+    }
+    const timer = window.setTimeout(checkAndExpire, remaining + 50);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") checkAndExpire();
+    };
+    window.addEventListener("focus", checkAndExpire);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", checkAndExpire);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [savedAt, resetAll]);
 
   const baselineQtyOf = useCallback((key: string) => baseline[key]?.qty ?? 0, [baseline]);
 
   /* ── 3. mutations ──────────────────────────────────────────────── */
   const add = useCallback(
     (item: MenuItem, remark = "") => {
+      setSavedAt((prevTs) => (prevTs > 0 && !isExpired(prevTs) ? prevTs : Date.now()));
       const key = lineKey(item.id, remark);
       setLines((prev) => {
         const hit = prev.find((l) => l.key === key);
@@ -227,8 +327,6 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
     [baselineQtyOf]
   );
 
-  /* Stepper on the menu card: act on the most recently added line
-     of that item (a dish can exist twice with different remarks). */
   const incItem = useCallback((itemId: string) => {
     setLines((prev) => {
       let idx = -1;
@@ -255,7 +353,7 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
         }
         if (idx === -1) return prev;
         const target = prev[idx];
-        if (target.qty <= baselineQtyOf(target.key)) return prev; // never below the baseline
+        if (target.qty <= baselineQtyOf(target.key)) return prev;
         return prev
           .map((l, i) => (i === idx ? { ...l, qty: l.qty - 1 } : l))
           .filter((l) => l.qty > 0);
@@ -375,6 +473,10 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
       return null;
     }
 
+    const sessionExpired = savedAt > 0 && isExpired(savedAt);
+    const activeInvoiceNo = sessionExpired ? "" : invoiceNo;
+    const activeBaseline = sessionExpired ? {} : baseline;
+
     const payloadItems = newLines.map((l) => ({
       itemId: l.itemId,
       quantity: l.qty,
@@ -390,6 +492,7 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
         body: JSON.stringify({
           tableNo: table,
           tableGroup: tableGroup || undefined,
+          existingInvoiceNo: activeInvoiceNo || undefined,
           t: token || undefined,
           pax: guest.pax || undefined,
           customerName: guest.name || undefined,
@@ -410,9 +513,17 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
         source: data.source ?? "database",
       };
 
-      // Confirmed → the whole cart becomes the new read-only baseline.
-      const nextBaseline: CartStore["baseline"] = { ...baseline };
-      for (const l of lines) {
+      const now = Date.now();
+      const nextSavedAt =
+        !activeInvoiceNo || sessionExpired
+          ? now
+          : savedAt > 0 && !isExpired(savedAt)
+            ? savedAt
+            : now;
+
+      const updatedLines = sessionExpired ? [...newLines] : lines;
+      const nextBaseline: CartStore["baseline"] = { ...activeBaseline };
+      for (const l of updatedLines) {
         nextBaseline[l.key] = {
           qty: l.qty,
           name: l.name,
@@ -420,7 +531,9 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
           remark: l.remark,
         };
       }
+      if (sessionExpired) setLines(updatedLines);
       setBaseline(nextBaseline);
+      setSavedAt(nextSavedAt);
       if (result.invoiceNo) setInvoiceNo(result.invoiceNo);
       setLastResult(result);
       return result;
@@ -431,15 +544,7 @@ export function useOrderCart({ table, token, tableGroup, itemsById }: Options) {
       inFlight.current = false;
       setConfirming(false);
     }
-  }, [baseline, confirming, guest, lines, newLines, table, tableGroup, token]);
-
-  const resetAll = useCallback(() => {
-    setLines([]);
-    setBaseline({});
-    setInvoiceNo("");
-    setLastResult(null);
-    writeStore(table, null);
-  }, [table]);
+  }, [baseline, confirming, guest, invoiceNo, lines, newLines, savedAt, table, tableGroup, token]);
 
   return {
     loadingBaseline: Boolean(table) && !hydrated,

@@ -242,6 +242,11 @@ export default function MenuClient({
   const detailItem = detailId ? itemsById.get(detailId) ?? null : null;
 
   const handleConfirm = useCallback(async () => {
+    if (!cart.hasGuest) {
+      setView("guest");
+      window.scrollTo({ top: 0 });
+      return;
+    }
     const result = await cart.confirm();
     if (result) {
       setView("success");
