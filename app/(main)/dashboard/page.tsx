@@ -10,6 +10,9 @@ import {
   type PerfLocationOption,
 } from "@/app/actions/dashboard";
 
+// ── NEW: dashboard tabs (Live | Performance Analytics | Kitchen) ──
+import DashboardTabs from "@/components/dashboard/DashboardTabs";
+
 function shiftIsoDays(baseIso: string, deltaDays: number): string {
   const m = baseIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return baseIso;
@@ -686,16 +689,16 @@ export default function DashboardPage() {
               s.locCode.toUpperCase() === defaultLoc.toUpperCase()
           );
           if (forLoc.length > 0) {
-            const firstIso = forLoc[0].dateIso;
-            const latestIso = forLoc[forLoc.length - 1].dateIso;
-            if (forLoc.length <= 14) {
-              setFromDate(firstIso);
-              setToDate(latestIso);
-            } else {
-              const candFrom = shiftIsoDays(latestIso, -13);
-              setFromDate(candFrom < firstIso ? firstIso : candFrom);
-              setToDate(latestIso);
-            }
+            /* Performance Analytics default:
+               1st of the CURRENT month  →  today (ada dawasa) */
+            const nowD = new Date();
+            const p2m = (n: number) => String(n).padStart(2, "0");
+            const monthStart = `${nowD.getFullYear()}-${p2m(nowD.getMonth() + 1)}-01`;
+            const todayIso = `${nowD.getFullYear()}-${p2m(nowD.getMonth() + 1)}-${p2m(
+              nowD.getDate()
+            )}`;
+            setFromDate(monthStart);
+            setToDate(todayIso > monthStart ? todayIso : monthStart);
           }
         } else {
           setError(res.error || "Could not load performance data");
@@ -860,7 +863,7 @@ export default function DashboardPage() {
             ? `Location [${selectedLoc}]`
             : "";
 
-    if (!locSnapshots.length) return "No Tbl_PerformanceValues snapshots found";
+    if (!locSnapshots.length) return "No performance snapshots found";
     if (!activeData) {
       return `${locPrefix} · 0 snapshots in ${normFrom} – ${normTo}`;
     }
@@ -892,6 +895,13 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: "28px 26px 48px", fontFamily: "Inter, sans-serif" }}>
+      {/* ═══════════════════════════════════════════════════════════
+          TABS — Live | Performance Analytics | Kitchen
+          • "Performance Analytics" pane = me page eke thiyena content
+            (pahalama thiyenne — kisi wenasak nathiwa)
+          • Live / Kitchen = aluth components, thamange date controllers
+          ═══════════════════════════════════════════════════════════ */}
+      <DashboardTabs>
       <style>{`
         @keyframes perfCardFadeUp {
           from { opacity: 0; transform: translateY(10px); }
@@ -972,22 +982,6 @@ export default function DashboardPage() {
       {/* ═══════════════════════════════════════════════════════════
           1) HEADER + 4 PERIOD-ACCURATE STAT CARDS
           ═══════════════════════════════════════════════════════════ */}
-      <div style={{ marginBottom: 22 }}>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 22,
-            fontWeight: 700,
-            color: "#45301D",
-          }}
-        >
-          Dashboard
-        </h1>
-        <p style={{ margin: "4px 0 0", fontSize: 13.5, color: "#6B543E" }}>
-          Restaurant reporting overview — Mila Mirissa
-        </p>
-      </div>
-
       {/* Quick stat cards */}
       <div
         style={{
@@ -1213,8 +1207,7 @@ export default function DashboardPage() {
             fontSize: 13.5,
           }}
         >
-          No snapshot records found in <b>dbo.Tbl_PerformanceValues</b> for this
-          location yet.
+          No snapshot records found for this location yet.
         </div>
       )}
 
@@ -2063,6 +2056,7 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+      </DashboardTabs>
     </div>
   );
 }
