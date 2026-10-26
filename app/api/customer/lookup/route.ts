@@ -8,28 +8,31 @@
 //   { ok: true, data: { found: true, cusCode, cusName } }
 //   { ok: true, data: { found: false } }
 //
-// Only Tbl_CustomerMaster rows with Enable = 1 and a matching
-// RegTel are returned. Nothing else (credit, blacklist, …) is
-// exposed to the browser.
+// The search itself lives in lib/customerService.findCustomerByPhone
+// so the read path and the create path (POST /api/customer/register,
+// /api/order/confirm) always agree:
+//   • phone column auto-detected (RegTel / CusTel / Mobile / Phone)
+//   • both sides digit-normalised, compared on the last 9 digits
+//     "+94 77 979 2705" · "0094779792705" · "0779792705" → same row
+//   • only CusCode / CusName leave the server — nothing else
+//     (credit, blacklist, address … stay in the POS)
 //
 // Rate limited per IP — this endpoint answers "does this phone
 // number exist", so it must not be a free customer dump.
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
-import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { findCustomerByPhone, normalisePhone } from "@/lib/customerService";
 
 export const dynamic = "force-dynamic";
-
-const digits = (v: string) => String(v ?? "").replace(/[^0-9]/g, "");
 
 export async function GET(request: NextRequest) {
   try {
     const raw = (request.nextUrl.searchParams.get("phone") ?? "").trim();
-    const phone = digits(raw);
+    const digits = raw.replace(/[^0-9]/g, "");
 
-    if (phone.length < 9 || phone.length > 15) {
+    if (digits.length < 9 || digits.length > 15) {
       return NextResponse.json(
         { ok: false, error: "Enter a valid phone number." },
         { status: 400 }
@@ -50,34 +53,18 @@ export async function GET(request: NextRequest) {
     }
 
     const pool = await getPool();
-    const req = pool.request();
-    req.input("phone", sql.VarChar(20), phone);
-    const res = await req.query(`
-      SELECT TOP 1
-        LTRIM(RTRIM(CusCode)) AS CusCode,
-        LTRIM(RTRIM(CusName)) AS CusName
-      FROM dbo.Tbl_CustomerMaster WITH (NOLOCK)
-      WHERE ISNULL(Enable, 1) = 1
-        AND REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(RegTel)), ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' + @phone
-      ORDER BY
-        CASE
-          WHEN REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(RegTel)), ' ', ''), '-', ''), '+', '') = @phone THEN 0
-          ELSE 1
-        END,
-        CusCode;
-    `);
+    const hit = await findCustomerByPhone(pool, normalisePhone(digits));
 
-    if (!res.recordset.length) {
+    if (!hit) {
       return NextResponse.json({ ok: true, data: { found: false } });
     }
 
-    const row = res.recordset[0];
     return NextResponse.json({
       ok: true,
       data: {
         found: true,
-        cusCode: String(row.CusCode ?? "").trim(),
-        cusName: String(row.CusName ?? "").trim(),
+        cusCode: hit.cusCode,
+        cusName: hit.cusName,
       },
     });
   } catch (error) {

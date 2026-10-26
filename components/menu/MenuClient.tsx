@@ -338,6 +338,8 @@ export default function MenuClient({
           table={table}
           tableGroup={resolvedGroup || tableGroup}
           takeaway={isTakeaway}
+          locCode={locCode}
+          token={token}
           initial={cart.guest}
           onSubmit={(g) => {
             cart.setGuestDetails(g);

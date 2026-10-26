@@ -7,6 +7,13 @@
 //     pax?, localPax?, foreignPax?, customerName?, customerPhone?,
 //     customerCode?, orderType?, items: [{ itemId, quantity, remark? }] }
 //
+// Customer master:
+//   customerPhone is resolved against dbo.Tbl_CustomerMaster inside the
+//   same transaction (lib/customerService.resolveOrCreateCustomer), so
+//   Tbl_HoldUpsCloudTempQR.CusCode always carries the REAL CusCode
+//   (Tbl_TxnNumbers 'CC', per LocCode → A000005). The browser's
+//   customerCode is accepted but never trusted.
+//
 // Saves ONLY into dbo.Tbl_HoldUpsCloudTempQR:
 //   • LocCode      = QR location code
 //   • UserID/Name  = 'QR'
@@ -16,6 +23,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkTableAccess } from "@/lib/orderToken";
 import { confirmOrder, OrderError } from "@/lib/menuService";
+import { defaultLocCode } from "@/lib/customerService";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -77,12 +85,15 @@ export async function POST(request: NextRequest) {
     const result = await confirmOrder({
       tableNo,
       tableGroup: body.tableGroup ? String(body.tableGroup) : undefined,
-      locCode: body.locCode ? String(body.locCode) : undefined,
+      locCode: body.locCode
+        ? String(body.locCode)
+        : defaultLocCode(), // customer serial falls back to the default location
       existingInvoiceNo: body.existingInvoiceNo ? String(body.existingInvoiceNo) : undefined,
       existingTakeawayNo: body.existingTakeawayNo ? String(body.existingTakeawayNo) : undefined,
       items: Array.isArray(body.items) ? body.items : [],
       customerName: body.customerName ? String(body.customerName) : undefined,
       customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+      /* echoed back by the browser — logged only, re-resolved server-side */
       customerCode: body.customerCode ? String(body.customerCode) : undefined,
       pax: body.pax ? Number(body.pax) : undefined,
       localPax: body.localPax != null ? Number(body.localPax) : undefined,

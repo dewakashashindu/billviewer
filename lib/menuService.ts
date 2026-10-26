@@ -27,6 +27,12 @@ import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { convertMenuImage, type ConvertedImage } from "./menuImage";
 import { TAKEAWAY_TABLE_NO } from "./tableLink";
+import {
+  defaultLocCode,
+  findColumnName,
+  normalisePhone,
+  resolveOrCreateCustomer,
+} from "./customerService";
 
 export interface MenuItem {
   id: string;
@@ -124,6 +130,9 @@ const colSizeCache = new Map<string, Record<string, number>>([
   ],
 ]);
 const colSizeLoaded = new Set<string>();
+/** UPPER(column) → real column name, so optional columns (ContactNo,
+    CusTel, …) can be written only when the install actually has them. */
+const colNameCache = new Map<string, Map<string, string>>();
 
 async function loadColumnSizes(
   tx: sql.Transaction,
@@ -150,9 +159,14 @@ async function loadColumnSizes(
     }
     for (const r of res.recordset) {
       const table = String(r.TableName).toUpperCase();
+      const colName = String(r.ColumnName);
+      const upper = colName.toUpperCase();
       const map = colSizeCache.get(table) ?? {};
-      map[String(r.ColumnName).toUpperCase()] = Number(r.MaxLen);
+      map[upper] = Number(r.MaxLen);
       colSizeCache.set(table, map);
+      const names = colNameCache.get(table) ?? new Map<string, string>();
+      names.set(upper, colName);
+      colNameCache.set(table, names);
     }
   } catch (error) {
     console.error("Could not read column sizes (using fallback defaults):", error);
@@ -178,15 +192,11 @@ function makeFitter() {
 }
 
 /* ── phone normalisation ─────────────────────────────────────
+   Moved to lib/customerService.ts (shared with the customer
+   register/lookup flow) and re-exported here for compatibility.
    CusCode is char(10) on this POS: keep local 10-digit numbers.
    "+94 77 123 4567" → "0771234567" */
-export function normalisePhone(raw: string): string {
-  let d = String(raw ?? "").replace(/[^0-9]/g, "");
-  if (d.startsWith("0094")) d = `0${d.slice(4)}`; // 0094 77 …
-  else if (d.startsWith("94") && d.length >= 11) d = `0${d.slice(2)}`; // +94 77 …
-  if (d.length > 10 && !d.startsWith("0")) d = d.slice(-10);
-  return d.slice(0, 10);
-}
+export { normalisePhone } from "./customerService";
 
 /* ─────────────────────────── mock data ─────────────────────────── */
 const MOCK: MenuItem[] = [
@@ -331,7 +341,11 @@ export interface ConfirmInput {
   items: ConfirmLineInput[];
   customerName?: string;
   customerPhone?: string;
-  /** Tbl_CustomerMaster.CusCode when the phone matched a customer. */
+  /**
+   * Tbl_CustomerMaster.CusCode echoed back by the browser.
+   * ⚠️ NOT trusted — confirmOrder re-resolves the code from the phone
+   * number inside the transaction (spoof-proof). Kept for logging only.
+   */
   customerCode?: string;
   /** Number of guests for this order (LPax). */
   pax?: number;
@@ -758,7 +772,12 @@ function validateInput(
   const foreignPax = clampPax(input.foreignPax, 0);
 
   const customerName = s(input.customerName).slice(0, 200);
-  const customerPhone = s(input.customerPhone).slice(0, 30);
+  const customerPhoneRaw = s(input.customerPhone).slice(0, 30);
+  /* "+94 77 …" / "0094 77 …" / "077…" -> 077…  (same as RegTel in the POS) */
+  const customerPhone =
+    normalisePhone(customerPhoneRaw).length >= 9
+      ? normalisePhone(customerPhoneRaw)
+      : customerPhoneRaw;
   if (customerName.length < 2)
     throw new OrderError("Please enter the customer name.");
   if (customerPhone.replace(/[^0-9]/g, "").length < 9)
@@ -778,7 +797,8 @@ function validateInput(
     pax,
     localPax: takeaway ? 0 : localPax,
     foreignPax: takeaway ? 0 : foreignPax,
-    customerCode: s(input.customerCode).slice(0, 10),
+    /* echoed client code — used only for the mismatch warning */
+    customerCode: s(input.customerCode).slice(0, 20),
     takeaway,
     requestId: s(input.requestId),
   };
@@ -988,40 +1008,53 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
     const orderTypeValue = fit(TARGET_TABLE, "OrderType", input.takeaway ? "TA" : "DI");
     const voidRemarkValue = fit(TARGET_TABLE, "VoidRemark", "");
     const invoiceValue = fit(TARGET_TABLE, "InvoiceNo", invoiceNo);
-    const cusNameValue = fit(TARGET_TABLE, "CusName", input.customerName);
-    let resolvedCusCode = input.customerCode;
-    if (!resolvedCusCode && input.customerPhone) {
-      const phoneDigits = input.customerPhone.replace(/[^0-9]/g, "");
-      if (phoneDigits.length >= 9) {
-        try {
-          const cReq = tx.request();
-          cReq.input("phone", sql.VarChar(20), phoneDigits);
-          const cRes = await cReq.query(`
-            SELECT TOP 1 LTRIM(RTRIM(CusCode)) AS CusCode
-            FROM dbo.Tbl_CustomerMaster WITH (NOLOCK)
-            WHERE ISNULL(Enable, 1) = 1
-              AND REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(RegTel)), ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' + @phone
-            ORDER BY
-              CASE
-                WHEN REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(RegTel)), ' ', ''), '-', ''), '+', '') = @phone THEN 0
-                ELSE 1
-              END,
-              CusCode;
-          `);
-          if (cRes.recordset.length) {
-            resolvedCusCode = s(cRes.recordset[0].CusCode);
-          }
-        } catch {
-          /* Tbl_CustomerMaster optional */
-        }
+    /* 6.5) Customer master — REAL CusCode
+       The client-sent `customerCode` is NOT trusted (it can be spoofed).
+       The phone number is resolved against dbo.Tbl_CustomerMaster inside
+       THIS transaction:
+         • known phone  -> reuse the existing CusCode
+         • new phone    -> create the customer, code from
+                           dbo.Tbl_TxnNumbers (TxnType 'CC', per LocCode)
+                           e.g. Prefix 'A' + TxnNo 4 -> A000005
+       A failed order rolls the new customer row back too (no orphans). */
+    let cusNameValue = fit(TARGET_TABLE, "CusName", input.customerName);
+    let cusCodeValue = "";
+    if (input.customerPhone) {
+      const cust = await resolveOrCreateCustomer(tx, {
+        locCode: input.locCode || defaultLocCode(),
+        phone: input.customerPhone,
+        name: input.customerName,
+      });
+      cusCodeValue = fit(TARGET_TABLE, "CusCode", cust.cusCode);
+      if (cust.created) {
+        cusNameValue = fit(TARGET_TABLE, "CusName", cust.cusName);
+        console.log(`👤 customer created: ${cust.cusCode} (${input.locCode || defaultLocCode()})`);
+      } else if (input.customerCode && s(input.customerCode) !== cust.cusCode) {
+        console.warn(
+          `⚠️ client cusCode "${input.customerCode}" ≠ master "${cust.cusCode}" — master එකම ගත්තා`
+        );
       }
     }
 
-    const cusCodeValue = fit(
-      TARGET_TABLE,
-      "CusCode",
-      resolvedCusCode || " "
-    );
+    /* 6.6) ContactNo — the guest's phone number.
+       The column is not on every POS install, so it is written only
+       when INFORMATION_SCHEMA actually has it (ContactNo / CusTel /
+       Mobile / Phone…). */
+    const contactColName =
+      input.customerPhone && colSizeLoaded.has(TARGET_TABLE.toUpperCase())
+        ? findColumnName(colNameCache.get(TARGET_TABLE.toUpperCase()), [
+            "ContactNo",
+            "Contact_No",
+            "CusContactNo",
+            "CusTel",
+            "Mobile",
+            "Phone",
+            "TelNo",
+          ])
+        : null;
+    const contactValue = contactColName
+      ? fit(TARGET_TABLE, contactColName, normalisePhone(input.customerPhone))
+      : "";
 
     /* 7) Save ONLY into dbo.Tbl_HoldUpsCloudTempQR */
     for (const line of priced) {
@@ -1051,18 +1084,25 @@ export async function confirmOrder(rawInput: ConfirmInput): Promise<ConfirmResul
       ins.input("cusName", sql.VarChar(200), cusNameValue);
       ins.input("cusCode", sql.Char(10), cusCodeValue);
       ins.input("rowLine", sql.Float, nextRowLine);
+      if (contactColName && contactValue) {
+        ins.input("contactNo", sql.VarChar(50), contactValue);
+      }
 
       await ins.query(`
         INSERT INTO dbo.Tbl_HoldUpsCloudTempQR (
           LocCode, TabelNo, OrderNo, UserID, UserName, AOR,
           ItemCode, QTY, ItemRemarks, TabelGrpID, TxnDateTime,
           LPax, FPax, MgrID, OrderType, SalesPrice, VoidRemark,
-          InvoiceNo, IsPaid, CusName, CusCode, RowLine
+          InvoiceNo, IsPaid, CusName, CusCode, RowLine${
+            contactColName && contactValue ? `, ${contactColName}` : ""
+          }
         ) VALUES (
           @locCode, @table, @orderNo, @userId, @userName, @aor,
           @item, @qty, @remark, @grp, DATEADD(MINUTE, 330, GETUTCDATE()),
           @lpx, @fpx, @mgrId, @orderType, @price, @voidRemark,
-          @inv, @isPaid, @cusName, @cusCode, @rowLine
+          @inv, @isPaid, @cusName, @cusCode, @rowLine${
+            contactColName && contactValue ? `, @contactNo` : ""
+          }
         );
       `);
     }

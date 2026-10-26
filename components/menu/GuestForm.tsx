@@ -12,6 +12,14 @@
 //                                not found → name typed by the guest
 //     • Customer name        — MANDATORY
 //
+//   "Continue" taps POST /api/customer/register:
+//     • the phone number is resolved against Tbl_CustomerMaster
+//     • a brand-new customer is saved there (CusCode generated from
+//       Tbl_TxnNumbers, TxnType 'CC', per location) — the guest never
+//       sees that code, it only travels with the order
+//     • if the call fails the guest continues anyway; /api/order/confirm
+//       re-creates the customer inside its own transaction
+//
 //   TAKEAWAY (TA QR)
 //     • No pax (hidden / skipped)
 //     • Phone + customer name — MANDATORY
@@ -31,12 +39,18 @@ export default function GuestForm({
   table,
   tableGroup,
   takeaway = false,
+  locCode = "",
+  token = "",
   initial,
   onSubmit,
 }: {
   table: string;
   tableGroup?: string;
   takeaway?: boolean;
+  /** Location code from the scanned QR — Tbl_TxnNumbers counter key. */
+  locCode?: string;
+  /** Signed table token (only used to prove the QR when registering). */
+  token?: string;
   initial: GuestDetails;
   onSubmit: (guest: GuestDetails) => void;
 }) {
@@ -50,6 +64,9 @@ export default function GuestForm({
     initial.cusCode && initial.cusName ? "found" : "idle"
   );
   const [touched, setTouched] = useState(false);
+  /* "Continue" → POST /api/customer/register (customer master save) */
+  const [saving, setSaving] = useState(false);
+  const [registerNote, setRegisterNote] = useState<string | null>(null);
   const lookupTimer = useRef<number | null>(null);
   const lastLookup = useRef("");
 
@@ -112,15 +129,47 @@ export default function GuestForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phoneDigits]);
 
-  const submit = () => {
+  /* ── register the customer before moving on ────────────────
+     Phone is the identity: a known number returns the CusCode it
+     already has in Tbl_CustomerMaster, a new number creates the row
+     (code from Tbl_TxnNumbers 'CC' for this location). The code is
+     kept in local state only — the guest never sees it. */
+  const submit = async () => {
     setTouched(true);
-    if (!canContinue) return;
+    if (!canContinue || saving) return;
+    setRegisterNote(null);
+    setSaving(true);
+    let resolvedCode = cusCode.trim();
+    try {
+      const res = await fetch("/api/customer/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: phoneDigits,
+          name: cusName.trim(),
+          locCode: locCode || undefined,
+          tableNo: table || undefined,
+          t: token || undefined,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.ok) {
+        resolvedCode = String(json.data?.cusCode ?? "") || resolvedCode;
+      } else {
+        setRegisterNote(json?.error || null);
+      }
+    } catch {
+      /* offline / server hiccup — the order confirm call reconciles */
+      setRegisterNote("Could not save your details — you can still order.");
+    } finally {
+      setSaving(false);
+    }
     onSubmit({
       localPax: takeaway ? 0 : localPax,
       foreignPax: takeaway ? 0 : foreignPax,
       cusName: cusName.trim(),
       cusPhone: phoneDigits,
-      cusCode: cusCode.trim(),
+      cusCode: resolvedCode,
     });
   };
 
@@ -277,13 +326,22 @@ export default function GuestForm({
 
         <button
           type="button"
-          style={{ ...s.continue, ...(canContinue ? null : s.continueOff) }}
+          style={{
+            ...s.continue,
+            ...(canContinue && !saving ? null : s.continueOff),
+          }}
           className="mnu-tap"
-          aria-disabled={!canContinue}
-          onClick={submit}
+          aria-disabled={!canContinue || saving}
+          onClick={() => void submit()}
         >
-          Continue to Menu
+          {saving ? "Saving…" : "Continue to Menu"}
         </button>
+
+        {registerNote && (
+          <div style={{ ...s.hint, color: T.red, textAlign: "center" }}>
+            {registerNote}
+          </div>
+        )}
 
         <p style={s.note}>
           {takeaway
