@@ -10,6 +10,8 @@ import Image from "next/image";
 import DateRangeModal, { type DateRangeFilterSpec } from "./DateRangeModal";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
 /* ── Icons ── */
 function IGrid() {
   return (
@@ -667,6 +669,48 @@ export default function AppShell({
       alive = false;
     };
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!userInfo) return;
+
+    let lastActivity = Date.now();
+    let loggingOut = false;
+    const activityEvents: Array<keyof WindowEventMap> = [
+      "pointerdown",
+      "keydown",
+      "mousemove",
+      "touchstart",
+      "scroll",
+    ];
+
+    const markActivity = () => {
+      lastActivity = Date.now();
+    };
+
+    const logoutForInactivity = async () => {
+      if (loggingOut) return;
+      loggingOut = true;
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } finally {
+        router.replace("/login");
+      }
+    };
+
+    const checkActivity = () => {
+      if (Date.now() - lastActivity >= IDLE_TIMEOUT_MS) {
+        void logoutForInactivity();
+      }
+    };
+
+    activityEvents.forEach((event) => window.addEventListener(event, markActivity));
+    const interval = window.setInterval(checkActivity, 15_000);
+
+    return () => {
+      activityEvents.forEach((event) => window.removeEventListener(event, markActivity));
+      window.clearInterval(interval);
+    };
+  }, [router, userInfo]);
 
   const visibleNav = NAV.filter(
     (item) => !item.adminOnly || Boolean(userInfo?.isAdmin)
