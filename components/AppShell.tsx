@@ -10,6 +10,8 @@ import Image from "next/image";
 import DateRangeModal, { type DateRangeFilterSpec } from "./DateRangeModal";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 
+declare global { interface Window { __inventoryCanLeave?: (message?: string) => boolean } }
+
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 /* ── Icons ── */
@@ -68,11 +70,20 @@ function IChevDown() {
   );
 }
 
+function IInventory() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7h18v13H3z" /><path d="M3 7l2-4h14l2 4M8 11h8M8 15h5" />
+    </svg>
+  );
+}
+
 /* ── Nav types ── */
 interface ReportLeaf {
   key: string;
   label: string;
   reportId?: string; // undefined = coming soon
+  path?: string;
 }
 interface Category {
   key: string;
@@ -283,6 +294,26 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    key: "inventory",
+    label: "Inventory",
+    icon: <IInventory />,
+    adminOnly: true,
+    children: [
+      {
+        key: "inventory-reference",
+        label: "Reference",
+        children: [
+          { key: "inv-locations", label: "Location Master", path: "/inventory/locations" },
+          { key: "inv-categories", label: "Categories", path: "/inventory/categories" },
+          { key: "inv-items", label: "Item Master", path: "/inventory/items" },
+          { key: "inv-units", label: "Unit Master", path: "/inventory/units" },
+          { key: "inv-modes", label: "Modes", path: "/inventory/modes" },
+          { key: "inv-suppliers", label: "Supplier Master", path: "/inventory/suppliers" },
+        ],
+      },
+    ],
+  },
+  {
     // Right below Reports — Admin User Creation page
     key: "user-creation",
     label: "User Creation",
@@ -482,6 +513,7 @@ function UserBar({
   const name = user?.userName || user?.loginName || "";
 
   async function logout() {
+    if (typeof window !== "undefined" && window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave without saving?")) return;
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
@@ -611,6 +643,8 @@ export default function AppShell({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     reports: true,
     "cat-performance": true,
+    inventory: true,
+    "inventory-reference": true,
   });
   const [modal, setModal] = useState<{
     title: string;
@@ -625,6 +659,9 @@ export default function AppShell({
 
   // Auto-expand the category containing the currently active report
   useEffect(() => {
+    if (pathname.startsWith("/inventory/")) {
+      setExpanded((prev) => ({ ...prev, inventory: true, "inventory-reference": true }));
+    }
     if (!pathname.startsWith("/reports/")) return;
     const reportsNav = NAV.find((n) => n.key === "reports");
     if (!reportsNav?.children) return;
@@ -753,7 +790,11 @@ export default function AppShell({
           const isDirect = !item.children;
           const activeItem = isDirect
             ? pathname.startsWith(item.path ?? "#")
-            : pathname.startsWith("/reports");
+            : item.key === "reports"
+              ? pathname.startsWith("/reports")
+              : item.key === "inventory"
+                ? pathname.startsWith("/inventory")
+                : pathname.startsWith("/reports");
           const isExpanded = !!expanded[item.key];
 
           if (!fullMode) {
@@ -763,7 +804,7 @@ export default function AppShell({
                 title={item.label}
                 className={`sh-group-btn icon-mode ${activeItem ? "active" : ""}`}
                 onClick={() => {
-                  if (isDirect && item.path) router.push(item.path);
+                  if (isDirect && item.path) { if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return; router.push(item.path); }
                   else {
                     setOpen(true);
                     setExpanded((p) => ({ ...p, [item.key]: true }));
@@ -783,6 +824,7 @@ export default function AppShell({
                 onClick={() => {
                   if (isDirect && item.path) {
                     setMobOpen(false);
+                    if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return;
                     router.push(item.path);
                   } else {
                     toggle(item.key);
@@ -840,9 +882,9 @@ export default function AppShell({
                     {item.children.map((cat: Category) => {
                       const catExpanded = !!expanded[cat.key];
                       const hasActiveLeaf = cat.children.some(
-                        (leaf) =>
-                          leaf.reportId != null &&
-                          pathname === `/reports/${leaf.reportId}`
+                        (leaf) => leaf.path
+                          ? pathname === leaf.path
+                          : leaf.reportId != null && pathname === `/reports/${leaf.reportId}`
                       );
                       return (
                         <div key={cat.key}>
@@ -876,18 +918,24 @@ export default function AppShell({
                           >
                             <div className="sh-lvl3-list">
                               {cat.children.map((leaf) => {
-                                const active =
-                                  leaf.reportId != null &&
-                                  pathname === `/reports/${leaf.reportId}`;
+                                const active = leaf.path
+                                  ? pathname === leaf.path
+                                  : leaf.reportId != null && pathname === `/reports/${leaf.reportId}`;
                                 return (
                                   <button
                                     key={leaf.key}
                                     className={`sh-leaf-btn ${active ? "active" : ""}`}
-                                    onClick={() =>
-                                      openReport(leaf.label, leaf.reportId)
-                                    }
+                                    onClick={() => {
+                                      if (leaf.path) {
+                                        setMobOpen(false);
+                                        if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return;
+                                        router.push(leaf.path);
+                                      } else {
+                                        openReport(leaf.label, leaf.reportId);
+                                      }
+                                    }}
                                     title={
-                                      leaf.reportId
+                                      leaf.path || leaf.reportId
                                         ? leaf.label
                                         : `${leaf.label} (coming soon)`
                                     }
@@ -1072,6 +1120,7 @@ export default function AppShell({
         filter={modal?.filter}
         onClose={() => setModal(null)}
         onApply={(from, to, loc, extra) => {
+          if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return;
           const id = modal?.reportId;
           setModal(null);
           if (id)
