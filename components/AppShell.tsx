@@ -311,6 +311,22 @@ const NAV: NavItem[] = [
           { key: "inv-suppliers", label: "Supplier Master", path: "/inventory/suppliers" },
         ],
       },
+      {
+        key: "inventory-transactions",
+        label: "Transactions",
+        children: [
+          { key: "inv-po", label: "Purchase Orders", path: "/inventory/po" },
+          { key: "inv-grn", label: "GRN / DGRN", path: "/inventory/grn" },
+          { key: "inv-srn", label: "Supplier Return Note", path: "/inventory/srn" },
+          { key: "inv-damage", label: "Damage Note", path: "/inventory/damage" },
+          { key: "inv-transfer-requisition", label: "Transfer · Requisition", path: "/inventory/transfer-requisition" },
+          { key: "inv-transfer-note", label: "Transfer · Note", path: "/inventory/transfer-note" },
+          { key: "inv-transfer-return", label: "Transfer · Return", path: "/inventory/transfer-return" },
+          { key: "inv-issue-requisition", label: "Issue · Requisition", path: "/inventory/issue-requisition" },
+          { key: "inv-issue-note", label: "Issue · Note", path: "/inventory/issue-note" },
+          { key: "inv-stock-reconciliation", label: "Stock Reconciliation", path: "/inventory/stock-reconciliation" },
+        ],
+      },
     ],
   },
   {
@@ -645,6 +661,7 @@ export default function AppShell({
     "cat-performance": true,
     inventory: true,
     "inventory-reference": true,
+    "inventory-transactions": true,
   });
   const [modal, setModal] = useState<{
     title: string;
