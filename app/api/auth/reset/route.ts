@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (password.length < 6) {
+  if (loginName.length > 50 || password.length > 256 || password.length < 6) {
     return NextResponse.json(
       { success: false, error: "Password must be at least 6 characters" },
       { status: 400 }
@@ -75,50 +75,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!verifyOtpToken(otpToken, loginName, code)) {
-    registerHit(guessKey, WINDOW_MS);
-    return NextResponse.json(
-      { success: false, error: "Invalid or expired verification code" },
-      { status: 401 }
-    );
-  }
-
-  resetKey(guessKey);
-  registerHit(usedKey, WINDOW_MS);
-
+  let tx: sql.Transaction | undefined;
   try {
-    if (!isDbConfigured()) {
-      return NextResponse.json(
-        { success: false, error: "Database not configured (DB_* env vars missing)" },
-        { status: 500 }
-      );
-    }
-
-    const pool = await getPool();
-    const request = pool.request();
-    request.input("loginName", sql.VarChar(50), loginName);
-    request.input("psw", sql.VarChar(400), hashPassword(password));
-    const res = await request.query(`
-      UPDATE Tbl_UserDetails
-      SET Password = @psw
-      WHERE NULLIF(LTRIM(RTRIM(LoginName)), '') IS NOT NULL
-        AND LTRIM(RTRIM(LoginName)) = @loginName
-        AND Enable = 1
+    if (!isDbConfigured()) return NextResponse.json({ success:false,error:"Database not configured" }, {status:503});
+    tx = new sql.Transaction(await getPool());
+    await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const users = await new sql.Request(tx).input("loginName",sql.VarChar(50),loginName).query(`
+      SELECT TOP 2 LTRIM(RTRIM(LoginNameWeb)) AS LoginName,
+        LTRIM(RTRIM(LOCCODE)) AS LocCode,LTRIM(RTRIM(UserId)) AS UserId,Enable
+      FROM dbo.Tbl_UserDetails WITH (UPDLOCK,HOLDLOCK)
+      WHERE NULLIF(LTRIM(RTRIM(LoginNameWeb)), '') IS NOT NULL
+        AND LTRIM(RTRIM(LoginNameWeb))=@loginName
     `);
-
-    if ((res.rowsAffected?.[0] ?? 0) === 0) {
-      console.warn(`Password reset: no active account "${loginName}"`);
-      return NextResponse.json(
-        { success: false, error: "Reset failed. Please try again." },
-        { status: 401 }
-      );
+    const user=users.recordset[0];
+    const identity=user?`${String(user.LoginName).toLowerCase()}|${String(user.LocCode).toLowerCase()}|${String(user.UserId).toLowerCase()}`:'';
+    if(users.recordset.length!==1 || !user?.Enable || !verifyOtpToken(otpToken,identity,code)){
+      await tx.rollback(); tx=undefined;registerHit(guessKey,WINDOW_MS);
+      return NextResponse.json({success:false,error:"Invalid or expired verification code"},{status:401});
     }
+    resetKey(guessKey);
+    registerHit(usedKey,WINDOW_MS);
+    const result=await new sql.Request(tx).input("loc",sql.Char(10),user.LocCode).input("id",sql.Char(10),user.UserId).input("loginName",sql.VarChar(50),user.LoginName).input("psw",sql.VarChar(255),hashPassword(password)).query(`
+      UPDATE dbo.Tbl_UserDetails SET PasswordWeb=@psw
+      WHERE LOCCODE=@loc AND UserId=@id AND LTRIM(RTRIM(LoginNameWeb))=@loginName AND Enable=1
+    `);
+    if(result.rowsAffected[0]!==1){await tx.rollback();tx=undefined;return NextResponse.json({success:false,error:"Reset failed. Please try again."},{status:409})}
+    await tx.commit();tx=undefined;
 
     const out = NextResponse.json({ success: true });
     out.cookies.set(OTP_COOKIE, "", { path: "/", maxAge: 0 });
     out.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
     return out;
   } catch (e) {
+    if(tx)try{await tx.rollback()}catch{}
     console.error("Reset password error:", e);
     return NextResponse.json(
       { success: false, error: "Reset failed. Please try again." },

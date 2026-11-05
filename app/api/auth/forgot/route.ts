@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const loginName = String(body?.loginName ?? body?.username ?? "").trim();
-  if (!loginName) {
+  if (!loginName || loginName.length > 50) {
     return NextResponse.json(
       { success: false, error: "Username is required" },
       { status: 400 }
@@ -72,17 +72,19 @@ export async function POST(req: NextRequest) {
     const request = pool.request();
     request.input("loginName", sql.VarChar(50), loginName);
     const res = await request.query(`
-      SELECT TOP 1
-        LTRIM(RTRIM(LoginName)) AS LoginName,
+      SELECT TOP 2
+        LTRIM(RTRIM(LoginNameWeb)) AS LoginName,
+        LTRIM(RTRIM(LOCCODE)) AS LocCode,
+        LTRIM(RTRIM(UserId)) AS UserId,
+        Enable,
         LTRIM(RTRIM(ContNo))    AS ContNo
-      FROM Tbl_UserDetails WITH (NOLOCK)
-      WHERE NULLIF(LTRIM(RTRIM(LoginName)), '') IS NOT NULL
-        AND LTRIM(RTRIM(LoginName)) = @loginName
-        AND Enable = 1
+      FROM Tbl_UserDetails
+      WHERE NULLIF(LTRIM(RTRIM(LoginNameWeb)), '') IS NOT NULL
+        AND LTRIM(RTRIM(LoginNameWeb)) = @loginName
     `);
 
     const user = res.recordset[0];
-    if (!user) {
+    if (!user || res.recordset.length !== 1 || !user.Enable) {
       console.warn(`Forgot password: no active account "${loginName}" — uniform 200`);
       return uniformResponse();
     }
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
     }
 
     const out = uniformResponse();
-    out.cookies.set(OTP_COOKIE, createOtpToken(String(user.LoginName), code), {
+    out.cookies.set(OTP_COOKIE, createOtpToken(`${String(user.LoginName).toLowerCase()}|${String(user.LocCode).toLowerCase()}|${String(user.UserId).toLowerCase()}`, code), {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

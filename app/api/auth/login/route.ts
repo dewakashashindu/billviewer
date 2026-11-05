@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { ensureLoginNameColumn } from "@/lib/userSchema";
 import {
   verifyPassword,
   createSessionValue,
@@ -67,7 +66,7 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    if (!loginName || !password) {
+    if (!loginName || loginName.length > 50 || !password || password.length > 256) {
       return NextResponse.json(
         { success: false, error: "Username and password are required" },
         { status: 400 }
@@ -82,24 +81,23 @@ export async function POST(req: NextRequest) {
     }
 
     const pool = await getPool();
-    await ensureLoginNameColumn(pool);
     const request = pool.request();
     request.input("loginName", sql.VarChar(50), loginName);
     const res = await request.query(`
-      SELECT TOP 1
+      SELECT TOP 2
         LTRIM(RTRIM(u.UserId))    AS UserId,
-        LTRIM(RTRIM(u.LoginName)) AS LoginName,
-        ISNULL(NULLIF(LTRIM(RTRIM(u.UserName)), ''), LTRIM(RTRIM(u.LoginName))) AS UserName,
+        LTRIM(RTRIM(u.LoginNameWeb)) AS LoginName,
+        ISNULL(NULLIF(LTRIM(RTRIM(u.UserName)), ''), LTRIM(RTRIM(u.LoginNameWeb))) AS UserName,
         LTRIM(RTRIM(ISNULL(u.GroupId, ''))) AS GroupId,
-        u.Password,
+        u.PasswordWeb AS Password,
         u.Enable
-      FROM Tbl_UserDetails u WITH (NOLOCK)
-      WHERE NULLIF(LTRIM(RTRIM(u.LoginName)), '') IS NOT NULL
-        AND LTRIM(RTRIM(u.LoginName)) = @loginName
+      FROM Tbl_UserDetails u
+      WHERE NULLIF(LTRIM(RTRIM(u.LoginNameWeb)), '') IS NOT NULL
+        AND LTRIM(RTRIM(u.LoginNameWeb)) = @loginName
     `);
 
     const user = res.recordset[0];
-    if (!user || !user.Enable) return fail();
+    if (res.recordset.length !== 1 || !user || !user.Enable) return fail();
     if (!verifyPassword(password, String(user.Password ?? ""))) return fail();
 
     /* Success — clear the failure counter for this account. */

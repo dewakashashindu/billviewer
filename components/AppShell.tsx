@@ -330,12 +330,18 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    // Right below Reports — Admin User Creation page
-    key: "user-creation",
-    label: "User Creation",
+    key: "administration",
+    label: "Administration",
     icon: <IUserPlus />,
-    path: "/user-creation",
     adminOnly: true,
+    children: [{
+      key: "administration-user-creation",
+      label: "User Creation",
+      children: [
+        { key: "admin-user-groups", label: "User Groups", path: "/settings/user-groups" },
+        { key: "admin-users", label: "Users", path: "/user-creation" },
+      ],
+    }],
   },
   {
     // Last sidebar item — Table QR generator page
@@ -660,6 +666,8 @@ export default function AppShell({
     reports: true,
     "cat-performance": true,
     inventory: true,
+    administration: false,
+    "administration-user-creation": false,
     "inventory-reference": true,
     "inventory-transactions": true,
   });
@@ -679,6 +687,7 @@ export default function AppShell({
     if (pathname.startsWith("/inventory/")) {
       setExpanded((prev) => ({ ...prev, inventory: true, "inventory-reference": true }));
     }
+    if (pathname === "/settings/user-groups" || pathname === "/user-creation") setExpanded((prev) => ({...prev, administration: true, "administration-user-creation": true}));
     if (!pathname.startsWith("/reports/")) return;
     const reportsNav = NAV.find((n) => n.key === "reports");
     if (!reportsNav?.children) return;
@@ -811,7 +820,9 @@ export default function AppShell({
               ? pathname.startsWith("/reports")
               : item.key === "inventory"
                 ? pathname.startsWith("/inventory")
-                : pathname.startsWith("/reports");
+                : item.key === "administration"
+                  ? pathname === "/settings/user-groups" || pathname === "/user-creation"
+                  : pathname.startsWith("/reports");
           const isExpanded = !!expanded[item.key];
 
           if (!fullMode) {
