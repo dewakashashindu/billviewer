@@ -4,7 +4,7 @@ import { getPool, isDbConfigured } from "@/lib/db";
 import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 
 // The table identifier is selected only from this server-side allowlist.
-const tables = ["[dbo].[Tbl_Maincategory]", "[dbo].[Tbl_MenuLevel1]", "[dbo].[Tbl_MenuLevel2]", "[dbo].[Tbl_MenuLevel3]", "[dbo].[Tbl_MenuLevel4]", "[dbo].[Tbl_MenuLevel5]", "[dbo].[Tbl_MenuLevel6]", "[dbo].[Tbl_MenuLevel7]"] as const;
+const tables = ["[dbo].[Tbl_Maincategory]", "[dbo].[Tbl_Subcategory1]", "[dbo].[Tbl_Subcategory2]", "[dbo].[Tbl_Subcategory3]", "[dbo].[Tbl_Subcategory4]", "[dbo].[Tbl_Subcategory5]"] as const;
 
 async function authorize(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -21,8 +21,8 @@ async function authorize(req: NextRequest) {
 }
 function tableFor(req: NextRequest) {
   const level = req.nextUrl.searchParams.get("level");
-  if (level === null || !/^[0-7]$/.test(level)) return null;
-  return { table: tables[Number(level)], codeColumn: level === "0" ? "[CatCode]" : "[LevelID]", nameColumn: level === "0" ? "[CatDes]" : "[LevelDes]" };
+  if (level === null || !/^[0-5]$/.test(level)) return null;
+  return { level: Number(level), table: tables[Number(level)], codeColumn: "[CatCode]", nameColumn: "[CatDes]" };
 }
 function errorResponse(error: unknown) {
   console.error("Category database error:", error);
@@ -69,8 +69,8 @@ export async function DELETE(req: NextRequest) {
   try {
     const result = await validate(req); if ("response" in result) return result.response;
     const body = await req.json(); if (typeof body.code !== "string" || !body.code.trim() || body.code.length > 4000) return NextResponse.json({ error: "Category code is required." }, { status: 400 });
-    const deleted = await (await getPool()).request().input("code", sql.NVarChar(sql.MAX), body.code.trim()).query(`DELETE FROM ${result.table} WHERE ${result.codeColumn} = @code AND (SELECT COUNT(*) FROM ${result.table} WHERE ${result.codeColumn} = @code) = 1`);
-    if (!deleted.rowsAffected[0]) return NextResponse.json({ error: "Category not found or its code is duplicated. Check the table before editing or deleting." }, { status: 404 });
+    const deleted = await (await getPool()).request().input("code", sql.NVarChar(sql.MAX), body.code.trim()).query(`DELETE FROM ${result.table} WHERE ${result.codeColumn} = @code AND (SELECT COUNT(*) FROM ${result.table} WHERE ${result.codeColumn} = @code) = 1 AND NOT EXISTS (SELECT 1 FROM dbo.Tbl_RowItems WITH (UPDLOCK,HOLDLOCK) WHERE [RowLevel${result.level + 1}]=@code)`);
+    if (!deleted.rowsAffected[0]) return NextResponse.json({ error: "Category is missing, duplicated, or used by an item." }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (e) { return errorResponse(e); }
 }

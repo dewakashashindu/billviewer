@@ -38,7 +38,7 @@ export async function loadWebAuthorization(session:SessionUser){
     if(!node||seen.has(id))throw new AccessDeniedError();
     seen.add(id);
     const rawMask=decryptAccess(clean(row.ACCESS));
-    const mask=id==='items' && rawMask.length===1 ? rawMask+'0' : rawMask;
+    const mask=(id==='irq' && rawMask.length===4) || ((id==='inn' || id==='recon') && rawMask.length===3) || (id==='items' && (rawMask.length===1||rawMask.length===2)) || (id==='locations' && rawMask.length===2) || ((id==='po' || id==='grn' || id==='srn') && rawMask.length===4) || (['trq','tn','tr','damage'].includes(id) && rawMask.length===5) ? rawMask.padEnd(node.actions.length,'0') : rawMask;
     if(mask.length!==node.actions.length||!/^[01]+$/.test(mask))throw new AccessDeniedError();
     node.actions.forEach((action,i)=>{if(mask[i]==='1')permissions.add(`${id}:${action}`)});
   }

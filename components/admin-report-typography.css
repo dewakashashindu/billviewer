@@ -1,0 +1,36 @@
+/* Administration and user-settings typography, aligned with the existing report interface.
+   Do not alter layout, colours, data or report pages. */
+.admin-report-typography {
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  min-width: 0;
+  width: 100%;
+}
+.admin-report-typography :where(div, span, p, a, label, small, strong, b, i, h1, h2, h3, h4, button, input, select, textarea, table, th, td, summary) {
+  font-family: Inter, sans-serif !important;
+}
+.admin-report-typography h1 {
+  font-size: 15.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.2px !important;
+  line-height: 1.25 !important;
+}
+.admin-report-typography h2 {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+.admin-report-typography h3,
+.admin-report-typography h4 {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+.admin-report-typography :where(button, input, select, textarea) {
+  font-size: 12.5px !important;
+  line-height: 1.35;
+}
+.admin-report-typography :where(table, th, td) {
+  font-size: 12px !important;
+}

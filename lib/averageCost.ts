@@ -1,0 +1,6 @@
+/** Exact decimal arithmetic from the decimal representation of SQL float values.
+ * Free quantities are intentionally excluded. Negative opening stock counts as zero. */
+type Fraction={n:bigint;d:bigint};
+function dec(value:number):Fraction{if(!Number.isFinite(value))throw Error('STOCK');const match=value.toString().match(/^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i);if(!match)throw Error('STOCK');const digits=match[2]+(match[3]||''),scale=(match[3]||'').length-Number(match[4]||0);let n=BigInt(digits)*(match[1]?-BigInt(1):BigInt(1));return scale>=0?{n,d:BigInt(10)**BigInt(scale)}:{n:n*BigInt(10)**BigInt(-scale),d:BigInt(1)}}
+const add=(a:Fraction,b:Fraction):Fraction=>({n:a.n*b.d+b.n*a.d,d:a.d*b.d});const mul=(a:Fraction,b:Fraction):Fraction=>({n:a.n*b.n,d:a.d*b.d});
+export function movingAverageCost(oldCost:number,oldStock:number,paidQty:number,incomingCost:number):number{if(![oldCost,oldStock,paidQty,incomingCost].every(Number.isFinite)||paidQty<=0||incomingCost<0)throw Error('STOCK');const stock=dec(Math.max(0,oldStock)),qty=dec(paidQty),value=add(mul(dec(oldCost),stock),mul(dec(incomingCost),qty)),count=add(stock,qty);if(count.n===BigInt(0))throw Error('STOCK');const result=Number((value.n*count.d*BigInt(100))/(value.d*count.n))/100;if(!Number.isFinite(result))throw Error('STOCK');return result}
