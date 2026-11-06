@@ -1,4 +1,5 @@
 import InventoryWorkspace from "@/components/InventoryWorkspace";
+import RawItemsWorkspace from "@/components/RawItemsWorkspace";
 import CategoryWorkspace from "@/components/CategoryWorkspace";
 import UnitWorkspace from "@/components/UnitWorkspace";
 import ModesWorkspace from "@/components/ModesWorkspace";
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
 const transactionSections = new Set(["po", "grn", "srn", "damage", "transfer-requisition", "transfer-note", "transfer-return", "issue-requisition", "issue-note", "stock-reconciliation"]);
 export default async function InventoryPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
+  if (section === "items") return <RawItemsWorkspace/>;
   const movementKeys = {"transfer-requisition":"trq", "transfer-note":"tn", "transfer-return":"tr", "issue-requisition":"irq", "issue-note":"inn"} as const;
   const movement = movementKeys[section as keyof typeof movementKeys];
   if (movement) return <MovementWorkspace key={section} kind={movement} />;

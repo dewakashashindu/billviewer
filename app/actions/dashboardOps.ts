@@ -20,6 +20,7 @@
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
+import { requireWebPermission, AccessDeniedError } from "@/lib/webAuthorization";
 import { demoOps } from "@/components/dashboard/demoData";
 
 /* ───────────────────────── types ───────────────────────── */
@@ -223,26 +224,29 @@ export async function getDashboardOpsAction(
   range: OpsRange
 ): Promise<OpsResult<DashboardOpsData>> {
   try {
-    await requireSession();
+    const access = await requireWebPermission(await requireSession(), "dashboard:VIEW");
+    const allowed = [...access.locations].map(x => x.trim().toUpperCase());
     const from = str(range?.from);
     const to = str(range?.to) || from;
     const loc = str(range?.loc);
     if (!from) return { success: false, error: "Date range required" };
+    if (loc && loc.toUpperCase() !== "ALL" && !allowed.includes(loc.toUpperCase())) throw new AccessDeniedError();
 
     if (!isDbConfigured()) {
       return { success: true, demo: true, data: demoOps(from, to, loc) };
     }
 
     const pool = await getPool();
-    const locations = await loadLocations(pool);
+    const locations = (await loadLocations(pool)).filter(x => allowed.includes(x.code.trim().toUpperCase()));
     const hr = await hourExpression(pool, "Tbl_BillHeader", "TxnTime", "h");
-    const LOC = locWhere(loc);
+    const LOC = allowed.length ? `AND UPPER(LTRIM(RTRIM(h.LocCode))) IN (${allowed.map((_,i)=>`@allowedLoc${i}`).join(",")}) ${locWhere(loc)}` : "AND 1=0";
 
     const newReq = () => {
       const req = pool.request();
       req.input("from", sql.NVarChar(10), from);
       req.input("to", sql.NVarChar(10), to);
       bindLoc(req, loc);
+      allowed.forEach((value,i) => req.input(`allowedLoc${i}`, sql.NVarChar(10), value));
       return req;
     };
 

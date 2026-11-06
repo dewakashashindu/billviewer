@@ -8,6 +8,7 @@
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
+import {requireWebPermission} from "@/lib/webAuthorization";
 
 export interface ReportFilter {
   startDate: string;
@@ -3767,6 +3768,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
 export async function getPerformanceReportAction(filters: ReportFilter) {
   try {
     const session = await requireSession();
+    await requireWebPermission(session, 'report-performance-report:VIEW');
     if (!isDbConfigured()) {
       return {
         success: false,

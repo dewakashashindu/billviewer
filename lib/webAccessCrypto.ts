@@ -1,0 +1,6 @@
+import crypto from 'node:crypto';
+function key(){const raw=process.env.WEB_ACCESS_ENCRYPTION_KEY||'';if(!/^[0-9a-f]{64}$/i.test(raw))throw Error('WEB_ACCESS_ENCRYPTION_KEY must be a stable 64-character hex key.');return Buffer.from(raw,'hex')}
+// Versioned authenticated encryption with random IV; wrong keys fail closed.
+export function encryptAccess(value:string){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv('aes-256-gcm',key(),iv);const encrypted=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);const result='v1.'+Buffer.concat([iv,cipher.getAuthTag(),encrypted]).toString('base64url');if(result.length>200)throw Error('Encrypted function ID exceeds database limit.');return result}
+export function decryptAccess(value:string){if(!value.startsWith('v1.'))throw Error('Unknown encrypted access row.');const data=Buffer.from(value.slice(3),'base64url');if(data.length<29)throw Error('Invalid encrypted access row.');const cipher=crypto.createDecipheriv('aes-256-gcm',key(),data.subarray(0,12));cipher.setAuthTag(data.subarray(12,28));return Buffer.concat([cipher.update(data.subarray(28)),cipher.final()]).toString('utf8')}
+export function requireAccessKey(){key()}

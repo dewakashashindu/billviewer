@@ -10,6 +10,7 @@
 // ============================================================
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
+import { requireWebPermission } from "@/lib/webAuthorization";
 
 export interface PerfLocationOption {
   locCode: string;
@@ -382,7 +383,8 @@ export async function getDashboardPerformanceAction(): Promise<{
   error?: string;
 }> {
   try {
-    await requireSession();
+    const access = await requireWebPermission(await requireSession(), "dashboard:VIEW");
+    const allowed = new Set([...access.locations].map(x => x.trim().toUpperCase()));
 
     if (!isDbConfigured()) {
       return { success: true, data: mockDashboardData() };
@@ -424,7 +426,7 @@ export async function getDashboardPerformanceAction(): Promise<{
         const seenMain = new Set<string>();
         for (const r of locRows) {
           const code = s(r[lcKey]);
-          if (!code) continue;
+          if (!code || !allowed.has(code.toUpperCase())) continue;
           const name = (ldKey ? s(r[ldKey]) : "") || code;
           const up = code.toUpperCase();
           locNameByCode.set(up, name);
@@ -457,7 +459,8 @@ export async function getDashboardPerformanceAction(): Promise<{
     const kValDes = findRowKey(pKeys, ["Valdes", "ValDes", "ValueDes"]) ?? "Valdes";
     const kAmt = findRowKey(pKeys, ["PerfAmount", "Amount", "Val"]) ?? "PerfAmount";
     const kUser = findRowKey(pKeys, ["UserID", "UserId", "User"]);
-    const kLoc = findRowKey(pKeys, ["LocID", "LocCode", "Loc"]) ?? "LocID";
+    const kLoc = findRowKey(pKeys, ["LocID", "LocCode", "Loc"]);
+    if (!kLoc) throw new Error("Performance location column not found");
     const kSort = findRowKey(pKeys, ["SortingOrder", "SortOrder", "OrderNo"]) ?? "SortingOrder";
     const kHead = findRowKey(pKeys, ["Heading", "IsHeading"]) ?? "Heading";
 
@@ -481,7 +484,8 @@ export async function getDashboardPerformanceAction(): Promise<{
     for (const r of rawRows) {
       const dateIso = toDateIso(r[kDate]);
       if (!dateIso) continue;
-      const locCode = s(r[kLoc]) || "01";
+      const locCode = s(r[kLoc]);
+      if (!locCode || !allowed.has(locCode.toUpperCase())) continue;
       seenLocsInPerf.add(locCode.toUpperCase());
       const key = `${locCode.toUpperCase()}|${dateIso}`;
       const user = kUser ? s(r[kUser]) : "";

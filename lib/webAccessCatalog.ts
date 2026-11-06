@@ -1,0 +1,11 @@
+import {REPORT_ACCESS_SCREENS} from './reportAccessCatalog';
+// Stable, version-controlled web-only keys. Do not renumber existing keys.
+export const WEB_ACCESS_SECTIONS = [
+ {title:'Dashboard',screens:[{id:'dashboard',name:'Dashboard',actions:['VIEW']}]},
+ {title:'Inventory · Reference',screens:[{id:'locations',name:'Location Master',actions:['VIEW','SAVE']},{id:'categories',name:'Categories',actions:['VIEW','SAVE','DELETE']},{id:'items',name:'Item Master',actions:['VIEW','SAVE']},{id:'units',name:'Unit Master',actions:['VIEW','SAVE','DELETE']},{id:'modes',name:'Modes',actions:['VIEW','SAVE','DELETE']},{id:'suppliers',name:'Supplier Master',actions:['VIEW','SAVE','DELETE']}]},
+ {title:'Inventory · Transactions',screens:[{id:'po',name:'Purchase Orders',actions:['VIEW','SAVE','PRINT','EMAIL']},{id:'grn',name:'GRN / DGRN',actions:['VIEW','SAVE','PRINT','EMAIL']},{id:'srn',name:'Supplier Return Note',actions:['VIEW','DELETE','PRINT','EMAIL']},{id:'damage',name:'Damage Note',actions:['VIEW','SAVE','DELETE','PRINT','EMAIL']},{id:'trq',name:'Transfer Requisition',actions:['VIEW','SAVE','DELETE','PRINT','EMAIL']},{id:'tn',name:'Transfer Note',actions:['VIEW','SAVE','DELETE','PRINT','EMAIL']},{id:'tr',name:'Transfer Return',actions:['VIEW','SAVE','DELETE','PRINT','EMAIL']},{id:'irq',name:'Issue Requisition',actions:['VIEW','SAVE','DELETE','PRINT']},{id:'inn',name:'Issue Note',actions:['VIEW','SAVE','PRINT']},{id:'recon',name:'Stock Reconciliation',actions:['VIEW','PRINT','EMAIL']}]},
+ {title:'Reports',screens:REPORT_ACCESS_SCREENS},
+ {title:'Administration',screens:[{id:'groups',name:'User Groups',actions:['VIEW','SAVE','DELETE']},{id:'users',name:'User Creation',actions:['VIEW','SAVE']},{id:'profiles',name:'Access Profile Creation',actions:['VIEW','SAVE','DELETE','PRINT']},{id:'assign',name:'Assign Profiles',actions:['VIEW','SAVE','PRINT']}]},
+ {title:'Other screens',screens:[{id:'settings',name:'Settings',actions:['VIEW','SAVE']},{id:'orders',name:'Orders',actions:['VIEW']},{id:'tableqr',name:'Table QR Codes',actions:['VIEW','PRINT']}]},
+] as const;
+export const WEB_ACCESS_KEYS=new Set(WEB_ACCESS_SECTIONS.flatMap(group=>group.screens.flatMap(screen=>screen.actions.map(action=>`${screen.id}:${action}`))));

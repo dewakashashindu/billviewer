@@ -12,7 +12,9 @@
 //   Share   — PDF blob -> WhatsApp / Email / Device / Copy link
 //   Chart   — toggle chart view (chartSupported=true only)
 // ============================================================
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import {useParams} from "next/navigation";
+import {ReportPermissionsContext} from "./ReportPermissionsContext";
 import dynamic from "next/dynamic";
 import {
   IconSearch,
@@ -157,7 +159,7 @@ export default function ReportToolbar({
   search,
   onSearchChange,
   searchPlaceholder = "Search...",
-  pdfDocument,
+  pdfDocument: suppliedPdfDocument,
   pdfFileName = "report.pdf",
   chartSupported = false,
   chartMode = false,
@@ -166,6 +168,9 @@ export default function ReportToolbar({
   singleDate = false,
   singleDateLabel = "Business Date",
 }: ReportToolbarProps) {
+  const reportPermissions = useContext(ReportPermissionsContext);
+  const params = useParams<{reportId:string}>();
+  const pdfDocument = reportPermissions.includes(`report-${params?.reportId}:PRINT`) ? suppliedPdfDocument : undefined;
   const [zoom, setZoom] = useState(100);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);

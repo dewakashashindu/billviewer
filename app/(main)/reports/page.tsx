@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import {useContext} from "react";
+import {ReportPermissionsContext} from "@/components/ReportPermissionsContext";
 import UserCreationPanel from "@/components/UserCreationPanel";
 
 /* ── inline SVG icons (emoji naha — professional icons) ── */
@@ -76,6 +78,7 @@ const REPORTS = [
 
 export default function ReportsLandingPage() {
   const router = useRouter();
+  const reportPermissions = useContext(ReportPermissionsContext);
   const now = new Date();
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const localIso = (d: Date) =>
@@ -101,7 +104,7 @@ export default function ReportsLandingPage() {
           gap: 14,
         }}
       >
-        {REPORTS.map((r) => (
+        {REPORTS.filter(r => !r.id || reportPermissions.includes(`report-${r.id}:VIEW`)).map((r) => (
           <button
             key={r.title}
             onClick={() =>

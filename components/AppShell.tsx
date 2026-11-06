@@ -5,6 +5,7 @@
 // (Bill viewer pages meka ain — /bill, / me shell eken wenaskai)
 // ============================================================
 import { useEffect, useState, type ReactNode } from "react";
+import {ReportPermissionsContext} from "./ReportPermissionsContext";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import DateRangeModal, { type DateRangeFilterSpec } from "./DateRangeModal";
@@ -344,6 +345,16 @@ const NAV: NavItem[] = [
     }],
   },
   {
+    key: "system-settings",
+    label: "System Settings",
+    icon: <IUserPlus />,
+    adminOnly: true,
+    children: [{ key: "system-user-settings", label: "User Settings", children: [
+      { key: "settings-access-profiles", label: "Access Profile Creation", path: "/settings/access-profiles" },
+      { key: "settings-assign-profiles", label: "Assign Profiles", path: "/settings/assign-profiles" },
+    ] }],
+  },
+  {
     // Last sidebar item — Table QR generator page
     key: "table-qr",
     label: "Table QR Codes",
@@ -651,9 +662,13 @@ function UserBar({
 export default function AppShell({
   children,
   currentUser,
+  canViewDashboard = false,
+  reportPermissions = [],
 }: {
   children: ReactNode;
   currentUser?: ShellUserInfo;
+  canViewDashboard?: boolean;
+  reportPermissions?: string[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -666,6 +681,8 @@ export default function AppShell({
     reports: true,
     "cat-performance": true,
     inventory: true,
+    "system-settings": false,
+    "system-user-settings": false,
     administration: false,
     "administration-user-creation": false,
     "inventory-reference": true,
@@ -688,6 +705,7 @@ export default function AppShell({
       setExpanded((prev) => ({ ...prev, inventory: true, "inventory-reference": true }));
     }
     if (pathname === "/settings/user-groups" || pathname === "/user-creation") setExpanded((prev) => ({...prev, administration: true, "administration-user-creation": true}));
+    if (pathname === "/settings/access-profiles" || pathname === "/settings/assign-profiles") setExpanded((prev) => ({...prev, "system-settings": true, "system-user-settings": true}));
     if (!pathname.startsWith("/reports/")) return;
     const reportsNav = NAV.find((n) => n.key === "reports");
     if (!reportsNav?.children) return;
@@ -776,8 +794,11 @@ export default function AppShell({
   }, [router, userInfo]);
 
   const visibleNav = NAV.filter(
-    (item) => !item.adminOnly || Boolean(userInfo?.isAdmin)
-  );
+    (item) => (item.key !== "dashboard" || canViewDashboard) && (!item.adminOnly || Boolean(userInfo?.isAdmin))
+  ).map(item => item.key !== 'reports' || !item.children ? item : {
+    ...item,
+    children: item.children.map(cat => ({...cat, children: cat.children.filter(leaf => !leaf.reportId || reportPermissions.includes(`report-${leaf.reportId}:VIEW`))})).filter(cat => cat.children.length > 0),
+  });
 
   function toggle(key: string) {
     setExpanded((p) => ({ ...p, [key]: !p[key] }));
@@ -820,6 +841,8 @@ export default function AppShell({
               ? pathname.startsWith("/reports")
               : item.key === "inventory"
                 ? pathname.startsWith("/inventory")
+                : item.key === "system-settings"
+                  ? pathname === "/settings/access-profiles" || pathname === "/settings/assign-profiles"
                 : item.key === "administration"
                   ? pathname === "/settings/user-groups" || pathname === "/user-creation"
                   : pathname.startsWith("/reports");
@@ -1137,7 +1160,7 @@ export default function AppShell({
         }}
       >
         <UserBar user={userInfo} onOpenMobileMenu={() => setMobOpen(true)} />
-        {children}
+        <ReportPermissionsContext.Provider value={reportPermissions}>{children}</ReportPermissionsContext.Provider>
       </main>
 
       {/* Date range modal */}
