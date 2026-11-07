@@ -1,35 +1,15 @@
 import 'server-only';
 import PDFDocument from 'pdfkit';
-
-type PdfLine={item:string;name?:string;unit:string;unitName?:string;qty:number;cost:number;value:number};
-export type InventoryPdfData={title:string;id:string;date:string;status:string;location:string;locationName?:string;destination?:string;supplier?:string;supplierName?:string;invoice?:string;due?:string;delivery?:string;remarks?:string;total:number;discount?:number;adjustment?:number;type?:string;lines:PdfLine[]};
-const money=(n:number)=>Number(n||0).toFixed(2);
-export async function renderInventoryPdf(d:InventoryPdfData,copy:'standard'|'supplier'):Promise<Buffer>{
- return new Promise((resolve,reject)=>{
-  try{
-   const pdf=new PDFDocument({size:'A4',margin:32,autoFirstPage:true,info:{Title:`${d.title} ${d.id}`}}),chunks:Buffer[]=[];
-   pdf.on('data',(chunk:Buffer)=>chunks.push(chunk));pdf.on('end',()=>resolve(Buffer.concat(chunks)));pdf.on('error',reject);
-   const monetary=copy==='standard',left=32,right=pdf.page.width-32,width=right-left;
-   pdf.fillColor('#292929').font('Helvetica-Bold').fontSize(18).text(d.title);
-   pdf.font('Helvetica').fontSize(9).moveDown(.3).text(monetary?'Standard Copy':'Supplier Copy').moveDown(.5);
-   pdf.text(`Document: ${d.id}    Date: ${d.date}    Status: ${d.status}`);
-   pdf.text(`Location: ${d.location} ${d.locationName||''}${d.destination?`    To: ${d.destination}`:''}`);
-   if(d.supplier)pdf.text(`Supplier: ${d.supplier} ${d.supplierName||''}    Invoice: ${d.invoice||'-'}`);
-   if(d.due)pdf.text(`Due date: ${d.due}    Delivery: ${d.delivery||'-'}`);
-   pdf.moveDown();
-   const columns=monetary?[.35,.17,.16,.16,.16]:[.50,.25,.25];
-   const headers=monetary?['Item code / name','Unit','Quantity','Cost','Value']:['Item code / name','Unit','Quantity'];
-   function header(){const y=pdf.y;let x=left;pdf.font('Helvetica-Bold').fontSize(9);headers.forEach((v,i)=>{pdf.text(v,x,y,{width:width*columns[i]-6,lineBreak:false});x+=width*columns[i]});pdf.moveTo(left,y+15).lineTo(right,y+15).strokeColor('#aaaaaa').lineWidth(.6).stroke();pdf.y=y+20}
-   header();
-   for(const line of d.lines){
-    const vals=[`${line.item} ${line.name||''}`.trim(),line.unitName||line.unit,String(line.qty),...(monetary?[money(line.cost),money(line.value)]:[])];
-    pdf.font('Helvetica').fontSize(9);const heights=vals.map((v,i)=>pdf.heightOfString(v,{width:width*columns[i]-8}));const rowHeight=Math.max(14,...heights)+8;
-    if(pdf.y+rowHeight>pdf.page.height-48){pdf.addPage();header()}
-    const y=pdf.y;let x=left;vals.forEach((v,i)=>{pdf.text(v,x,y,{width:width*columns[i]-8});x+=width*columns[i]});pdf.moveTo(left,y+rowHeight-4).lineTo(right,y+rowHeight-4).strokeColor('#dddddd').lineWidth(.4).stroke();pdf.y=y+rowHeight;
-   }
-   if(pdf.y>pdf.page.height-100)pdf.addPage();pdf.x=left;pdf.moveDown(.5);
-   if(monetary){if(d.type==='grn'){pdf.text(`Discount: ${money(d.discount||0)}`,{align:'right'});pdf.text(`Adjustment: ${money(d.adjustment||0)}`,{align:'right'})}pdf.font('Helvetica-Bold').text(`Total (LKR): ${money(d.total)}`,{align:'right'}).font('Helvetica')}
-   pdf.moveDown().text(`Remarks: ${d.remarks||'-'}`);pdf.end();
-  }catch(e){reject(e)}
- });
-}
+import {columns,money,type PrintDoc,type PrintCopy} from './inventoryPrintLayout';
+export type InventoryPdfData=PrintDoc;
+export async function renderInventoryPdf(d:InventoryPdfData,copy:PrintCopy):Promise<Buffer>{return new Promise((resolve,reject)=>{try{
+ const pdf=new PDFDocument({size:'A4',margin:34,bufferPages:true,info:{Title:`${d.title} ${d.id}`}}),chunks:Buffer[]=[];pdf.on('data',(c:Buffer)=>chunks.push(c));pdf.on('end',()=>resolve(Buffer.concat(chunks)));pdf.on('error',reject);
+ const left=34,right=pdf.page.width-34,width=right-left,blue='#315b78',pale='#eaf1f5',cols=columns(d,copy);let y=34;
+ const txt=(text:string,x:number,yy:number,w:number,align:'left'|'right'|'center'='left',bold=false,size=9)=>{pdf.font(bold?'Helvetica-Bold':'Helvetica').fontSize(size).fillColor('#243849').text(text,x,yy,{width:w,align,lineBreak:false,ellipsis:true})};
+ function header(){const top=34;txt(d.locationName||d.location,left,top,width*.29,'left',true,11);txt(d.title,left+width*.29,top,width*.42,'center',true,13);txt(`Date: ${d.date||'-'}`,left+width*.72,top,width*.28,'right',false,9);txt(`Status: ${d.status}`,left+width*.72,top+15,width*.28,'right');y=top+35;pdf.rect(left,y,width,38).lineWidth(.6).strokeColor(blue).stroke();txt(d.destination?'FROM / TO':d.supplier?'SUPPLIER':'LOCATION',left+8,y+6,width-16,'left',true,8);txt(d.destination?`${d.location} ${d.locationName||''}  to  ${d.destination}`:d.supplier?`${d.supplier}  ${d.supplierName||''}`:`${d.location}  ${d.locationName||''}`,left+8,y+20,width-16);y+=44;pdf.rect(left,y,width,21).fillAndStroke(pale,blue);txt(`Document No: ${d.id}${d.invoice?`    Supplier invoice: ${d.invoice}`:''}`,left+7,y+6,width-14,'left',true,9);y+=21;tableHeader()}
+ function tableHeader(){pdf.rect(left,y,width,22).fillAndStroke('#dce8ef',blue);let x=left;for(const col of cols){const w=width*col.width;txt(col.label,x+4,y+7,w-8,col.align,true,7.5);x+=w}y+=22}
+ function page(){pdf.addPage();y=34;header()}
+ header();for(const line of d.lines){pdf.font('Helvetica').fontSize(8.5);const values=cols.map(c=>c.value(line));const height=Math.max(22,...values.map((v,i)=>pdf.heightOfString(v,{width:width*cols[i].width-8})+10));if(y+height>pdf.page.height-60)page();let x=left;cols.forEach((col,i)=>{const w=width*col.width;pdf.rect(x,y,w,height).lineWidth(.4).strokeColor('#a7bac6').stroke();pdf.fillColor('#243849').font('Helvetica').fontSize(8.5).text(values[i],x+4,y+5,{width:w-8,align:col.align});x+=w});y+=height}
+ if(y+100>pdf.page.height-48)page();y+=10;if(copy==='standard'){if(d.type==='grn'){txt(`Discount: ${money(d.discount)}    Adjustment: ${money(d.adjustment)}`,left,y,width,'right');y+=16}pdf.rect(left,y,width,22).fillAndStroke(pale,blue);txt(`Total (LKR): ${money(d.total)}`,left+8,y+6,width-16,'right',true);y+=30}if(d.due){txt(`Due date: ${d.due}`,left,y,width);y+=14}if(d.delivery){pdf.font('Helvetica').fontSize(9).fillColor('#243849').text(`Delivery: ${d.delivery}`,left,y,{width});y=pdf.y+6}pdf.font('Helvetica').fontSize(9).fillColor('#243849').text(`Remarks: ${d.remarks||'-'}`,left,y,{width});
+ const pages=pdf.bufferedPageRange();for(let i=0;i<pages.count;i++){pdf.switchToPage(i);pdf.page.margins.bottom=0;const fy=pdf.page.height-24;txt(copy==='standard'?'Standard Copy':'Supplier Copy',left,fy,width*.5,'left',false,8);txt(`Page ${i+1} of ${pages.count}`,left+width*.5,fy,width*.5,'right',false,8)}pdf.end();
+ }catch(e){reject(e)}})}

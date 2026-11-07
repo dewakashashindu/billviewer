@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import SemiRecipe from './SemiRecipe';
+import ReferencePrint from './ReferencePrint';
 type Opt={code:string;name:string};type Row=Record<string,unknown>;type Masters={categories:Opt[][];units:Opt[];suppliers:Opt[];locations:Opt[];allLocationAccess:boolean;data:Row[]};
 const texts=['RowItmDes','RowItmPrintDes','UnitID','SuppID','RowLevel1','RowLevel2','RowLevel3','RowLevel4','RowLevel5','RowLevel6'] as const;
 const nums=['RowCost','ROL','ROQ','MinQty','MaxQty','PackSize','PackPrice'] as const;
@@ -24,7 +25,7 @@ export default function RawItemsWorkspace(){const [detailTab,setDetailTab]=useSt
  const number=(key:string)=>label(key,<input style={style} type="number" min="0" step="any" value={Number(form[key]??0)} onChange={e=>set(key,Number(e.target.value))}/>);
  const selectBox=(key:string,opts:Opt[])=>label(key,<select style={style} value={String(form[key]??'')} onChange={e=>set(key,e.target.value)}><option value="">Select…</option>{opts.map(o=><option value={o.code} key={o.code}>{o.name} ({o.code})</option>)}</select>);
  const section=(id:string,title:string,contents:React.ReactNode)=><section id={id} className="ri-box"><div className="ri-box-head">{title}</div><div className="ri-box-body">{contents}</div></section>;
- return <main className="ri-root"><div className="ri-wrap"><header className="ri-page-head"><div><small>RESTAURANT · INVENTORY</small><h1>Item Master</h1><p>Manage restaurant items, categories and location details.</p></div><button className="ri-primary" onClick={fresh} disabled={busy}>＋　New Item</button></header>
+ return <main className="ri-root"><div className="ri-wrap"><header className="ri-page-head"><div><small>RESTAURANT · INVENTORY</small><h1>Item Master</h1><p>Manage restaurant items, categories and location details.</p></div><div style={{display:"flex",gap:8}}><ReferencePrint title="Item Master" columns={["Item code","Item description"]} rows={items.map(([id,name])=>[id,name])} disabled={!master||busy}/><button className="ri-primary" onClick={fresh} disabled={busy}>＋　New Item</button></div></header>
  {error&&<div className="ri-error" role="alert">{error}</div>}{msg&&<div className="ri-success" role="status">{msg}</div>}
  <nav className="ri-shortcuts" aria-label="Item sections">{[['identification','Identification'],['categories','Categories'],['specification','Flags'],['stock','Cost & Stock'],['locations','Locations']].map(([id,title])=><a key={id} href={`#ri-${id}`}>{title}</a>)}</nav>
  <div className="ri-columns"><aside className="ri-list"><div className="ri-list-head"><div className="ri-list-title"><b>Item Master</b><span>{items.length} total</span></div><input style={style} value={search} onChange={e=>setSearch(e.target.value)} placeholder="⌕  Search item master…"/><button className="ri-primary" onClick={fresh} disabled={busy}>＋　New Item</button></div><div className="ri-list-items">{items.length?items.map(([id,n])=><button key={id} disabled={busy} onClick={()=>select(id)} className={`ri-item ${!isNew&&code===id?'active':''}`}><span className="ri-icon">◇</span><span><b>{n}</b><small>{id}</small></span></button>):<p className="ri-empty">{master?'No items found.':'Loading items…'}</p>}</div></aside>
