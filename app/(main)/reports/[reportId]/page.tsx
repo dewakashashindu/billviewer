@@ -9,7 +9,7 @@
 //   • page-level loading + error blocks (same style)
 //   • sales summary gets pdfDocument too (share/PDF identical)
 // ============================================================
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { UNAUTHORIZED_ERROR } from "@/lib/auth";
 import { REPORTS_CONFIG } from "@/config/reports.config";
@@ -54,6 +54,9 @@ import TransactionSummaryReport, {
   TXN_PDF_COLUMNS,
   type TxnSummaryData,
 } from "@/components/reports/TransactionSummaryReport";
+import CreditHistoryPos, { CreditHistoryPosPdf, creditFilter, type CreditData } from "@/components/reports/CreditHistoryPos";
+import InvoiceTraceReport, { InvoiceTracePdf, type InvoiceData } from "@/components/reports/InvoiceTraceReport";
+import ServiceChargeReport, { ServiceChargePdf, serviceFilter, stewardLabel, type ServiceData } from "@/components/reports/ServiceChargeReport";
 import StewardSummaryReport, {
   filterSteward,
   flattenStewardForPdf,
@@ -65,11 +68,7 @@ import TaxVatReport, {
   type TaxVatData,
 } from "@/components/reports/TaxVatReport";
 import TaxVatPdfDocument from "@/components/reports/TaxVatPdfDocument";
-import VoidReport, {
-  filterVoid,
-  VoidPdfDocument,
-  type VoidData,
-} from "@/components/reports/VoidReport";
+import VoidPosReport, { VoidPosPdf, filterVoidPos, type VoidPosData } from "@/components/reports/VoidPosReport";
 import PaxCountReport, {
   filterPax,
   PaxCountPdfDocument,
@@ -165,6 +164,8 @@ import PerformanceReport, {
   type PerformanceReportData,
 } from "@/components/reports/PerformanceReport";
 import {
+  getReportPaymentModesAction,
+  getInvoiceTraceAction,
   getLocationsAction,
   getMainLocationsAction,
 } from "@/app/actions/reports";
@@ -383,6 +384,11 @@ export default function DynamicReportPage() {
   const [search, setSearch] = useState("");
   const [chartMode, setChartMode] = useState(false);
   const [printedAt] = useState(() => new Date());
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceError, setInvoiceError] = useState("");
+  const invoiceRequest = useRef(0);
 
   // URL params: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sidebar date popup eken)
   // local date — toISOString UTC nisa day shift wenna (31/Dec bug)
@@ -410,9 +416,27 @@ export default function DynamicReportPage() {
   const [kotType, setKotType] = useState("all");
   const [credCus, setCredCus] = useState("");
   const [cashSel, setCashSel] = useState("");
+  const [stewardSelection, setStewardSelection] = useState("all");
+  const [creditCustomerSelection, setCreditCustomerSelection] = useState("all");
+  const [voidDetail, setVoidDetail] = useState(false);
   const [perfLocs, setPerfLocs] = useState<{ code: string; name: string }[]>([]);
   const [perfCompare, setPerfCompare] = useState(false);
+  const [paymentModes, setPaymentModes] = useState<{ value: string; label: string }[]>([]);
+  const [paymentModesError, setPaymentModesError] = useState("");
   const [allLocs, setAllLocs] = useState<{ code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (reportId !== "payment-summary-wise") return;
+    let alive = true;
+    setPaymentModes([]);
+    setPaymentModesError("");
+    getReportPaymentModesAction().then(res => {
+      if (!alive) return;
+      if (res.success && Array.isArray(res.data)) setPaymentModes(res.data);
+      else setPaymentModesError(res.error || "Failed to load payment modes");
+    }).catch(() => { if (alive) setPaymentModesError("Failed to load payment modes"); });
+    return () => { alive = false; };
+  }, [reportId]);
 
   // Load main outlets once so every report page can switch All Locations / Loc 1 / Loc 2 on screen
   useEffect(() => {
@@ -467,7 +491,7 @@ export default function DynamicReportPage() {
 
   // ── single fetch effect — ALL reports (sales summary includes) ──
   useEffect(() => {
-    if (!config) return;
+    if (!config || reportId === "invoice-trace") return;
     let alive = true;
     const goLogin = () => {
       if (alive) router.replace("/login");
@@ -484,6 +508,7 @@ export default function DynamicReportPage() {
           billType: billType || config.lockBillType || undefined,
           payMode: payMode || undefined,
           withCost: miiCost || undefined,
+          menuIssueByDate: config.render === "mii-date",
           movement: imvMode,
           threshold: imvThr,
           payCat: cioCat || undefined,
@@ -519,9 +544,16 @@ export default function DynamicReportPage() {
     };
   }, [reportId, config, startDate, endDate, loc, orderMode, billType, payMode, miiCost, imvMode, imvThr, cioCat, kotType, credCus, cashSel, router]);
 
+  useEffect(() => {
+    invoiceRequest.current++;
+    setInvoiceData(null); setInvoiceError(""); setInvoiceBusy(false);
+  }, [reportId, loc]);
+
   // reset view state on report change
   useEffect(() => {
     setSearch("");
+    setStewardSelection("all");
+    setCreditCustomerSelection("all");
     setChartMode(false);
     setPerfCompare(false);
   }, [reportId]);
@@ -580,7 +612,8 @@ export default function DynamicReportPage() {
     setEndDate(t);
   };
 
-  const extraFilter = config.filter;
+  const extraFilter = reportId === "payment-summary-wise" && config.filter
+    ? { ...config.filter, options: paymentModes } : config.filter;
   const extraValue =
     extraFilter?.param === "om"
       ? orderMode
@@ -598,6 +631,7 @@ export default function DynamicReportPage() {
 
   const filterBarNode =
     config.render !== "performance-report" ? (
+      <>
       <ReportFilterBar
         locations={allLocs}
         selectedLoc={loc}
@@ -606,6 +640,8 @@ export default function DynamicReportPage() {
         extraValue={extraValue}
         onExtraChange={handleExtraChange}
       />
+      {paymentModesError && reportId === "payment-summary-wise" && <p role="alert" style={{ color: "#b91c1c", padding: "0 24px" }}>{paymentModesError}</p>}
+      </>
     ) : null;
 
   // ── Sales Summary (custom render — SAME toolbar/loading/error/chart) ──
@@ -1039,12 +1075,27 @@ export default function DynamicReportPage() {
     );
   }
 
+  // Service charge uses bill-level DI rows, not the steward daily-summary renderer.
+  if (config.id === "service-charge") {
+    const report = objectData as ServiceData | null;
+    const rows = report ? serviceFilter(report, stewardSelection, search) : [];
+    const options = new Map<string, string>();
+    for (const r of report?.rows ?? []) { const k = `s:${r.stewardId}`; if (!options.has(k) || (!options.get(k)?.includes(" — ") && r.stewardName)) options.set(k, stewardLabel(r)); }
+    const pdf = rows.length ? <ServiceChargePdf rows={rows} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} /> : undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search bill, steward, location, date..." pdfDocument={pdf} pdfFileName={`service-charge-${startDate}_to_${endDate}.pdf`} />
+      {filterBarNode}
+      <div style={{padding:"10px 24px",color:"#684830",fontSize:12}}><label>Steward: <select aria-label="Steward" value={stewardSelection} onChange={e=>setStewardSelection(e.target.value)} style={{marginLeft:8,padding:"7px 10px",border:"1px solid #decbb0",borderRadius:8,background:"white",color:"#45301d"}}><option value="all">All Stewards</option>{stewardSelection !== "all" && !options.has(stewardSelection) && <option value={stewardSelection}>Selected steward (no records)</option>}{Array.from(options).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
+      <div id="report-zoom-area" style={{flex:1}}>{loading ? <LoadingBlock/> : error ? <ErrorBlock message={error}/> : <ServiceChargeReport rows={rows}/>}</div>
+    </>;
+  }
+
   // ── 6.1 / 8.1 Steward Wise & Service Charge ──
   if (config.render === "steward-wise") {
     const stwData = objectData
       ? (objectData as unknown as StewardData)
       : null;
-    const filteredStw = stwData ? filterSteward(stwData, search) : null;
+    const selectedStewardId = stewardSelection === "all" ? undefined : stewardSelection.slice(2);
+    const filteredStw = stwData ? filterSteward(stwData, search, config.id === "steward-wise" ? selectedStewardId : undefined) : null;
     const hasStwData =
       !loading &&
       !error &&
@@ -1078,6 +1129,13 @@ export default function DynamicReportPage() {
           onChartToggle={() => setChartMode((c) => !c)}
         />
         {filterBarNode}
+        {config.id === "steward-wise" && <div style={{padding:"10px 24px", color:"#684830", fontSize:12}}>
+          <label>Steward: <select aria-label="Steward" value={stewardSelection} onChange={e => setStewardSelection(e.target.value)} style={{marginLeft:8,padding:"7px 10px",border:"1px solid #decbb0",borderRadius:8,background:"white",color:"#45301d"}}>
+            <option value="all">All Stewards</option>
+            {stewardSelection !== "all" && !(stwData?.stewards ?? []).some(s => `s:${s.stewId}` === stewardSelection) && <option value={stewardSelection}>Selected steward (no records)</option>}
+            {(stwData?.stewards ?? []).map(s => <option key={s.stewId} value={`s:${s.stewId}`}>{s.stewId ? `${s.stewId}${s.stewName ? ` — ${s.stewName}` : ""}` : "Unassigned steward"}</option>)}
+          </select></label>
+        </div>}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
@@ -1148,61 +1206,16 @@ export default function DynamicReportPage() {
     );
   }
 
-  // ── 10 Void Summery and Detail ──
+  // 10 Void Summary and Detail — Vw_VoidBeforeSettlement.
   if (config.render === "void-report") {
-    const voidData = objectData
-      ? (objectData as unknown as VoidData)
-      : null;
-    const filteredVoid = voidData ? filterVoid(voidData, search) : null;
-    const hasVoidData =
-      !loading &&
-      !error &&
-      Boolean(filteredVoid && (filteredVoid.locationGroups?.length ?? 0) > 0);
-    const chartsVoid =
-      hasVoidData && filteredVoid
-        ? buildReportCharts(reportId, filteredVoid)
-        : [];
-    const pdfDocVoid = hasVoidData && filteredVoid ? (
-      <VoidPdfDocument
-        title={config.title}
-        printDate={printDate}
-        printTime={printTime}
-        from={fmtDMonY(startDate)}
-        to={fmtDMonY(endDate)}
-        data={filteredVoid}
-      />
-    ) : undefined;
-    return (
-      <>
-        <ReportToolbar
-          title={config.title}
-          subtitle={config.subtitle}
-          from={startDate}
-          to={endDate}
-          onRangeChange={rangeChange}
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search bill no, item, cashier..."
-          pdfDocument={pdfDocVoid}
-          pdfFileName={`void-${startDate}_to_${endDate}.pdf`}
-          chartSupported={hasVoidData && chartsVoid.length > 0}
-          chartMode={chartMode}
-          onChartToggle={() => setChartMode((c) => !c)}
-        />
-        {filterBarNode}
-        <div id="report-zoom-area" style={{ flex: 1 }}>
-          {loading ? (
-            <LoadingBlock />
-          ) : error ? (
-            <ErrorBlock message={error} />
-          ) : chartMode && hasVoidData && chartsVoid.length > 0 ? (
-            <ReportChartsView charts={chartsVoid} title={config.title} />
-          ) : filteredVoid ? (
-            <VoidReport report={filteredVoid} />
-          ) : null}
-        </div>
-      </>
-    );
+    const report = objectData as VoidPosData | null;
+    const rows = report ? filterVoidPos(report, search) : [];
+    const pdf = rows.length ? <VoidPosPdf rows={rows} detail={voidDetail} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} /> : undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search item, table, cashier..." pdfDocument={pdf} pdfFileName={`void-${startDate}_to_${endDate}.pdf`} />
+      {filterBarNode}
+      <div style={{padding:"10px 24px",fontSize:12,color:"#684830",display:"flex",gap:16}}><span>Report type:</span><label><input type="radio" checked={!voidDetail} onChange={()=>setVoidDetail(false)}/> Summary</label><label><input type="radio" checked={voidDetail} onChange={()=>setVoidDetail(true)}/> Details</label></div>
+      <div id="report-zoom-area" style={{flex:1}}>{loading ? <LoadingBlock/> : error ? <ErrorBlock message={error}/> : <VoidPosReport rows={rows} detail={voidDetail}/>}</div>
+    </>;
   }
 
   // ── 11 Pax Count ──
@@ -1666,6 +1679,7 @@ export default function DynamicReportPage() {
         to={fmtDMonY(endDate)}
         data={filteredMII}
         byDate={config.render === "mii-date"}
+        withCost={miiCost}
       />
     ) : undefined;
     return (
@@ -1678,7 +1692,7 @@ export default function DynamicReportPage() {
           onRangeChange={rangeChange}
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search item code, name, dept..."
+          searchPlaceholder="Search item code or name..."
           pdfDocument={pdfDocMII}
           pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}
           chartSupported={hasMiiData && chartsMII.length > 0}
@@ -1686,7 +1700,7 @@ export default function DynamicReportPage() {
           onChartToggle={() => setChartMode((c) => !c)}
         />
         {filterBarNode}
-        <div
+        {config.render === "mii" && <div
           style={{
             display: "flex",
             gap: 16,
@@ -1706,9 +1720,9 @@ export default function DynamicReportPage() {
             With Sale Cost
           </label>
           <span style={{ color: "#907860", fontSize: 11 }}>
-            (POS dialog checkbox — uses Sp_SalesItemIssueWSC when ticked)
+            (Show cost price and cost of sales)
           </span>
-        </div>
+        </div>}
         <div id="report-zoom-area" style={{ flex: 1 }}>
           {loading ? (
             <LoadingBlock />
@@ -1720,7 +1734,7 @@ export default function DynamicReportPage() {
             config.render === "mii-date" ? (
               <MenuItemIssueByDateReport report={filteredMII} />
             ) : (
-              <MenuItemIssueReport report={filteredMII} />
+              <MenuItemIssueReport report={filteredMII} withCost={miiCost} />
             )
           ) : null}
         </div>
@@ -1881,7 +1895,8 @@ export default function DynamicReportPage() {
       <>
         <ReportToolbar
           title={config.title}
-          subtitle={config.subtitle}
+          subtitle="Current used credit — not date-filtered"
+          hideDates
           from={startDate}
           to={endDate}
           onRangeChange={rangeChange}
@@ -1889,7 +1904,7 @@ export default function DynamicReportPage() {
           onSearchChange={setSearch}
           searchPlaceholder="Search customer code or name..."
           pdfDocument={pdfDocCS}
-          pdfFileName={`credit-summary-${startDate}_to_${endDate}.pdf`}
+          pdfFileName="current-credit-summary.pdf"
           chartSupported={hasCsData && chartsCS.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
@@ -1908,6 +1923,19 @@ export default function DynamicReportPage() {
         </div>
       </>
     );
+  }
+
+  if (config.id === "credit-history") {
+    const report = objectData as CreditData | null;
+    const rows = report ? creditFilter(report, creditCustomerSelection, search) : [];
+    const options = new Map<string,string>();
+    for (const r of report?.rows ?? []) { const key=`c:${r.cus}`; if (!options.has(key)) options.set(key,r.cus ? `${r.cus} — ${r.cusName || r.cus}` : "Unassigned customer"); }
+    const pdf = rows.length ? <CreditHistoryPosPdf rows={rows} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} /> : undefined;
+    return <><ReportToolbar title={config.title} subtitle="Customer credit transactions (POS 21.2)" from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search customer or bill..." pdfDocument={pdf} pdfFileName={`credit-history-${startDate}_to_${endDate}.pdf`} />
+      {filterBarNode}
+      <div style={{padding:"10px 24px",color:"#684830",fontSize:12}}><label>Customer: <select aria-label="Customer" value={creditCustomerSelection} onChange={e=>setCreditCustomerSelection(e.target.value)} style={{marginLeft:8,padding:"7px 10px",border:"1px solid #decbb0",borderRadius:8,background:"white"}}><option value="all">All Customers</option>{creditCustomerSelection!=="all"&&!options.has(creditCustomerSelection)&&<option value={creditCustomerSelection}>Selected customer (no records)</option>}{Array.from(options).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
+      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:<CreditHistoryPos rows={rows}/>}</div>
+    </>;
   }
 
   // ── 21.2 / 21.3 Credit & Payment History ──
@@ -1991,7 +2019,8 @@ export default function DynamicReportPage() {
       <>
         <ReportToolbar
           title={config.title}
-          subtitle={config.subtitle}
+          subtitle="Current open tables — live data, not date-filtered"
+          hideDates
           from={startDate}
           to={endDate}
           onRangeChange={rangeChange}
@@ -1999,7 +2028,7 @@ export default function DynamicReportPage() {
           onSearchChange={setSearch}
           searchPlaceholder="Search table, item, cashier..."
           pdfDocument={pdfDocOpen}
-          pdfFileName={`open-tables-${startDate}_to_${endDate}.pdf`}
+          pdfFileName="open-tables-current.pdf"
           chartSupported={hasOpenData && chartsOpen.length > 0}
           chartMode={chartMode}
           onChartToggle={() => setChartMode((c) => !c)}
@@ -2018,6 +2047,28 @@ export default function DynamicReportPage() {
         </div>
       </>
     );
+  }
+
+  if (reportId === "invoice-trace") {
+    const run = async () => {
+      const id = invoiceNo.trim();
+      if (!loc || !id) { setInvoiceError("Select one location and enter an invoice number."); setInvoiceData(null); return; }
+      const seq = ++invoiceRequest.current;
+      setInvoiceBusy(true); setInvoiceData(null); setInvoiceError("");
+      try {
+        const res = await getInvoiceTraceAction(id, loc);
+        if (seq !== invoiceRequest.current) return;
+        if (res.success && res.data) setInvoiceData(res.data as InvoiceData);
+        else setInvoiceError(res.error || "Unable to load invoice trace.");
+      } catch { if (seq === invoiceRequest.current) setInvoiceError("Unable to load invoice trace."); }
+      finally { if (seq === invoiceRequest.current) setInvoiceBusy(false); }
+    };
+    const pdf = invoiceData?.rows.length ? <InvoiceTracePdf data={invoiceData} /> : undefined;
+    return <><ReportToolbar title={config.title} subtitle="Find an invoice by location and exact invoice number" from={startDate} to={endDate} onRangeChange={rangeChange} hideDates searchable={false} search="" onSearchChange={()=>{}} pdfDocument={pdf} pdfFileName="invoice-trace.pdf" />
+      {filterBarNode}
+      <form onSubmit={e=>{e.preventDefault(); void run();}} style={{padding:"14px 24px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",color:"#684830",fontSize:12}}><label htmlFor="invoice-number">Invoice Number:</label><input id="invoice-number" value={invoiceNo} maxLength={100} onChange={e=>{invoiceRequest.current++; setInvoiceBusy(false); setInvoiceData(null); setInvoiceError(""); setInvoiceNo(e.target.value);}} style={{height:36,padding:"0 10px",border:"1px solid #decbb0",borderRadius:8}}/><button type="submit" disabled={invoiceBusy} style={{height:36,padding:"0 16px",background:"#684830",color:"white",border:0,borderRadius:8,cursor:"pointer"}}>Trace Invoice</button><span>Select a location above.</span></form>
+      <div id="report-zoom-area" style={{flex:1}}>{invoiceBusy ? <LoadingBlock/> : invoiceError ? <ErrorBlock message={invoiceError}/> : invoiceData ? invoiceData.rows.length ? <InvoiceTraceReport data={invoiceData}/> : <p style={{padding:30,textAlign:"center"}}>No records found for this invoice and location.</p> : <p style={{padding:30,textAlign:"center"}}>Select a location and enter an invoice number.</p>}</div>
+    </>;
   }
 
   // ── 15.1 / 15.2 Slip & Invoice Trace ──

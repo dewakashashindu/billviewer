@@ -50,8 +50,9 @@ export function filterCreditSummary(d: CreditSummaryData, q0: string): CreditSum
       ...l,
       customers: (l.customers ?? []).filter((c) => `${c.code} ${c.name}`.toLowerCase().includes(q)),
     }))
-    .filter((l) => l.customers.length > 0);
-  return { ...d, locationGroups };
+    .filter((l) => l.customers.length > 0)
+    .map(l => ({...l, locTotal: l.customers.reduce((n,c)=>n+c.total,0)}));
+  return { ...d, locationGroups, grandTotal: locationGroups.reduce((n,l)=>n+l.locTotal,0) };
 }
 
 const NAVY = "#684830";
@@ -68,7 +69,7 @@ export default function CreditSummaryReport({ report }: { report: CreditSummaryD
   if ((report.locationGroups ?? []).length === 0)
     return (
       <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No credit customers for this range.
+        No customers with used credit.
       </p>
     );
   return (
@@ -93,7 +94,7 @@ export default function CreditSummaryReport({ report }: { report: CreditSummaryD
           >
             <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <IconPin size={13} />
-              {l.locCode} — {l.locName}
+              {l.locCode}{l.locName && l.locName !== l.locCode ? ` — ${l.locName}` : ""}
             </span>
             <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(l.locTotal)}</span>
           </div>
@@ -102,8 +103,7 @@ export default function CreditSummaryReport({ report }: { report: CreditSummaryD
               <tr style={{ background: "#F0E8D8" }}>
                 <th style={{ ...cell, textAlign: "left", width: 110, fontWeight: 700 }}>Cust Code</th>
                 <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Customer Name</th>
-                <th style={{ ...cell, textAlign: "right", width: 150, fontWeight: 700 }}>This Credit Period</th>
-                <th style={{ ...cell, textAlign: "right", width: 130, fontWeight: 700 }}>Total Credit</th>
+                <th style={{ ...cell, textAlign: "right", width: 130, fontWeight: 700 }}>Used Credit</th>
               </tr>
             </thead>
             <tbody>
@@ -111,13 +111,11 @@ export default function CreditSummaryReport({ report }: { report: CreditSummaryD
                 <tr key={`${l.locCode}-${c.code}`} style={{ background: i % 2 === 1 ? "#FCF7F3" : "#fff" }}>
                   <td style={{ ...cell, fontWeight: 700 }}>{c.code}</td>
                   <td style={cell}>{c.name}</td>
-                  <td style={num}>{fmtAmt(c.period)}</td>
                   <td style={{ ...num, fontWeight: 700, color: NAVY }}>{fmtAmt(c.total)}</td>
                 </tr>
               ))}
               <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
                 <td colSpan={2} style={{ ...cell, fontWeight: 800, color: "#684830" }}>Location Total</td>
-                <td style={num}>{fmtAmt(l.locPeriod)}</td>
                 <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(l.locTotal)}</td>
               </tr>
             </tbody>
@@ -140,7 +138,7 @@ export default function CreditSummaryReport({ report }: { report: CreditSummaryD
       >
         <span>Grand Total (all locations)</span>
         <span style={{ fontVariantNumeric: "tabular-nums" }}>
-          {fmtAmt(report.grandPeriod)} · {fmtAmt(report.grandTotal)}
+          {fmtAmt(report.grandTotal)}
         </span>
       </div>
     </div>
@@ -209,34 +207,30 @@ export function CreditSummaryPdfDocument({
           <Text style={pStyles.infoLabel}>Print Time</Text>
           <Text>: {printTime}</Text>
         </View>
-        <Text style={pStyles.range}>From {from}  To {to}</Text>
+        <Text style={pStyles.range}>Current used credit</Text>
         {data.locationGroups.map((l) => (
           <View key={l.locCode}>
             <Text style={pStyles.location}>{l.locCode}   {l.locName}</Text>
             <View style={pStyles.row}>
               <Text style={[pStyles.th, { width: CW.code }]}>Cust Code</Text>
               <Text style={[pStyles.th, { width: CW.name }]}>Customer Name</Text>
-              <Text style={[pStyles.th, { width: CW.period }, pStyles.right]}>This Credit Period</Text>
-              <Text style={[pStyles.th, { width: CW.total }, pStyles.right]}>Total Credit</Text>
+              <Text style={[pStyles.th, { width: CW.total }, pStyles.right]}>Used Credit</Text>
             </View>
             {l.customers.map((c) => (
               <View style={pStyles.row} key={c.code}>
                 <Text style={[pStyles.td, { width: CW.code }]}>{c.code}</Text>
                 <Text style={[pStyles.td, { width: CW.name }]}>{c.name}</Text>
-                <Text style={[pStyles.td, { width: CW.period }, pStyles.right]}>{fmtAmt(c.period)}</Text>
                 <Text style={[pStyles.td, { width: CW.total }, pStyles.right]}>{fmtAmt(c.total)}</Text>
               </View>
             ))}
             <View style={pStyles.totalRow}>
               <Text style={[pStyles.td, { width: CW.code + CW.name }, pStyles.bold]}>Location Total</Text>
-              <Text style={[pStyles.td, { width: CW.period }, pStyles.right]}>{fmtAmt(l.locPeriod)}</Text>
               <Text style={[pStyles.td, { width: CW.total }, pStyles.right, pStyles.bold]}>{fmtAmt(l.locTotal)}</Text>
             </View>
           </View>
         ))}
         <View style={pStyles.grandRow}>
           <Text style={[pStyles.bold, { width: CW.code + CW.name }]}>Grand Total</Text>
-          <Text style={[pStyles.bold, { width: CW.period }, pStyles.right]}>{fmtAmt(data.grandPeriod)}</Text>
           <Text style={[pStyles.bold, { width: CW.total }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
       </Page>

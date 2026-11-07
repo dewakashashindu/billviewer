@@ -10,6 +10,7 @@
 import { Fragment } from "react";
 import type { CSSProperties } from "react";
 import { IconPin } from "./ReportIcons";
+import {categoryLabel,subcategoryLabels} from "@/lib/categoryLabels";
 
 // ── types ──
 export interface CatItem {
@@ -19,11 +20,14 @@ export interface CatItem {
 export interface CatSub {
   level2: string;
   level3: string;
+  level2Des?: string;
+  level3Des?: string;
   total: number;
   items: CatItem[];
 }
 export interface CatGroup {
   level1: string;
+  level1Des?: string;
   total: number;
   subs: CatSub[];
 }
@@ -50,11 +54,14 @@ export interface CatDetRow {
 export interface CatDetSub {
   level2: string;
   level3: string;
+  level2Des?: string;
+  level3Des?: string;
   total: number;
   rows: CatDetRow[];
 }
 export interface CatDetGroup {
   level1: string;
+  level1Des?: string;
   total: number;
   subs: CatDetSub[];
 }
@@ -89,7 +96,7 @@ export function summaryToCatRows(d: CatSummaryData): CatRow[] {
     for (const c of loc.cats ?? [])
       for (const s of c.subs ?? [])
         for (const it of s.items ?? [])
-          out.push({ level1: c.level1, item: it.name, value: it.total });
+          out.push({ level1: categoryLabel(c.level1,c.level1Des), item: it.name, value: it.total });
   return out;
 }
 export function detailToCatRows(d: CatDetailData): CatRow[] {
@@ -99,7 +106,7 @@ export function detailToCatRows(d: CatDetailData): CatRow[] {
       for (const s of c.subs ?? [])
         for (const r of s.rows ?? [])
           out.push({
-            level1: c.level1,
+            level1: categoryLabel(c.level1,c.level1Des),
             item: r.item,
             value: r.saleTotal,
             date: r.txnDate,
@@ -121,7 +128,7 @@ export function filterCategorySummary(d: CatSummaryData, q0: string): CatSummary
             .map((s) => {
               const items = (s.items ?? []).filter(
                 (it) =>
-                  `${c.level1} ${s.level2} ${s.level3} ${it.name}`.toLowerCase().includes(q)
+                  `${categoryLabel(c.level1,c.level1Des)} ${subcategoryLabels(s)} ${it.name}`.toLowerCase().includes(q)
               );
               return { ...s, items, total: r2(items.reduce((t, i) => t + i.total, 0)) };
             })
@@ -145,7 +152,7 @@ export function filterCategoryDetail(d: CatDetailData, q0: string): CatDetailDat
           const subs = (c.subs ?? [])
             .map((s) => {
               const rows = (s.rows ?? []).filter((r) =>
-                `${c.level1} ${s.level2} ${s.level3} ${r.billNo} ${r.item} ${r.orderMode} ${r.steward}`
+                `${categoryLabel(c.level1,c.level1Des)} ${subcategoryLabels(s)} ${r.billNo} ${r.item} ${r.orderMode} ${r.steward}`
                   .toLowerCase()
                   .includes(q)
               );
@@ -190,6 +197,9 @@ const catBar: CSSProperties = {
   padding: "6px 10px",
   display: "flex",
   justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  flexWrap: "wrap",
   fontSize: 12,
   fontWeight: 800,
   color: NAVY,
@@ -199,6 +209,10 @@ const subBar: CSSProperties = {
   padding: "4px 10px 4px 22px",
   display: "flex",
   justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  flexWrap: "wrap",
+  background: "#faf6f0",
   fontSize: 11,
   fontWeight: 700,
   color: "#6B543E",
@@ -263,7 +277,7 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
             <div key={c.level1}>
               {/* category band */}
               <div style={{ background: "#F0E8D8", padding: "6px 14px", fontWeight: 800, fontSize: 12, color: "#684830", fontFamily: "Inter, sans-serif", textTransform: "uppercase" }}>
-                {c.level1}
+                {categoryLabel(c.level1,c.level1Des)}
               </div>
 
               {/* item rows — level2/level3 + item name + total */}
@@ -283,8 +297,8 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ color: "#907860", fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {[sub.level2, sub.level3].filter(Boolean).join(" / ")}
+                    <span style={{ color: "#907860", fontSize: 10.5, overflowWrap: "anywhere" }}>
+                      {subcategoryLabels(sub)}
                     </span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.name}>
                       {it.name}
@@ -326,7 +340,7 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
       {report.locationGroups.map((loc) => (
         <div key={loc.locCode}>
           <LocHead loc={loc} />
-          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+          <div style={{overflowX:"auto", maxWidth:"100%"}}><table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", marginTop: 8 }}>
             <thead>
               <tr style={thRow}>
                 <th style={{ ...cell, textAlign: "left", width: 90 }}>BillNO</th>
@@ -341,18 +355,18 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
               {loc.cats.map((c) => (
                 <Fragment key={c.level1}>
                   <tr>
-                    <td colSpan={6} style={{ ...catBar, marginTop: 8 }}>
-                      <span>{c.level1}</span>
-                      <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(c.total)}</span>
-                    </td>
+                    <td colSpan={6} style={{padding:"8px 0 0"}}><div style={catBar}>
+                      <span style={{overflowWrap:"anywhere"}}>{categoryLabel(c.level1,c.level1Des)}</span>
+                      <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace:"nowrap", marginLeft:"auto" }}>{fmtAmt(c.total)}</span>
+                    </div></td>
                   </tr>
                   {c.subs.map((s, si) => (
                     <Fragment key={`${c.level1}-${si}`}>
                       <tr>
-                        <td colSpan={6} style={subBar}>
-                          <span>{[s.level2, s.level3].filter(Boolean).join(" / ") || "—"}</span>
-                          <span style={{ fontVariantNumeric: "tabular-nums" }}>Sub Total {fmtAmt(s.total)}</span>
-                        </td>
+                        <td colSpan={6} style={{padding:0}}><div style={subBar}>
+                          <span style={{overflowWrap:"anywhere"}}>{subcategoryLabels(s) || "—"}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace:"nowrap", marginLeft:"auto" }}>Sub Total {fmtAmt(s.total)}</span>
+                        </div></td>
                       </tr>
                       {s.rows.map((r, ri) => (
                         <tr key={`${r.billNo}-${ri}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
@@ -377,7 +391,7 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
                 </Fragment>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       ))}
       <GrandBanner total={report.grandTotal} />

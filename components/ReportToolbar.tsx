@@ -115,6 +115,7 @@ export interface ReportToolbarProps {
   searchable?: boolean;
 
   /** Single date mode (e.g. Performance Report Business Date — no From/To range) */
+  hideDates?: boolean;
   singleDate?: boolean;
   singleDateLabel?: string;
 }
@@ -165,6 +166,7 @@ export default function ReportToolbar({
   chartMode = false,
   onChartToggle,
   searchable = true,
+  hideDates = false,
   singleDate = false,
   singleDateLabel = "Business Date",
 }: ReportToolbarProps) {
@@ -585,7 +587,7 @@ export default function ReportToolbar({
         )}
 
         {/* Single Business Date OR From / To */}
-        {singleDate ? (
+        {!hideDates && (singleDate ? (
           <div
             style={{
               display: "flex",
@@ -648,7 +650,7 @@ export default function ReportToolbar({
               style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
             />
           </div>
-        )}
+        ))}
 
         {/* Zoom */}
         <div
@@ -889,7 +891,7 @@ export default function ReportToolbar({
       </div>
 
       {/* ── ROW 3: quick range chips ── */}
-      <div
+      {!hideDates && <div
         style={{
           display: "flex",
           alignItems: "center",
@@ -923,7 +925,7 @@ export default function ReportToolbar({
             </button>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }

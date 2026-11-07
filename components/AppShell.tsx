@@ -289,7 +289,7 @@ const NAV: NavItem[] = [
           { key: "r-cred-ccs", label: "Current Credit Summery", reportId: "credit-summary" },
           { key: "r-cred-history", label: "Credit History", reportId: "credit-history" },
           { key: "r-cred-pay", label: "Payment History", reportId: "credit-pay-history" },
-          { key: "r-cred-payhistory", label: "Payment History", reportId: "credit-pay-history" },
+          
           { key: "r-cred-account", label: "Account Detail", reportId: "credit-account-detail" },
         ],
       },

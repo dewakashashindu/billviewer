@@ -12,6 +12,7 @@ import type { CSSProperties } from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
 export interface OpenRow {
+  itemCode: string;
   desc: string;
   qty: number;
   price: number;
@@ -21,6 +22,7 @@ export interface OpenRow {
   cashier: string;
 }
 export interface OpenSection {
+  locCode: string;
   code: string;
   rows: OpenRow[];
   amount: number;
@@ -49,11 +51,12 @@ export function filterOpen(d: OpenTablesData, q0: string): OpenTablesData {
     .map((s) => ({
       ...s,
       rows: (s.rows ?? []).filter((r) =>
-        `${s.code} ${r.desc} ${r.mode} ${r.cancel} ${r.cashier}`.toLowerCase().includes(q)
+        `${s.locCode} ${s.code} ${r.itemCode} ${r.desc} ${r.mode} ${r.cancel} ${r.cashier}`.toLowerCase().includes(q)
       ),
     }))
-    .filter((s) => s.rows.length > 0);
-  return { ...d, sections };
+    .filter((s) => s.rows.length > 0)
+    .map(s => ({...s, amount: s.rows.reduce((n,r)=>n+r.value,0)}));
+  return { ...d, sections, grandTotal: sections.reduce((n,s)=>n+s.amount,0) };
 }
 
 const NAVY = "#684830";
@@ -76,7 +79,7 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.sections.map((s) => (
-        <div key={s.code}>
+        <div key={`${s.locCode}-${s.code}`}>
           <div
             style={{
               background: "#E4D6BF",
@@ -91,12 +94,13 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
               marginTop: 12,
             }}
           >
-            <span>TABLE {s.code}</span>
+            <span>{s.locCode && `${s.locCode} — `}TABLE {s.code}</span>
             <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(s.amount)}</span>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+          <div style={{overflowX:"auto"}}><table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", marginTop: 6 }}>
             <thead>
               <tr style={{ background: "#F0E8D8" }}>
+                <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Item Code</th>
                 <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Description</th>
                 <th style={{ ...cell, textAlign: "right", width: 70, fontWeight: 700 }}>Qty</th>
                 <th style={{ ...cell, textAlign: "right", width: 100, fontWeight: 700 }}>Sales Price</th>
@@ -109,6 +113,7 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
             <tbody>
               {s.rows.map((r, ri) => (
                 <tr key={`${s.code}-${ri}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
+                  <td style={cell}>{r.itemCode}</td>
                   <td style={cell}>{r.desc}</td>
                   <td style={num}>{fmtQty(r.qty)}</td>
                   <td style={num}>{fmtAmt(r.price)}</td>
@@ -119,12 +124,12 @@ export default function OpenTablesReport({ report }: { report: OpenTablesData })
                 </tr>
               ))}
               <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
-                <td colSpan={3} style={{ ...cell, fontWeight: 800, color: "#684830" }}>Table Amount</td>
+                <td colSpan={4} style={{ ...cell, fontWeight: 800, color: "#684830" }}>Table Amount</td>
                 <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(s.amount)}</td>
                 <td colSpan={3} style={cell} />
               </tr>
             </tbody>
-          </table>
+          </table></div>
         </div>
       ))}
       <div
@@ -181,7 +186,7 @@ const pStyles = StyleSheet.create({
   totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
   grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
-const OW = { desc: 170, qty: 40, price: 65, value: 70, mode: 60, cancel: 45, cashier: 60 };
+const OW = { code: 65, desc: 170, qty: 40, price: 65, value: 70, mode: 60, cancel: 45, cashier: 60 };
 
 export function OpenTablesPdfDocument({
   title,
@@ -200,7 +205,7 @@ export function OpenTablesPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
+      <Page size="A4" orientation="landscape" style={pStyles.page}>
         <Text style={pStyles.title}>{title}</Text>
         <View style={pStyles.infoRow}>
           <Text style={pStyles.infoLabel}>Print Date</Text>
@@ -210,11 +215,12 @@ export function OpenTablesPdfDocument({
           <Text style={pStyles.infoLabel}>Print Time</Text>
           <Text>: {printTime}</Text>
         </View>
-        <Text style={pStyles.range}>From {from}  To {to}</Text>
+        <Text style={pStyles.range}>Current open tables (live)</Text>
         {data.sections.map((s) => (
-          <View key={s.code}>
-            <Text style={pStyles.section}>TABLE {s.code}</Text>
+          <View key={`${s.locCode}-${s.code}`}>
+            <Text style={pStyles.section}>{s.locCode} — TABLE {s.code}</Text>
             <View style={pStyles.row}>
+              <Text style={[pStyles.th, { width: OW.code }]}>Item Code</Text>
               <Text style={[pStyles.th, { width: OW.desc }]}>Description</Text>
               <Text style={[pStyles.th, { width: OW.qty }, pStyles.right]}>Qty</Text>
               <Text style={[pStyles.th, { width: OW.price }, pStyles.right]}>Sales Price</Text>
@@ -225,6 +231,7 @@ export function OpenTablesPdfDocument({
             </View>
             {s.rows.map((r, i) => (
               <View style={pStyles.row} key={i}>
+                <Text style={[pStyles.td, { width: OW.code }]}>{r.itemCode}</Text>
                 <Text style={[pStyles.td, { width: OW.desc }]}>{r.desc}</Text>
                 <Text style={[pStyles.td, { width: OW.qty }, pStyles.right]}>{fmtQty(r.qty)}</Text>
                 <Text style={[pStyles.td, { width: OW.price }, pStyles.right]}>{fmtAmt(r.price)}</Text>
@@ -235,13 +242,13 @@ export function OpenTablesPdfDocument({
               </View>
             ))}
             <View style={pStyles.totalRow}>
-              <Text style={[pStyles.td, { width: OW.desc + OW.qty + OW.price }, pStyles.bold]}>Table Amount</Text>
+              <Text style={[pStyles.td, { width: OW.code + OW.desc + OW.qty + OW.price }, pStyles.bold]}>Table Amount</Text>
               <Text style={[pStyles.td, { width: OW.value }, pStyles.right, pStyles.bold]}>{fmtAmt(s.amount)}</Text>
             </View>
           </View>
         ))}
         <View style={pStyles.grandRow}>
-          <Text style={[pStyles.bold, { width: OW.desc + OW.qty + OW.price }]}>Grand Total</Text>
+          <Text style={[pStyles.bold, { width: OW.code + OW.desc + OW.qty + OW.price }]}>Grand Total</Text>
           <Text style={[pStyles.bold, { width: OW.value }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
       </Page>

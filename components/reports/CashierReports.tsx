@@ -41,7 +41,7 @@ export function filterBillType(d: BillTypeData, q0: string): BillTypeData {
 
 // ── 3.1 Cashier Collection ──
 export interface CcBill { billNo: string; value: number; dateTime: string; }
-export interface CcCashier { code: string; bills: CcBill[]; total: number; }
+export interface CcCashier { code: string; name?: string; bills: CcBill[]; total: number; }
 export interface CcLocation { locCode: string; locName: string; cashiers: CcCashier[]; locTotal: number; }
 export interface CcData { locationGroups: CcLocation[]; grandTotal: number; }
 
@@ -49,7 +49,7 @@ export function ccToRows(d: CcData): Array<{ date?: string; billNo?: string; des
   const out: Array<{ date?: string; billNo?: string; desc: string; value: number; loc?: string }> = [];
   for (const l of d.locationGroups ?? [])
     for (const c of l.cashiers ?? [])
-      for (const b of c.bills ?? []) out.push({ date: b.dateTime, billNo: b.billNo, desc: c.code, value: b.value, loc: l.locName });
+      for (const b of c.bills ?? []) out.push({ date: b.dateTime, billNo: b.billNo, desc: c.name ? `${c.code} — ${c.name}` : c.code, value: b.value, loc: l.locName });
   return out;
 }
 export function filterCc(d: CcData, q0: string): CcData {
@@ -59,10 +59,9 @@ export function filterCc(d: CcData, q0: string): CcData {
     .map((l) => ({
       ...l,
       cashiers: (l.cashiers ?? [])
-        .filter((c) => `${c.code} ${l.locCode} ${l.locName}`.toLowerCase().includes(q))
         .map((c) => ({
           ...c,
-          bills: `${c.code}`.toLowerCase().includes(q)
+          bills: `${c.code} ${c.name ?? ""} ${l.locCode} ${l.locName}`.toLowerCase().includes(q)
             ? c.bills
             : (c.bills ?? []).filter((b) => `${b.billNo} ${b.dateTime}`.toLowerCase().includes(q)),
         }))
@@ -235,7 +234,7 @@ export function CashierCollectionReport({ report }: { report: CcData }) {
           {l.cashiers.map((c) => (
             <div key={c.code}>
               <div style={band}>
-                <span>CASHIER — {c.code}</span>
+                <span>CASHIER — {c.code}{c.name ? ` — ${c.name}` : ""}</span>
                 <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(c.total)}</span>
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
@@ -413,7 +412,7 @@ export function CashierCollectionPdfDocument({ title, printDate, printTime, from
             <Text style={pStyles.location}>{l.locCode}   {l.locName}</Text>
             {l.cashiers.map((c) => (
               <View key={c.code}>
-                <Text style={pStyles.band}>CASHIER - {c.code}</Text>
+                <Text style={pStyles.band}>CASHIER - {c.code}{c.name ? ` - ${c.name}` : ""}</Text>
                 <View style={pStyles.row}>
                   <Text style={[pStyles.th, { width: CW.bill }]}>BillNo</Text>
                   <Text style={[pStyles.th, { width: CW.value }, pStyles.right]}>Total Value</Text>

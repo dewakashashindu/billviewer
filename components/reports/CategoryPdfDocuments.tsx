@@ -5,6 +5,7 @@
 // ============================================================
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { CatSummaryData, CatDetailData } from "./CategoryReports";
+import {categoryLabel,subcategoryLabels} from "@/lib/categoryLabels";
 
 const fmt = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -112,14 +113,14 @@ export function CategorySummaryPdfDocument({
             {loc.cats.map((c) => (
               <View key={c.level1}>
                 <View style={styles.cat}>
-                  <Text>{c.level1}</Text>
+                  <Text>{categoryLabel(c.level1,c.level1Des)}</Text>
                   <Text>{fmt(c.total)}</Text>
                 </View>
                 {c.subs.map((s, si) => (
                   <View key={si}>
                     {(s.level2 || s.level3) && (
                       <View style={styles.sub}>
-                        <Text>{[s.level2, s.level3].filter(Boolean).join(" / ")}</Text>
+                        <Text>{subcategoryLabels(s)}</Text>
                         <Text>{fmt(s.total)}</Text>
                       </View>
                     )}
@@ -187,13 +188,13 @@ export function CategoryDetailPdfDocument({
             {loc.cats.map((c) => (
               <View key={c.level1}>
                 <View style={styles.cat}>
-                  <Text>{c.level1}</Text>
+                  <Text>{categoryLabel(c.level1,c.level1Des)}</Text>
                   <Text>{fmt(c.total)}</Text>
                 </View>
                 {c.subs.map((s, si) => (
                   <View key={si}>
                     <View style={styles.sub}>
-                      <Text>{[s.level2, s.level3].filter(Boolean).join(" / ") || "—"}</Text>
+                      <Text>{subcategoryLabels(s) || "—"}</Text>
                       <Text>{fmt(s.total)}</Text>
                     </View>
                     {s.rows.map((r, ri) => (

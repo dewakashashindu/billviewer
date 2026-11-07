@@ -156,7 +156,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                 <span>{g.date}</span>
                 <span style={{ fontVariantNumeric: "tabular-nums" }}>Daily Total {fmtAmt(g.dailyTotal)}</span>
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+              <div style={{overflowX:"auto",maxWidth:"100%"}}><table style={{ width: "100%", minWidth: 690, borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
                   <tr style={{ background: "#F0E8D8" }}>
                     <th style={{ ...cell, textAlign: "left", width: 110, fontWeight: 700 }}>BillNo</th>
@@ -170,10 +170,10 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                   {g.bills.map((b, bi) => (
                     <Fragment key={b.billNo}>
                       {b.payments.map((p, pi) => (
-                        <tr key={`${b.billNo}-${pi}`} style={{ background: bi % 2 === 1 ? "#FCF7F3" : "#fff" }}>
+                        <tr key={`${b.billNo}-${pi}`} style={{ background: bi % 2 === 1 ? "#FCF8F2" : "#fff", borderTop: pi === 0 ? "2px solid #d5c1a8" : undefined }}>
                           {pi === 0 && (
                             <td rowSpan={b.payments.length} style={{ ...cell, fontWeight: 700 }}>
-                              {b.billNo}
+                              <span style={{display:"inline-block",background:"#eadbc9",color:"#523820",borderRadius:6,padding:"4px 7px",whiteSpace:"nowrap"}}>{b.billNo}</span>
                             </td>
                           )}
                           <td style={cell}>{p.desc}</td>
@@ -190,11 +190,11 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                           )}
                         </tr>
                       ))}
-                      <tr key={`${b.billNo}-t`} style={{ background: "#FCF7F3" }}>
-                        <td colSpan={2} style={{ ...cell, color: "#6B543E", fontSize: 10.5 }}>
+                      <tr key={`${b.billNo}-t`} style={{ background: "#eee3d4", borderTop:"1px solid #dccdbb", borderBottom:"2px solid #d5c1a8" }}>
+                        <td colSpan={2} style={{ ...cell, color: "#684830", fontSize: 11, fontWeight: 800 }}>
                           Bill Total
                         </td>
-                        <td style={{ ...num, fontWeight: 800, color: NAVY, borderBottom: "1px solid #E4D6BF" }}>
+                        <td style={{ ...num, fontWeight: 800, color: NAVY, borderBottom: "none" }}>
                           {fmtAmt(b.billTotal)}
                         </td>
                         <td colSpan={2} style={cell} />
@@ -202,7 +202,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                     </Fragment>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ))}
         </div>

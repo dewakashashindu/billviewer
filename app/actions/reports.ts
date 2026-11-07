@@ -22,6 +22,7 @@ export interface ReportFilter {
   payMode?: string;
   /** 4.x Menu Item Issue — "With Sale Cost" checkbox (WSC SP variant) */
   withCost?: boolean;
+  menuIssueByDate?: boolean;
   /** 5.1 Item Movement — fast | slow | non */
   movement?: string;
   /** 5.1 Item Movement — Top N threshold */
@@ -819,6 +820,9 @@ interface CatCols {
   l1: string;
   l2: string | null;
   l3: string | null;
+  l1des: string | null;
+  l2des: string | null;
+  l3des: string | null;
   item: string;
   total: string;
   bill: string | null;
@@ -838,6 +842,9 @@ const CAT_COL_SPEC: { field: keyof CatCols; required: boolean; candidates: strin
   { field: "locDes", required: false, candidates: ["LocDes", "LocName", "LocationName", "OutletName"] },
   { field: "l2", required: false, candidates: ["LEVEL2", "L2SES", "L2", "SubCategory", "Cat2"] },
   { field: "l3", required: false, candidates: ["LEVEL3", "L3SES", "L3", "Cat3"] },
+  { field: "l1des", required: false, candidates: ["L1DES"] },
+  { field: "l2des", required: false, candidates: ["L2DES"] },
+  { field: "l3des", required: false, candidates: ["L3DES"] },
   { field: "bill", required: false, candidates: ["BillNO", "BillNo", "Bill"] },
   { field: "mode", required: false, candidates: ["OrderMode", "Mode"] },
   { field: "time", required: false, candidates: ["TxnTime", "TrnTime"] },
@@ -884,6 +891,9 @@ type CatRowIn = {
   L1: string;
   L2: string;
   L3: string;
+  L1Des?: string;
+  L2Des?: string;
+  L3Des?: string;
   ItemName: string;
   SaleTotal: number;
   BillNo?: string;
@@ -895,8 +905,8 @@ type CatRowIn = {
 function groupCatRows(recordset: CatRowIn[], withRows: boolean) {
   const r2 = (n: number) => Math.round(n * 100) / 100;
   type Row = { billNo: string; item: string; saleTotal: number; orderMode: string; txnTime: string; steward: string; txnDate: string };
-  type Sub = { level2: string; level3: string; total: number; items: { name: string; total: number }[]; rows: Row[] };
-  type Cat = { level1: string; total: number; subs: Sub[] };
+  type Sub = { level2: string; level3: string; level2Des: string; level3Des: string; total: number; items: { name: string; total: number }[]; rows: Row[] };
+  type Cat = { level1: string; level1Des: string; total: number; subs: Sub[] };
   const locMap = new Map<string, { locCode: string; locName: string; locTotal: number; cats: Map<string, Cat> }>();
   for (const row of recordset) {
     const lc = String(row.LocCode ?? "");
@@ -908,16 +918,19 @@ function groupCatRows(recordset: CatRowIn[], withRows: boolean) {
     const l1 = String(row.L1 ?? "UNKNOWN");
     let cat = loc.cats.get(l1);
     if (!cat) {
-      cat = { level1: l1, total: 0, subs: [] };
+      cat = { level1: l1, level1Des: String(row.L1Des ?? "").trim(), total: 0, subs: [] };
       loc.cats.set(l1, cat);
     }
+    if (!cat.level1Des) cat.level1Des = String(row.L1Des ?? "").trim();
     const l2 = String(row.L2 ?? "");
     const l3 = String(row.L3 ?? "");
     let sub = cat.subs.find((s) => s.level2 === l2 && s.level3 === l3);
     if (!sub) {
-      sub = { level2: l2, level3: l3, total: 0, items: [], rows: [] };
+      sub = { level2: l2, level3: l3, level2Des: String(row.L2Des ?? "").trim(), level3Des: String(row.L3Des ?? "").trim(), total: 0, items: [], rows: [] };
       cat.subs.push(sub);
     }
+    if (!sub.level2Des) sub.level2Des = String(row.L2Des ?? "").trim();
+    if (!sub.level3Des) sub.level3Des = String(row.L3Des ?? "").trim();
     const v = r2(Number(row.SaleTotal ?? 0));
     if (withRows) {
       sub.rows.push({
@@ -979,6 +992,7 @@ export async function getCategorySummaryAction(filters: ReportFilter) {
     const l2Expr = c.l2 ? `ISNULL(LTRIM(RTRIM(v.[${c.l2}])), '')` : `''`;
     const l3Expr = c.l3 ? `ISNULL(LTRIM(RTRIM(v.[${c.l3}])), '')` : `''`;
     const itemExpr = `ISNULL(NULLIF(LTRIM(RTRIM(v.[${c.item}])), ''), 'UNKNOWN')`;
+    const descExpr = (col: string | null) => col ? `NULLIF(LTRIM(RTRIM(v.[${col}])), '')` : `CAST(NULL AS varchar(1))`;
 
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
@@ -992,6 +1006,9 @@ export async function getCategorySummaryAction(filters: ReportFilter) {
         ${l1Expr}       AS L1,
         ${l2Expr}       AS L2,
         ${l3Expr}       AS L3,
+        MAX(${descExpr(c.l1des)}) AS L1Des,
+        MAX(${descExpr(c.l2des)}) AS L2Des,
+        MAX(${descExpr(c.l3des)}) AS L3Des,
         ${itemExpr}     AS ItemName,
         SUM(ISNULL(v.[${c.total}], 0)) AS SaleTotal
       FROM dbo.${CATEGORY_VIEW} v WITH (NOLOCK)
@@ -1037,6 +1054,7 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
     const l2Expr = c.l2 ? `ISNULL(LTRIM(RTRIM(v.[${c.l2}])), '')` : `''`;
     const l3Expr = c.l3 ? `ISNULL(LTRIM(RTRIM(v.[${c.l3}])), '')` : `''`;
     const itemExpr = `ISNULL(NULLIF(LTRIM(RTRIM(v.[${c.item}])), ''), 'UNKNOWN')`;
+    const descExpr = (col: string | null) => col ? `NULLIF(LTRIM(RTRIM(v.[${col}])), '')` : `CAST(NULL AS varchar(1))`;
 
     const p2 = (n: number) => String(n).padStart(2, "0");
     const time12 = (d: Date): string => {
@@ -1058,6 +1076,9 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
         ${l1Expr}     AS L1,
         ${l2Expr}     AS L2,
         ${l3Expr}     AS L3,
+        ${descExpr(c.l1des)} AS L1Des,
+        ${descExpr(c.l2des)} AS L2Des,
+        ${descExpr(c.l3des)} AS L3Des,
         ${itemExpr}   AS ItemName,
         ISNULL(v.[${c.total}], 0) AS SaleTotal,
         ${c.bill ? `LTRIM(RTRIM(v.[${c.bill}]))` : `''`} AS BillNo,
@@ -1083,6 +1104,9 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
         L1: str("L1"),
         L2: str("L2"),
         L3: str("L3"),
+        L1Des: str("L1Des"),
+        L2Des: str("L2Des"),
+        L3Des: str("L3Des"),
         ItemName: str("ItemName"),
         SaleTotal: Number(r.SaleTotal ?? 0),
         BillNo: str("BillNo"),
@@ -1095,6 +1119,20 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
     return { success: true, data: groupCatRows(rows, true) };
   } catch (error) {
     console.error("Category Detail Action Error:", error);
+    return actionError(error);
+  }
+}
+
+// Payment mode selector master data (independent of report transactions).
+export async function getReportPaymentModesAction() {
+  try {
+    await requireSession();
+    if (!isDbConfigured()) return { success: false, error: "Database not configured (DB_* env vars missing)" };
+    const pool = await getPool();
+    const result = await pool.request().query(`SELECT LTRIM(RTRIM(PayCode)) AS value, LTRIM(RTRIM(PayDes)) AS label FROM dbo.Tbl_PaymentModes ORDER BY PayCode`);
+    return { success: true, data: (result.recordset as { value: string; label: string }[]).filter(row => row.value).map(row => ({ value: row.value, label: row.label || row.value })) };
+  } catch (error) {
+    console.error("Payment mode selector error:", error);
     return actionError(error);
   }
 }
@@ -1138,6 +1176,7 @@ export async function getPaymentSummaryAction(filters: ReportFilter) {
     }
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const payCode = pickCol(cols, ["PayCode", "PayModeCode", "ModeID", "PaymentCode"]);
+    if (payMode && !payCode) return { success: false, error: "Payment view has no payment code column; cannot filter by pay mode." };
     const remarks = pickCol(cols, ["Rmks", "Remarks", "Remark"]);
     const casher = pickCol(cols, ["UserName", "CasherName", "Casher", "CasherID"]);
     const donot = pickCol(cols, ["DoNotShowInSales"]);
@@ -1407,7 +1446,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
       error: `Unable to map steward view columns — missing: ${[!loc ? "loc (LocCode)" : "", !date ? "date (TenDate/Txndate)" : "", !stewId ? "steward (StewID)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
     };
   }
-  const stewName = pickCol(cols, ["StewardName", "Steward", "UserName", "CasherName", "StewName"]) || stewId;
+  const stewName = pickCol(cols, ["StewardName", "Steward", "StewName"]);
   const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
   const localC = pickCol(cols, ["LocalPax", "NOPax"]);
   const foreignC = pickCol(cols, ["ForiegnPax", "ForeignPax"]);
@@ -1427,7 +1466,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
       LTRIM(RTRIM(v.[${loc}])) AS LocCode,
       ${locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : `LTRIM(RTRIM(v.[${loc}]))`} AS LocDes,
       LTRIM(RTRIM(v.[${stewId}])) AS StewId,
-      LTRIM(RTRIM(v.[${stewName}])) AS StewName,
+      ${stewName && stewName !== stewId ? `MAX(NULLIF(LTRIM(RTRIM(v.[${stewName}])), ''))` : "CAST(NULL AS varchar(200))"} AS StewName,
       CONVERT(varchar(10), v.[${date}], 103) AS TxnDate,
       COUNT(*) AS Bills,
       ${localC ? `SUM(ISNULL(v.[${localC}], 0))` : "0"} AS LocalPax,
@@ -1441,10 +1480,25 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
       ${serCharge && btC ? `AND ISNULL(LTRIM(RTRIM(v.[${btC}])), '') <> 'CM'` : ""}
       ${serCharge && omC ? `AND ISNULL(LTRIM(RTRIM(v.[${omC}])), '') <> 'DI'` : ""}
       ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
-    GROUP BY LTRIM(RTRIM(v.[${loc}])), ${locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}]))), ` : ""}LTRIM(RTRIM(v.[${stewId}])), LTRIM(RTRIM(v.[${stewName}])), CONVERT(varchar(10), v.[${date}], 103)
+    GROUP BY LTRIM(RTRIM(v.[${loc}])), ${locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}]))), ` : ""}LTRIM(RTRIM(v.[${stewId}])), CONVERT(varchar(10), v.[${date}], 103)
     ORDER BY StewId, LocCode, TxnDate
   `);
 
+  // Resolve users separately to avoid multiplying aggregates on duplicate user records.
+  const userRows = await pool.request().query(`SELECT LTRIM(RTRIM(UserId)) AS id, LTRIM(RTRIM(LOCCODE)) AS loc, LTRIM(RTRIM(UserName)) AS name FROM dbo.Tbl_UserDetails`);
+  const namesByLocation = new Map<string, Set<string>>();
+  const namesById = new Map<string, Set<string>>();
+  for (const u of userRows.recordset) {
+    const id = String(u.id ?? "").trim(), loc = String(u.loc ?? "").trim(), name = String(u.name ?? "").trim();
+    if (!id || !name) continue;
+    const key = JSON.stringify([loc, id]);
+    if (!namesByLocation.has(key)) namesByLocation.set(key, new Set());
+    namesByLocation.get(key)!.add(name);
+    if (!namesById.has(id)) namesById.set(id, new Set());
+    namesById.get(id)!.add(name);
+  }
+  const uniqueName = (names?: Set<string>) => names?.size === 1 ? Array.from(names)[0] : "";
+  const resolvedNames = new Map<string, Set<string>>();
   const r2 = (n: number) => Math.round(n * 100) / 100;
   type Agg = { bills: number; pax: number; grand: number; serChg: number };
   const zero = (): Agg => ({ bills: 0, pax: 0, grand: 0, serChg: 0 });
@@ -1454,10 +1508,16 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
     const sid = String(row.StewId ?? "");
     let S = stewMap.get(sid);
     if (!S) {
-      S = { stewId: sid, stewName: String(row.StewName ?? ""), locs: new Map(), agg: zero() };
+      S = { stewId: sid, stewName: "", locs: new Map(), agg: zero() };
       stewMap.set(sid, S);
     }
     const lc = String(row.LocCode ?? "");
+    const name = uniqueName(namesByLocation.get(JSON.stringify([lc, sid]))) || uniqueName(namesById.get(sid)) || String(row.StewName ?? "").trim();
+    if (sid && name) {
+      if (!resolvedNames.has(sid)) resolvedNames.set(sid, new Set());
+      resolvedNames.get(sid)!.add(name);
+      S.stewName = Array.from(resolvedNames.get(sid)!).join(" / ");
+    }
     let L = S.locs.get(lc);
     if (!L) {
       L = { locCode: lc, locName: String(row.LocDes ?? ""), rows: [], agg: zero() };
@@ -1503,14 +1563,37 @@ export async function getStewardWiseAction(filters: ReportFilter) {
 export async function getServiceChargeAction(filters: ReportFilter) {
   try {
     await requireSession();
-    if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+    if (!isDbConfigured()) return {success:false, error:"Database not configured (DB_* env vars missing)"};
+    const pool = await getPool();
+    const request = pool.request().input("startDate", sql.Date, filters.startDate).input("endDate", sql.Date, filters.endDate);
+    if (filters.outletId) request.input("outletId", sql.VarChar(20), String(filters.outletId));
+    const result = await request.query(`
+      SELECT LTRIM(RTRIM(LocCode)) AS locCode, LTRIM(RTRIM(LocDes)) AS locName,
+        LTRIM(RTRIM(BillNo)) AS billNo, CONVERT(varchar(10), TxnDate, 23) AS txnDate,
+        LTRIM(RTRIM(StewID)) AS stewardId, LTRIM(RTRIM(Steward)) AS stewardName,
+        ISNULL(GrossAfterDis, 0) AS gross, ISNULL(SerChg, 0) AS service
+      FROM dbo.${SUMMARY_VIEW} WITH (NOLOCK)
+      WHERE DoNotShowInSales <> 1 AND BillType <> 'CM' AND OrderMode = 'DI'
+        AND TxnDate >= @startDate AND TxnDate < DATEADD(day, 1, @endDate)
+        ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) = @outletId" : ""}
+      ORDER BY LocCode, StewID, TxnDate, BillNo`);
+    const users = await pool.request().query(`SELECT LTRIM(RTRIM(LocCode)) AS loc, LTRIM(RTRIM(UserId)) AS id, LTRIM(RTRIM(UserName)) AS name FROM dbo.Tbl_UserDetails`);
+    const local = new Map<string, Set<string>>(), global = new Map<string, Set<string>>();
+    for (const u of users.recordset) {
+      const id = String(u.id ?? "").trim(), loc = String(u.loc ?? "").trim(), name = String(u.name ?? "").trim();
+      if (!id || !name) continue;
+      const key = JSON.stringify([loc,id]);
+      if (!local.has(key)) local.set(key, new Set()); local.get(key)!.add(name);
+      if (!global.has(id)) global.set(id, new Set()); global.get(id)!.add(name);
     }
-    return await stewardAggregate(filters, true);
-  } catch (error) {
-    console.error("Service Charge Action Error:", error);
-    return actionError(error);
-  }
+    const only = (set?: Set<string>) => set?.size === 1 ? Array.from(set)[0] : "";
+    const rows = result.recordset.map(r => {
+      const locCode = String(r.locCode ?? "").trim(), stewardId = String(r.stewardId ?? "").trim();
+      const name = stewardId ? only(local.get(JSON.stringify([locCode, stewardId]))) || only(global.get(stewardId)) || String(r.stewardName ?? "").trim() : "";
+      return {locCode, locName:String(r.locName ?? "").trim() || locCode, billNo:String(r.billNo ?? "").trim(), txnDate:String(r.txnDate ?? ""), stewardId, stewardName:name, gross:Number(r.gross ?? 0), service:Number(r.service ?? 0)};
+    });
+    return {success:true, data:{rows}};
+  } catch(error) { console.error("Service Charge Action Error:", error); return actionError(error); }
 }
 
 // ============================================================
@@ -1625,96 +1708,26 @@ export async function getTaxVatAction(filters: ReportFilter) {
 export async function getVoidReportAction(filters: ReportFilter) {
   try {
     await requireSession();
-    if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
-    }
-    const { startDate, endDate, outletId } = filters;
-    const pool = await getPool();
-    const VOID_VIEW = process.env.VOID_ITEMS_VIEW || "Vw_VoidItemSettlement";
-    const cols = await viewColumnsGeneric(pool, VOID_VIEW);
-    if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${VOID_VIEW}' not found in database` };
-    }
-    const loc = pickCol(cols, ["LOCCODE", "LocCode", "Loc", "Location", "Outlet"]);
-    const date = pickCol(cols, ["Txndate", "TXNDATE", "TrnDate", "SalesDate"]);
-    const item = pickCol(cols, ["MenuItmDes", "Menuitemnm", "MenuItemNm", "ItemName", "MenuItem"]);
-    const value = pickCol(cols, ["Value", "SaleTotal", "Total", "Amount"]);
-    if (!loc || !date || !item || !value) {
-      return {
-        success: false,
-        error: `Unable to map void view columns — missing: ${[!loc ? "loc (LOCCODE)" : "", !date ? "date (Txndate)" : "", !item ? "item (MenuItmDes)" : "", !value ? "value (Value)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
-      };
-    }
-    const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
-    const qty = pickCol(cols, ["Qty", "Quantity"]);
-    const rate = pickCol(cols, ["Rate", "Price", "SalesPrice"]);
-    const bill = pickCol(cols, ["BillNo", "BILLNO", "BillNO", "Bill"]);
-    const casherId = pickCol(cols, ["CasherID", "CashierID", "Casher"]);
-    const casherName = pickCol(cols, ["CasherName", "CashierName", "UserName"]);
-    const time = pickCol(cols, ["TxnTime", "TrnTime"]);
-
-    const r = pool.request();
-    r.input("startDate", sql.DateTime2, new Date(startDate));
-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
-
-    const result = await r.query(`
-      SELECT
-        LTRIM(RTRIM(v.[${loc}])) AS LocCode,
-        ${locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : `LTRIM(RTRIM(v.[${loc}]))`} AS LocDes,
-        CONVERT(varchar(10), v.[${date}], 103) AS VDate,
-        ${bill ? `LTRIM(RTRIM(v.[${bill}]))` : `''`} AS BillNo,
-        LTRIM(RTRIM(v.[${item}])) AS Item,
-        ${qty ? `ISNULL(v.[${qty}], 0)` : "0"} AS Qty,
-        ${rate ? `ISNULL(v.[${rate}], 0)` : "0"} AS Rate,
-        ISNULL(v.[${value}], 0) AS Value,
-        ${casherId ? `LTRIM(RTRIM(v.[${casherId}]))` : `''`} AS CasherId,
-        ${casherName ? `LTRIM(RTRIM(v.[${casherName}]))` : `''`} AS CasherName,
-        ${time ? `LTRIM(RTRIM(v.[${time}]))` : `''`} AS VTime
-      FROM dbo.${VOID_VIEW} v WITH (NOLOCK)
-      WHERE v.[${date}] >= @startDate
-        AND v.[${date}] < DATEADD(day, 1, @endDate)
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
-      ORDER BY LocCode, CasherId, VDate
-    `);
-
-    const r2 = (n: number) => Math.round(n * 100) / 100;
-    const locMap = new Map<string, { locCode: string; locName: string; cashiers: Map<string, { casherId: string; casherName: string; rows: Array<{ billNo: string; date: string; time: string; item: string; qty: number; rate: number; value: number }>; sub: number }>; total: number }>();
-    let grand = 0;
-    for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
-      const str = (k: string) => String(row[k] ?? "");
-      const lc = str("LocCode");
-      let L = locMap.get(lc);
-      if (!L) {
-        L = { locCode: lc, locName: str("LocDes"), cashiers: new Map(), total: 0 };
-        locMap.set(lc, L);
-      }
-      const cid = str("CasherId") || "—";
-      let C = L.cashiers.get(cid);
-      if (!C) {
-        C = { casherId: cid, casherName: str("CasherName"), rows: [], sub: 0 };
-        L.cashiers.set(cid, C);
-      }
-      const val = r2(Number(row.Value ?? 0));
-      C.rows.push({ billNo: str("BillNo"), date: str("VDate"), time: str("VTime"), item: str("Item"), qty: Number(row.Qty ?? 0), rate: r2(Number(row.Rate ?? 0)), value: val });
-      C.sub = r2(C.sub + val);
-      L.total = r2(L.total + val);
-      grand = r2(grand + val);
-    }
-    const locationGroups = Array.from(locMap.values())
-      .sort((a, b) => a.locCode.localeCompare(b.locCode))
-      .map((L) => ({
-        locCode: L.locCode,
-        locName: L.locName,
-        cashiers: Array.from(L.cashiers.values()).sort((a, b) => a.casherId.localeCompare(b.casherId))
-          .map((C) => ({ casherId: C.casherId, casherName: C.casherName, rows: C.rows, subTotal: C.sub })),
-        voidTotal: L.total,
-      }));
-    return { success: true, data: { locationGroups, grandTotal: grand } };
-  } catch (error) {
-    console.error("Void Report Action Error:", error);
-    return actionError(error);
-  }
+    if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
+    const pool=await getPool();
+    const req=pool.request().input("startDate",sql.Date,filters.startDate).input("endDate",sql.Date,filters.endDate);
+    if(filters.outletId) req.input("loc",sql.VarChar(20),String(filters.outletId));
+    const result=await req.query(`SELECT LTRIM(RTRIM(LOCCODE)) AS loc, CONVERT(varchar(10),TxnDate,23) AS txnDate,
+      LTRIM(RTRIM(TableNo)) AS tableNo, TRACENO AS traceNo, LTRIM(RTRIM(OrderMode)) AS orderMode,
+      LTRIM(RTRIM(VOIDTYPE)) AS voidType, LTRIM(RTRIM(ItemCode)) AS itemCode, LTRIM(RTRIM(ItemDes)) AS itemDes,
+      ISNULL(Qty,0) AS qty, ISNULL(SalesPrice,0) AS price, LTRIM(RTRIM(INVOICENO)) AS invoice,
+      LTRIM(RTRIM(CASHER)) AS cashierId, LTRIM(RTRIM(CASHERNAME)) AS cashierName,
+      LTRIM(RTRIM(AUTHORIZEDBY)) AS authorizedId, LTRIM(RTRIM(AuthorizedUserName)) AS authorizedName,
+      LTRIM(RTRIM(VOIDREMARKS)) AS remarks
+      FROM dbo.Vw_VoidBeforeSettlement WITH (NOLOCK)
+      WHERE TxnDate >= @startDate AND TxnDate < DATEADD(day,1,@endDate)
+      ${filters.outletId ? "AND LTRIM(RTRIM(LOCCODE))=@loc" : ""}
+      ORDER BY LOCCODE, TxnDate, TRACENO, TableNo, ItemDes`);
+    const locations=await pool.request().query(`SELECT LTRIM(RTRIM(LocCode)) AS code, MAX(LTRIM(RTRIM(LocDes))) AS name FROM dbo.Tbl_LocationMaster GROUP BY LTRIM(RTRIM(LocCode))`);
+    const names=new Map<string,string>(locations.recordset.map(x=>[String(x.code??""),String(x.name??"")]));
+    const rows=result.recordset.map(r=>{const loc=String(r.loc??"").trim(),qty=Number(r.qty??0),price=Number(r.price??0);return {loc,locName:names.get(loc)||loc,txnDate:String(r.txnDate??""),tableNo:String(r.tableNo??"").trim(),traceNo:String(r.traceNo??""),orderMode:String(r.orderMode??"").trim(),voidType:String(r.voidType??"").trim(),itemCode:String(r.itemCode??"").trim(),itemDes:String(r.itemDes??"").trim(),qty,price,value:qty*price,invoice:String(r.invoice??"").trim(),cashierId:String(r.cashierId??"").trim(),cashierName:String(r.cashierName??"").trim(),authorizedId:String(r.authorizedId??"").trim(),authorizedName:String(r.authorizedName??"").trim(),remarks:String(r.remarks??"").trim()};});
+    return {success:true,data:{rows}};
+  } catch(error){console.error("Void Report Action Error:",error);return actionError(error);}
 }
 
 // ============================================================
@@ -1747,6 +1760,8 @@ export async function getPaxCountAction(filters: ReportFilter) {
         error: `Unable to map pax view columns — missing: ${[!loc ? "loc (LOCCODE)" : "", !date ? "date (TXNDATE)" : "", !pax ? "pax (TotalPax)" : "", !spending ? "spending (TotalSpending)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
       };
     }
+    const localPax = pickCol(cols, ["LocalPax"]);
+    const foreignPax = pickCol(cols, ["ForiegnPax", "ForeignPax", "ForPax"]);
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const txn = pickCol(cols, ["SafeTransactionID", "TransactionID", "TxnID"]);
     const bill = pickCol(cols, ["BillNo", "BILLNO", "BillNO", "Bill"]);
@@ -1763,6 +1778,8 @@ export async function getPaxCountAction(filters: ReportFilter) {
         CONVERT(varchar(10), v.[${date}], 103) AS PDate,
         ${bill ? `LTRIM(RTRIM(v.[${bill}]))` : txn ? `LTRIM(RTRIM(v.[${txn}]))` : `''`} AS BillNo,
         ISNULL(v.[${pax}], 0) AS Pax,
+        ${localPax ? `v.[${localPax}]` : "NULL"} AS LocalPax,
+        ${foreignPax ? `v.[${foreignPax}]` : "NULL"} AS ForeignPax,
         ISNULL(v.[${spending}], 0) AS Spending
       FROM dbo.${PAX_VIEW} v WITH (NOLOCK)
       WHERE v.[${date}] >= @startDate
@@ -1772,24 +1789,28 @@ export async function getPaxCountAction(filters: ReportFilter) {
     `);
 
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const locMap = new Map<string, { locCode: string; locName: string; dates: Map<string, { pax: number; bills: number }>; bills: Array<{ date: string; billNo: string; pax: number; spending: number }>; tp: number; tb: number; ts: number }>();
-    const g = { tp: 0, tb: 0, ts: 0 };
+    const locMap = new Map<string, { locCode: string; locName: string; dates: Map<string, { pax: number; bills: number; local: number | null; foreign: number | null }>; bills: Array<{ date: string; billNo: string; pax: number; spending: number }>; tp: number; tb: number; ts: number; local: number | null; foreign: number | null }>();
+    const g: {tp:number;tb:number;ts:number;local:number | null;foreign:number | null} = { tp: 0, tb: 0, ts: 0, local: 0, foreign: 0 };
+    const addOptional = (sum: number | null, value: unknown): number | null => sum === null || value == null ? null : sum + Number(value);
     for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
       const str = (k: string) => String(row[k] ?? "");
       const lc = str("LocCode");
       let L = locMap.get(lc);
       if (!L) {
-        L = { locCode: lc, locName: str("LocDes"), dates: new Map(), bills: [], tp: 0, tb: 0, ts: 0 };
+        L = { locCode: lc, locName: str("LocDes"), dates: new Map(), bills: [], tp: 0, tb: 0, ts: 0, local: 0, foreign: 0 };
         locMap.set(lc, L);
       }
       const d = str("PDate");
       let D = L.dates.get(d);
       if (!D) {
-        D = { pax: 0, bills: 0 };
+        D = { pax: 0, bills: 0, local: 0, foreign: 0 };
         L.dates.set(d, D);
       }
       const p = Number(row.Pax ?? 0);
       const s = r2(Number(row.Spending ?? 0));
+      D.local = addOptional(D.local, row.LocalPax); D.foreign = addOptional(D.foreign, row.ForeignPax);
+      L.local = addOptional(L.local, row.LocalPax); L.foreign = addOptional(L.foreign, row.ForeignPax);
+      g.local = addOptional(g.local, row.LocalPax); g.foreign = addOptional(g.foreign, row.ForeignPax);
       D.pax += p;
       D.bills += 1;
       L.bills.push({ date: d, billNo: str("BillNo"), pax: p, spending: s });
@@ -1802,9 +1823,10 @@ export async function getPaxCountAction(filters: ReportFilter) {
         locCode: L.locCode,
         locName: L.locName,
         summary: Array.from(L.dates.entries())
-          .map(([d, v]) => ({ date: d, totalPax: v.pax, totalBills: v.bills, avgPax: v.bills > 0 ? r2(v.pax / v.bills) : 0 })),
+          .map(([d, v]) => ({ date: d, localPax: v.local, foreignPax: v.foreign, totalPax: v.pax, totalBills: v.bills, avgPax: v.bills > 0 ? r2(v.pax / v.bills) : 0 })),
         bills: L.bills.map((b) => ({ date: b.date, billNo: b.billNo, totalPax: b.pax, totalSpending: b.spending, avgSpending: b.pax > 0 ? r2(b.spending / b.pax) : 0 })),
         totals: {
+          localPax: L.local, foreignPax: L.foreign,
           totalPax: L.tp,
           totalBills: L.tb,
           avgPax: L.tb > 0 ? r2(L.tp / L.tb) : 0,
@@ -1817,6 +1839,7 @@ export async function getPaxCountAction(filters: ReportFilter) {
       data: {
         locationGroups,
         grand: {
+          localPax: g.local, foreignPax: g.foreign,
           totalPax: g.tp,
           totalBills: g.tb,
           avgPax: g.tb > 0 ? r2(g.tp / g.tb) : 0,
@@ -1850,32 +1873,36 @@ export async function getOpenTablesAction(filters: ReportFilter) {
       return { success: false, error: `View 'dbo.${OPEN_VIEW}' not found in database` };
     }
     const code = pickCol(cols, ["TransCode", "TableCode", "TabCode", "Section", "TableNo"]);
-    const desc = pickCol(cols, ["TransDescription", "Description", "MenuItmDes", "ItemName"]);
+    const desc = pickCol(cols, ["ItemDes", "MenuItmDes", "TransDescription", "Description", "ItemName"]);
     const value = pickCol(cols, ["ItemPrice", "Value", "Amount", "Total"]);
-    if (!code || !desc || !value) {
-      return {
-        success: false,
-        error: `Unable to map open tables view columns — missing: ${[!code ? "table (TransCode)" : "", !desc ? "desc (TransDescription)" : "", !value ? "value (ItemPrice)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
-      };
-    }
     const qty = pickCol(cols, ["Qty", "Quantity"]);
     const price = pickCol(cols, ["SalesPrice", "Price", "Rate"]);
+    const itemCode = pickCol(cols, ["ItemCode", "MenuItmId"]);
+    if (!code || !desc || (!value && (!qty || !price))) {
+      return {
+        success: false,
+        error: `Unable to map open tables view columns — missing: ${[!code ? "table (TransCode)" : "", !desc ? "desc (TransDescription)" : "", !value && (!qty || !price) ? "value (ItemPrice or Qty and SalesPrice)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+      };
+    }
     const mode = pickCol(cols, ["OrderMode", "Mode"]);
     const cancel = pickCol(cols, ["CANCEL", "Cancel", "Cancelled"]);
-    const cashier = pickCol(cols, ["CASHIER", "Casher", "CasherName", "UserName"]);
+    const cashier = pickCol(cols, ["CashierName", "CasherName", "CASHER", "Casher", "CASHERID"]);
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "Loc"]);
 
+    if (outletId && !loc) return {success: false, error: "Open tables view has no location column; cannot apply location filter."};
     const r = pool.request();
     if (outletId && loc) r.input("outletId", sql.VarChar(20), String(outletId));
     const result = await r.query(`
       SELECT
+        ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `''`} AS LocCode,
         LTRIM(RTRIM(v.[${code}])) AS Code,
+        ${itemCode ? `LTRIM(RTRIM(v.[${itemCode}]))` : "''"} AS ItemCode,
         LTRIM(RTRIM(v.[${desc}])) AS Des,
         ${qty ? `ISNULL(v.[${qty}], 0)` : "0"} AS Qty,
         ${price ? `ISNULL(v.[${price}], 0)` : "0"} AS Price,
-        ISNULL(v.[${value}], 0) AS Value,
+        ${value ? `ISNULL(v.[${value}], 0)` : `ISNULL(v.[${qty}], 0) * ISNULL(v.[${price}], 0)`} AS Value,
         ${mode ? `LTRIM(RTRIM(v.[${mode}]))` : `''`} AS Mode,
-        ${cancel ? `LTRIM(RTRIM(v.[${cancel}]))` : `''`} AS Cancel,
+        ${cancel ? `LTRIM(RTRIM(CONVERT(varchar(20), v.[${cancel}])))` : `''`} AS Cancel,
         ${cashier ? `LTRIM(RTRIM(v.[${cashier}]))` : `''`} AS Cashier
       FROM dbo.${OPEN_VIEW} v WITH (NOLOCK)
       ${loc && outletId ? `WHERE LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
@@ -1883,18 +1910,20 @@ export async function getOpenTablesAction(filters: ReportFilter) {
     `);
 
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const secMap = new Map<string, { code: string; rows: Array<{ desc: string; qty: number; price: number; value: number; mode: string; cancel: string; cashier: string }>; amount: number }>();
+    const secMap = new Map<string, { code: string; locCode: string; rows: Array<{ itemCode: string; desc: string; qty: number; price: number; value: number; mode: string; cancel: string; cashier: string }>; amount: number }>();
     let grand = 0;
     for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
       const str = (k: string) => String(row[k] ?? "");
       const c = str("Code");
-      let S = secMap.get(c);
+      const lc = str("LocCode");
+      const key = JSON.stringify([lc, c]);
+      let S = secMap.get(key);
       if (!S) {
-        S = { code: c, rows: [], amount: 0 };
-        secMap.set(c, S);
+        S = { code: c, locCode: lc, rows: [], amount: 0 };
+        secMap.set(key, S);
       }
       const val = r2(Number(row.Value ?? 0));
-      S.rows.push({ desc: str("Des"), qty: Number(row.Qty ?? 0), price: r2(Number(row.Price ?? 0)), value: val, mode: str("Mode"), cancel: str("Cancel"), cashier: str("Cashier") });
+      S.rows.push({ itemCode: str("ItemCode"), desc: str("Des"), qty: Number(row.Qty ?? 0), price: r2(Number(row.Price ?? 0)), value: val, mode: str("Mode"), cancel: str("Cancel") || "—", cashier: str("Cashier") });
       S.amount = r2(S.amount + val);
       grand = r2(grand + val);
     }
@@ -2031,19 +2060,20 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
     if (cols.size === 0) {
       return { success: false, error: `View 'dbo.${CRED_VIEW}' not found in database` };
     }
-    const code = pickCol(cols, ["CustCode", "Custcode", "CUSTCODE", "CustCI", "Code"]);
-    const name = pickCol(cols, ["CustName", "CustNameDTI", "Name"]);
-    const total = pickCol(cols, ["TotalCredit", "CreditTotal", "OutStanding", "Balance"]);
+    const code = pickCol(cols, ["CusCode", "CustCode", "Custcode", "CUSTCODE", "CustCI", "Code"]);
+    const name = pickCol(cols, ["CusName", "CustName", "CustNameDTI", "Name"]);
+    const total = pickCol(cols, ["UsedCredit"]);
     if (!code || !name || !total) {
       return {
         success: false,
-        error: `Unable to map credit summary view columns — missing: ${[!code ? "cust code (CustCode)" : "", !name ? "name (CustName)" : "", !total ? "total (TotalCredit)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: `Unable to map credit summary view columns — missing: ${[!code ? "cust code (CustCode)" : "", !name ? "name (CustName)" : "", !total ? "used credit (UsedCredit)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
       };
     }
-    const period = pickCol(cols, ["ThisCreditPeriod", "CurentCredit", "CreditPeriod", "CurCredit"]);
-    const dCode = pickCol(cols, ["custcodedti", "CustCodeDTI"]);
+    const period = null;
     const isCredit = pickCol(cols, ["creditcustomer", "CreditCustomer"]);
+    if (!isCredit) return {success:false, error:"CreditCustomer column missing from credit view."};
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
+    if (outletId && !loc) return {success:false,error:"Credit view has no location column; cannot filter by location."};
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
 
     const r = pool.request();
@@ -2051,14 +2081,14 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
     const result = await r.query(`
       SELECT
         ${loc ? `LTRIM(RTRIM(v.[${loc}])) AS LocCode,` : `'ALL' AS LocCode,`}
-        ${loc && locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : `'All Locations'`} AS LocDes,
+        ${loc && locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : loc ? `LTRIM(RTRIM(v.[${loc}]))` : `'All Locations'`} AS LocDes,
         LTRIM(RTRIM(v.[${code}])) AS Code,
         LTRIM(RTRIM(v.[${name}])) AS Name,
         ${period ? `ISNULL(v.[${period}], 0)` : "0"} AS Period,
         ISNULL(v.[${total}], 0) AS Total
       FROM dbo.${CRED_VIEW} v WITH (NOLOCK)
-      WHERE ${dCode ? `LTRIM(RTRIM(v.[${dCode}])) <> '0'` : "1 = 1"}
-        ${isCredit ? `AND LTRIM(RTRIM(v.[${isCredit}])) = '1'` : ""}
+      WHERE v.[${total}] <> 0
+        AND v.[${isCredit}] = 1
         ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
       ORDER BY LocCode, Code
     `);
@@ -2190,11 +2220,23 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
 
 export async function getCreditHistoryAction(filters: ReportFilter) {
   try {
-    return await runCreditHistory(process.env.CREDIT_HISTORY_VIEW || "Vw_CreditHistory", filters);
-  } catch (error) {
-    console.error("Credit History Action Error:", error);
-    return actionError(error);
-  }
+    await requireSession();
+    if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
+    const pool = await getPool();
+    const view = process.env.CREDIT_HISTORY_VIEW || "Vw_CreditHistory";
+    const req = pool.request().input("from",sql.Date,filters.startDate).input("to",sql.Date,filters.endDate);
+    if (filters.outletId) req.input("loc",sql.VarChar(20),String(filters.outletId));
+    const result = await req.query(`SELECT LTRIM(RTRIM(LocCode)) AS loc, LTRIM(RTRIM(LocDes)) AS locName,
+      LTRIM(RTRIM(CusID)) AS cus, LTRIM(RTRIM(CusName)) AS cusName, LTRIM(RTRIM(RegTel)) AS phone,
+      LTRIM(RTRIM(BillNo)) AS bill, CONVERT(varchar(10),solddate,23) AS billDate,
+      CONVERT(varchar(10),TxnDate,23) AS txnDate, PrevAmt, TxnAmt, FinalAmt, PaidAmount, ToBePaid
+      FROM dbo.${view} WITH (NOLOCK)
+      WHERE TxnDate >= @from AND TxnDate < DATEADD(day,1,@to)
+      ${filters.outletId ? "AND LTRIM(RTRIM(LocCode))=@loc" : ""}
+      ORDER BY LocCode, CusID, TxnDate, BillNo`);
+    const rows = result.recordset.map(r=>({loc:String(r.loc??"").trim(),locName:String(r.locName??"").trim(),cus:String(r.cus??"").trim(),cusName:String(r.cusName??"").trim(),phone:String(r.phone??"").trim(),bill:String(r.bill??"").trim(),billDate:String(r.billDate??""),txnDate:String(r.txnDate??""),prev:r.PrevAmt==null?null:Number(r.PrevAmt),txn:r.TxnAmt==null?null:Number(r.TxnAmt),final:r.FinalAmt==null?null:Number(r.FinalAmt),paid:r.PaidAmount==null?null:Number(r.PaidAmount),due:r.ToBePaid==null?null:Number(r.ToBePaid)}));
+    return {success:true,data:{rows}};
+  } catch(error){console.error("Credit History Action Error:",error);return actionError(error);}
 }
 
 export async function getCreditPayHistoryAction(filters: ReportFilter) {
@@ -2642,8 +2684,21 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
         ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) = @outletId` : ""}
       ORDER BY LocCode, CCash, v.[${date}]
     `);
+    // Resolve names separately so duplicate user rows cannot multiply sales rows.
+    const userCols = await viewColumnsGeneric(pool, "Tbl_UserDetails");
+    const userId = pickCol(userCols, ["UserId", "UserID"]);
+    const userName = pickCol(userCols, ["UserName"]);
+    const names = new Map<string, string>();
+    if (userId && userName) {
+      const users = await pool.request().query(`SELECT LTRIM(RTRIM([${userId}])) AS UserId, LTRIM(RTRIM([${userName}])) AS UserName FROM dbo.Tbl_UserDetails WITH (NOLOCK)`);
+      for (const u of users.recordset) {
+        const id = String(u.UserId ?? "").trim();
+        const name = String(u.UserName ?? "").trim();
+        if (id && name && !names.has(id)) names.set(id, name);
+      }
+    }
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const locMap = new Map<string, { locCode: string; locName: string; cash: Map<string, { code: string; bills: Array<{ billNo: string; value: number; dateTime: string }>; total: number }>; total: number }>();
+    const locMap = new Map<string, { locCode: string; locName: string; cash: Map<string, { code: string; name: string; bills: Array<{ billNo: string; value: number; dateTime: string }>; total: number }>; total: number }>();
     let gT = 0;
     for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
       const lc = String(row.LocCode ?? "");
@@ -2655,7 +2710,7 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
       const cc = String(row.CCash ?? "") || "UNKNOWN";
       let C = L.cash.get(cc);
       if (!C) {
-        C = { code: cc, bills: [], total: 0 };
+        C = { code: cc, name: names.get(cc) || "", bills: [], total: 0 };
         L.cash.set(cc, C);
       }
       const t = r2(Number(row.Val ?? 0));
@@ -2693,13 +2748,13 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
       return { success: false, error: `View 'dbo.${PAY_VIEW}' not found in database` };
     }
     const cash = pickCol(cols, ["CashierID", "CasherID", "CASHIER", "Cashier", "UserName"]);
-    const mode = pickCol(cols, ["PayMode", "PaymentMode", "PayModeDes", "Mode"]);
-    const amt = pickCol(cols, ["Amount", "Value", "PayAmt", "NetTotal"]);
+    const mode = pickCol(cols, ["PayDes", "PaymentDes", "PaymentDescription", "PayMode", "PaymentMode", "PayModeDes", "Mode"]);
+    const amt = pickCol(cols, ["ActAmt", "Amount", "Value", "PayAmt", "NetTotal"]);
     const date = pickCol(cols, ["Txndate", "TrnDate", "PayDate"]);
     if (!cash || !mode || !amt || !date) {
       return {
         success: false,
-        error: `Unable to build payment break down — missing: ${[!cash ? "cashier (CashierID)" : "", !mode ? "mode (PayMode)" : "", !amt ? "amount (Amount)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`,
+        error: `Unable to build payment break down — missing: ${[!cash ? "cashier (CashierID)" : "", !mode ? "mode (PayDes/PayMode)" : "", !amt ? "amount (Amount)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`,
       };
     }
     const time = pickCol(cols, ["TxnTime", "TrnTime", "PayTime"]);
@@ -2767,317 +2822,52 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
 }
 
 
-// ── 4.x fallback: run POS stored procedures + read temp table ──
-const MII_TEMP_CANDIDATES = [
-  "Tbl_Temp_MenuIssue",
-  "Tbl_Temp_ItemIssue",
-  "Tbl_Temp_MenuItemIssue",
-  "Tbl_Temp_SalesItemIssue",
-];
+// Shared date formatting for legacy Item Movement procedure.
 function dmyOf(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
-async function runMenuIssueSpFallback(
-  pool: Awaited<ReturnType<typeof getPool>>,
-  filters: ReportFilter,
-  viewName: string
-): Promise<null | { locationGroups: unknown[]; grandTotal: number }> {
-  const { startDate, endDate, outletId } = filters;
-  const diag: string[] = [];
-  // locations to run the SP for (SP is per-location like POS dialog)
-  let locs: Array<{ code: string; name: string }> = [];
-  if (outletId) {
-    locs = [{ code: String(outletId), name: String(outletId) }];
-  } else {
-    try {
-      const lr = await pool.request().query(
-        `SELECT DISTINCT LTRIM(RTRIM(LocCode)) AS LC, ISNULL(NULLIF(LTRIM(RTRIM(LocDes)), ''), LTRIM(RTRIM(LocCode))) AS LN FROM dbo.${SUMMARY_VIEW} WITH (NOLOCK)`
-      );
-      locs = (lr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ code: String(r.LC ?? ""), name: String(r.LN ?? "") }));
-    } catch (e) {
-      diag.push(`loc-list: ${e instanceof Error ? e.message : e}`);
-    }
-  }
-  if (locs.length === 0) return null;
 
-  const spName = filters.withCost ? "Sp_SalesItemIssueWSC" : "Sp_SalesItemIssue";
-  const spChk = await pool.request().query(`SELECT OBJECT_ID('dbo.${spName}') AS I`);
-  const spExists = Number((spChk.recordset[0] as { I: unknown })?.I ?? 0) !== 0;
-  diag.push(`${spName} exists: ${spExists}`);
-
-  const r2 = (n: number) => Math.round(n * 100) / 100;
-  const r4 = (n: number) => Math.round(n * 10000) / 10000;
-  type Row5 = { code: string; desc: string; qty: number; weight: number; unitValue: number; lastPrice: number; total: number };
-  const locGroups: Array<{ locCode: string; locName: string; dates: Map<string, { date: string; depts: Map<string, { dept: string; rows: Row5[]; total: number }>; total: number }>; total: number }> = [];
-  let gT = 0;
-
-  const mapRows = (rows: Array<{ [k: string]: unknown }>, lc: { code: string; name: string }) => {
-    // discover columns on the fly (view/temp/result-set all differ)
-    const colNames = new Set<string>();
-    for (const r of rows) for (const k of Object.keys(r)) colNames.add(k);
-    const code = pickCol(colNames, ["MenuItemCode", "MenuItmCode", "ItemCode", "MenuItmId", "Code"]);
-    const desc = pickCol(colNames, ["Description", "MenuItmDes", "ItemName", "Des"]);
-    const qty = pickCol(colNames, ["Qty", "Quantity", "IssuedQty"]);
-    const total = pickCol(colNames, ["TotalValue", "Total", "Value", "Amount"]);
-    if (!code || !desc || !qty || !total) {
-      diag.push(`rows for ${lc.code} unmappable — columns: ${Array.from(colNames).join(", ")}`);
-      return;
-    }
-    const dept = pickCol(colNames, ["SalesDept", "SalesDepartment", "Dept", "Department"]);
-    const weight = pickCol(colNames, ["WeightPer1MenuItem", "WeightPer1MenuIt", "Weight", "UnitWeight"]);
-    const unit = pickCol(colNames, ["ValuePerUnitBasedQty", "ValuePerUnit", "UnitValue"]);
-    const last = pickCol(colNames, ["LastPrice", "LastRate"]);
-    const date = pickCol(colNames, ["Txndate", "TrnDate", "IssueDate", "TDate"]);
-    let L = locGroups.find((x) => x.locCode === lc.code);
-    if (!L) {
-      L = { locCode: lc.code, locName: lc.name, dates: new Map(), total: 0 };
-      locGroups.push(L);
-    }
-    for (const row of rows) {
-      const rawD = date ? row[date] : undefined;
-      const dk =
-        rawD instanceof Date
-          ? `${String(rawD.getDate()).padStart(2, "0")}/${String(rawD.getMonth() + 1).padStart(2, "0")}/${rawD.getFullYear()}`
-          : rawD != null
-            ? String(rawD)
-            : "";
-      let D = L.dates.get(dk);
-      if (!D) {
-        D = { date: dk, depts: new Map(), total: 0 };
-        L.dates.set(dk, D);
-      }
-      const depk = dept ? String(row[dept] ?? "") || "Other" : "All";
-      let Dep = D.depts.get(depk);
-      if (!Dep) {
-        Dep = { dept: depk, rows: [], total: 0 };
-        D.depts.set(depk, Dep);
-      }
-      const t = r2(Number(row[total] ?? 0));
-      Dep.rows.push({
-        code: String(row[code] ?? ""),
-        desc: String(row[desc] ?? ""),
-        qty: r2(Number(row[qty] ?? 0)),
-        weight: r4(Number(weight ? row[weight] ?? 0 : 0)),
-        unitValue: r2(Number(unit ? row[unit] ?? 0 : 0)),
-        lastPrice: r2(Number(last ? row[last] ?? 0 : 0)),
-        total: t,
-      });
-      Dep.total = r2(Dep.total + t);
-      D.total = r2(D.total + t);
-      L.total = r2(L.total + t);
-      gT = r2(gT + t);
-    }
-  };
-
-  for (const lc of locs) {
-    const safeLoc = lc.code.replace(/'/g, "''");
-    // 1) SP may return the result set directly
-    try {
-      const er = await pool
-        .request()
-        .query(
-          `SET DATEFORMAT dmy; EXEC dbo.${spName} '${dmyOf(startDate)}','${dmyOf(endDate)}','${safeLoc}'`
-        );
-      if (er.recordset && er.recordset.length > 0) {
-        mapRows(er.recordset as Array<{ [k: string]: unknown }>, lc);
-        continue;
-      }
-    } catch (e) {
-      diag.push(`exec ${spName}(${lc.code}): ${e instanceof Error ? e.message : e}`);
-    }
-    // 2) otherwise read the physical temp table the SP filled —
-    //    known names first, then any recently-modified %temp% table
-    const cand = process.env.MENU_ISSUE_TEMP_TABLE
-      ? [process.env.MENU_ISSUE_TEMP_TABLE, ...MII_TEMP_CANDIDATES]
-      : MII_TEMP_CANDIDATES;
-    let tables: string[] = [];
-    for (const t of cand) {
-      const chk = await pool.request().query(`SELECT OBJECT_ID('dbo.${t}') AS I`);
-      if (Number((chk.recordset[0] as { I: unknown })?.I ?? 0)) tables.push(t);
-    }
-    if (tables.length === 0) {
-      try {
-        const dr = await pool.request().query(
-          `SELECT name FROM sys.tables WHERE modify_date >= DATEADD(minute, -10, GETDATE()) ORDER BY modify_date DESC`
-        );
-        tables = (dr.recordset as Array<{ name: string }>)
-          .map((r) => r.name)
-          .filter((n) => /temp/i.test(n));
-        if (tables.length > 0) diag.push(`discovered temp tables: ${tables.join(", ")}`);
-      } catch {
-        /* ignore */
-      }
-    }
-    for (const t of tables) {
-      const rr = await pool.request().query(`SELECT * FROM dbo.${t} WITH (NOLOCK)`);
-      const rows = rr.recordset as Array<{ [k: string]: unknown }>;
-      if (rows.length > 0) {
-        mapRows(rows, lc);
-        break;
-      }
-    }
-  }
-
-  if (locGroups.length === 0) {
-    // surface everything we learned so the exact name can be configured
-    console.error("[mii] fallback diagnostics:", diag.join(" | "));
-    throw new Error(`menu-issue diagnostics — ${diag.join(" | ") || "no locations found"}`);
-  }
-  void viewName;
-  return {
-    locationGroups: locGroups
-      .sort((a, b) => a.locCode.localeCompare(b.locCode))
-      .map((L) => ({
-        locCode: L.locCode,
-        locName: L.locName,
-        dates: Array.from(L.dates.values()).map((D) => ({
-          date: D.date,
-          depts: Array.from(D.depts.values()),
-          total: D.total,
-        })),
-        locTotal: L.total,
-      })),
-    grandTotal: gT,
-  };
-}
-
-// ============================================================
-// 4.1 / 4.2 Menu Item Issue (POS Sp_SalesItemIssue /
-// Sp_SalesItemIssueDept / Sp_SalesItemIssueWSC output):
-// sales-department wise issued menu items with qty / weight /
-// value columns. Source view configurable (Vw_MenuIssue).
-// ============================================================
+// 4.1 / 4.2 use the source of the supplied POS procedures directly.
 export async function getMenuIssueAction(filters: ReportFilter) {
   try {
     await requireSession();
-    if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
-    }
-    const { startDate, endDate, outletId } = filters;
+    if (!isDbConfigured()) return { success: false, error: "Database not configured (DB_* env vars missing)" };
     const pool = await getPool();
-    const MII_VIEW = process.env.MENU_ISSUE_VIEW || "Vw_MenuIssue";
-    const cols = await viewColumnsGeneric(pool, MII_VIEW);
-    if (cols.size === 0) {
-      // POS has no view for 4.x — it runs stored procedures
-      // (Sp_SalesItemIssue / ...Dept / ...WSC) that fill a temp
-      // table. Mirror that exactly as a fallback.
-      try {
-        const sp = await runMenuIssueSpFallback(pool, filters, MII_VIEW);
-        if (sp) return { success: true, data: sp };
-      } catch (e) {
-        return {
-          success: false,
-          error: `View 'dbo.${MII_VIEW}' not found and POS stored-procedure fallback failed: ${e instanceof Error ? e.message : e}`,
-        };
-      }
-      return {
-        success: false,
-        error: `View 'dbo.${MII_VIEW}' not found and POS stored-procedure fallback (Sp_SalesItemIssue) produced no data. Set MENU_ISSUE_VIEW env to your view name if different.`,
-      };
-    }
-    const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
-    const date = pickCol(cols, ["Txndate", "TrnDate", "IssueDate"]);
-    const code = pickCol(cols, ["MenuItemCode", "MenuItmCode", "ItemCode", "MenuItmId"]);
-    const desc = pickCol(cols, ["Description", "MenuItmDes", "ItemName", "Des"]);
-    const qty = pickCol(cols, ["Qty", "Quantity", "IssuedQty"]);
-    const total = pickCol(cols, ["TotalValue", "Total", "Value", "Amount"]);
-    if (!code || !desc || !qty || !total) {
-      return {
-        success: false,
-        error: `Unable to map menu issue view columns — missing: ${[!code ? "code (MenuItemCode)" : "", !desc ? "desc (Description)" : "", !qty ? "qty (Qty)" : "", !total ? "total (TotalValue)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
-      };
-    }
-    const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
-    const dept = pickCol(cols, ["SalesDept", "SalesDepartment", "Dept", "Department"]);
-    const weight = pickCol(cols, ["WeightPer1MenuItem", "WeightPer1MenuIt", "Weight", "UnitWeight"]);
-    const unit = pickCol(cols, ["ValuePerUnitBasedQty", "ValuePerUnit", "UnitValue"]);
-    const last = pickCol(cols, ["LastPrice", "LastRate"]);
-
     const req = pool.request();
-    req.input("startDate", sql.DateTime2, new Date(startDate));
-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+    req.input("startDate", sql.Date, filters.startDate);
+    req.input("endDate", sql.Date, filters.endDate);
+    if (filters.outletId) req.input("outletId", sql.VarChar(20), String(filters.outletId));
+    // Equivalent source and measures from the supplied POS procedures, without
+    // writing to the shared Tbl_Temp_SalesItemIssue[_Ext] tables.
     const result = await req.query(`
-      SELECT
-        ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `'ALL'`} AS LocCode,
-        ${loc && locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : `'All Locations'`} AS LocDes,
-        ${date ? `CONVERT(varchar(10), v.[${date}], 103)` : `''`} AS TDate,
-        ${dept ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${dept}])), ''), 'Other')` : `'All'`} AS Dept,
-        LTRIM(RTRIM(v.[${code}])) AS Code,
-        LTRIM(RTRIM(v.[${desc}])) AS Des,
-        SUM(ISNULL(v.[${qty}], 0)) AS Qty,
-        ${weight ? `AVG(ISNULL(v.[${weight}], 0))` : "0"} AS Weight,
-        ${unit ? `AVG(ISNULL(v.[${unit}], 0))` : "0"} AS Unit,
-        ${last ? `MAX(ISNULL(v.[${last}], 0))` : "0"} AS LastP,
-        SUM(ISNULL(v.[${total}], 0)) AS Total
-      FROM dbo.${MII_VIEW} v WITH (NOLOCK)
-      WHERE ${date ? `v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)` : "1 = 1"}
-        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
-      GROUP BY
-        ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `'ALL'`},
-        ${loc && locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : `'All Locations'`},
-        ${date ? `CONVERT(varchar(10), v.[${date}], 103)` : `''`},
-        ${dept ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${dept}])), ''), 'Other')` : `'All'`},
-        LTRIM(RTRIM(v.[${code}])),
-        LTRIM(RTRIM(v.[${desc}]))
-      ORDER BY LocCode, TDate, Dept, Code
-    `);
-    const r2 = (n: number) => Math.round(n * 100) / 100;
-    const r4 = (n: number) => Math.round(n * 10000) / 10000;
-    const locMap = new Map<string, { locCode: string; locName: string; dates: Map<string, { date: string; depts: Map<string, { dept: string; rows: Array<{ code: string; desc: string; qty: number; weight: number; unitValue: number; lastPrice: number; total: number }>; total: number }>; total: number }>; total: number }>();
-    let gT = 0;
-    for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
-      const lc = String(row.LocCode ?? "");
-      let L = locMap.get(lc);
-      if (!L) {
-        L = { locCode: lc, locName: String(row.LocDes ?? ""), dates: new Map(), total: 0 };
-        locMap.set(lc, L);
-      }
-      const dk = String(row.TDate ?? "");
-      let D = L.dates.get(dk);
-      if (!D) {
-        D = { date: dk, depts: new Map(), total: 0 };
-        L.dates.set(dk, D);
-      }
-      const depk = String(row.Dept ?? "");
-      let Dep = D.depts.get(depk);
-      if (!Dep) {
-        Dep = { dept: depk, rows: [], total: 0 };
-        D.depts.set(depk, Dep);
-      }
-      const t = r2(Number(row.Total ?? 0));
-      Dep.rows.push({
-        code: String(row.Code ?? ""),
-        desc: String(row.Des ?? ""),
-        qty: r2(Number(row.Qty ?? 0)),
-        weight: r4(Number(row.Weight ?? 0)),
-        unitValue: r2(Number(row.Unit ?? 0)),
-        lastPrice: r2(Number(row.LastP ?? 0)),
-        total: t,
-      });
-      Dep.total = r2(Dep.total + t);
-      D.total = r2(D.total + t);
-      L.total = r2(L.total + t);
-      gT = r2(gT + t);
+      SELECT LTRIM(RTRIM(LocCode)) AS LocCode,
+        MAX(LTRIM(RTRIM(LocDes))) AS LocDes,
+        ${filters.menuIssueByDate ? "CONVERT(varchar(10), Txndate, 23)" : "CAST('' AS varchar(10))"} AS TDate,
+        LTRIM(RTRIM(SubItmId)) AS Code, LTRIM(RTRIM(MenuItmDes)) AS Des,
+        SUM(Qty) AS Qty, SalesPrice, SUM(SalesPrice * Qty) AS SalesValue,
+        CostPrice, SUM(CostPrice * Qty) AS CostOfSales
+      FROM dbo.Vw_SalesDetail
+      WHERE Txndate >= @startDate AND Txndate < DATEADD(day, 1, @endDate)
+        ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) = @outletId" : ""}
+      GROUP BY LTRIM(RTRIM(LocCode)), ${filters.menuIssueByDate ? "CONVERT(varchar(10), Txndate, 23)," : ""}
+        LTRIM(RTRIM(SubItmId)), LTRIM(RTRIM(MenuItmDes)), SalesPrice, CostPrice
+      ORDER BY LocCode, TDate, Code, SalesPrice, CostPrice`);
+    const locations = new Map<string, {locCode: string; locName: string; dates: Map<string, {date: string; depts: Array<{dept: string; rows: Array<{code: string; desc: string; qty: number; weight: number; unitValue: number; lastPrice: number; total: number; costPrice: number; costTotal: number}>; total: number}>; total: number}>; locTotal: number}>();
+    for (const row of result.recordset) {
+      const code = String(row.LocCode ?? "");
+      let loc = locations.get(code);
+      if (!loc) { loc = {locCode: code, locName: String(row.LocDes || code), dates: new Map(), locTotal: 0}; locations.set(code, loc); }
+      const date = String(row.TDate ?? "");
+      let day = loc.dates.get(date);
+      if (!day) { day = {date, depts: [{dept: "All", rows: [], total: 0}], total: 0}; loc.dates.set(date, day); }
+      const total = Number(row.SalesValue ?? 0);
+      day.depts[0].rows.push({code: String(row.Code ?? ""), desc: String(row.Des ?? ""), qty: Number(row.Qty ?? 0), weight: 0, unitValue: Number(row.SalesPrice ?? 0), lastPrice: Number(row.SalesPrice ?? 0), total, costPrice: Number(row.CostPrice ?? 0), costTotal: Number(row.CostOfSales ?? 0)});
+      day.depts[0].total += total; day.total += total; loc.locTotal += total;
     }
-    const locationGroups = Array.from(locMap.values())
-      .sort((a, b) => a.locCode.localeCompare(b.locCode))
-      .map((L) => ({
-        locCode: L.locCode,
-        locName: L.locName,
-        dates: Array.from(L.dates.values()).map((D) => ({
-          date: D.date,
-          depts: Array.from(D.depts.values()),
-          total: D.total,
-        })),
-        locTotal: L.total,
-      }));
-    return { success: true, data: { locationGroups, grandTotal: gT } };
-  } catch (error) {
-    console.error("Menu Issue Action Error:", error);
-    return actionError(error);
-  }
+    const locationGroups = Array.from(locations.values()).map(l => ({...l, dates: Array.from(l.dates.values())}));
+    return {success: true, data: {locationGroups, grandTotal: locationGroups.reduce((n, l) => n + l.locTotal, 0)}};
+  } catch (error) { console.error("Menu Issue Action Error:", error); return actionError(error); }
 }
 
 // ============================================================
@@ -3158,60 +2948,45 @@ export async function getItemMovementAction(filters: ReportFilter) {
       return { success: true, data: { mode, threshold: N, locationGroups } };
     }
 
-    // ── non moving: POS SP + Vw_FastSlowItemMovement ──
-    const NON_VIEW = process.env.NON_MOVING_VIEW || "Vw_FastSlowItemMovement";
-    let locs: Array<{ code: string; name: string }> = [];
-    if (outletId) locs = [{ code: String(outletId), name: String(outletId) }];
-    else {
-      const lr = await pool.request().query(
-        `SELECT DISTINCT LTRIM(RTRIM(LocCode)) AS LC, ISNULL(NULLIF(LTRIM(RTRIM(LocDes)), ''), LTRIM(RTRIM(LocCode))) AS LN FROM dbo.${SUMMARY_VIEW} WITH (NOLOCK)`
-      );
-      locs = (lr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ code: String(r.LC ?? ""), name: String(r.LN ?? "") }));
+    // Reproduce the supplied Sp_ItemMovementNon membership test without
+    // writing to its shared, accumulating Tbl_Temp_ItemMovement table.
+    const req = pool.request();
+    req.input("startDate", sql.Date, startDate);
+    req.input("endDate", sql.Date, endDate);
+    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    const result = await req.query(`
+      WITH locations AS (
+        SELECT LTRIM(RTRIM(LocCode)) AS LocCode,
+          MAX(ISNULL(NULLIF(LTRIM(RTRIM(LocDes)), ''), LTRIM(RTRIM(LocCode)))) AS LocDes
+        FROM dbo.${SUMMARY_VIEW}
+        ${outletId ? "WHERE LTRIM(RTRIM(LocCode)) = @outletId" : ""}
+        GROUP BY LTRIM(RTRIM(LocCode))
+      ), items AS (
+        SELECT LTRIM(RTRIM(MenuItmId)) AS ItemCode,
+          MAX(LTRIM(RTRIM(MenuItmDes))) AS ItemDes
+        FROM dbo.Vw_MenuItemDetails
+        WHERE MenuItmId IS NOT NULL AND LTRIM(RTRIM(MenuItmId)) <> ''
+        GROUP BY LTRIM(RTRIM(MenuItmId))
+      )
+      SELECT l.LocCode, l.LocDes, i.ItemCode, i.ItemDes
+      FROM locations l CROSS JOIN items i
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.Vw_SalesDetail s
+        WHERE LTRIM(RTRIM(s.LocCode)) = l.LocCode
+          AND LTRIM(RTRIM(s.SubItmID)) = i.ItemCode
+          AND s.Txndate >= @startDate AND s.Txndate < DATEADD(day, 1, @endDate)
+      )
+      ORDER BY l.LocCode, i.ItemDes, i.ItemCode
+    `);
+    const groups = new Map<string, { locCode: string; locName: string; rows: Array<{ code: string; desc: string; qty: number }> }>();
+    for (const row of result.recordset) {
+      const code = String(row.LocCode ?? "");
+      let group = groups.get(code);
+      if (!group) { group = { locCode: code, locName: String(row.LocDes ?? code), rows: [] }; groups.set(code, group); }
+      group.rows.push({code: String(row.ItemCode ?? ""), desc: String(row.ItemDes ?? ""), qty: 0});
     }
-    const locGroups: Array<{ locCode: string; locName: string; rows: Array<{ code: string; desc: string; qty: number }> }> = [];
-    for (const lc of locs) {
-      const safeLoc = lc.code.replace(/'/g, "''");
-      let rows: Array<{ [k: string]: unknown }> = [];
-      try {
-        const er = await pool
-          .request()
-          .query(
-            `SET DATEFORMAT dmy; EXEC dbo.Sp_ItemMovementNon '${dmyOf(startDate)}','${dmyOf(endDate)}','${safeLoc}'`
-          );
-        rows = (er.recordset ?? []) as Array<{ [k: string]: unknown }>;
-      } catch (e) {
-        console.warn("[imv] Sp_ItemMovementNon exec failed:", e);
-      }
-      if (rows.length === 0) {
-        const vc = await viewColumnsGeneric(pool, NON_VIEW);
-        if (vc.size > 0) {
-          const rr = await pool
-            .request()
-            .query(
-              `SELECT * FROM dbo.${NON_VIEW} WITH (NOLOCK) WHERE LTRIM(RTRIM(LocCode)) = '${safeLoc}' ORDER BY MenuItmDes`
-            );
-          rows = rr.recordset as Array<{ [k: string]: unknown }>;
-        }
-      }
-      if (rows.length === 0) continue;
-      const colNames = new Set<string>();
-      for (const r of rows) for (const k of Object.keys(r)) colNames.add(k);
-      const code = pickCol(colNames, ["ItemCode", "SubItmID", "ItmCode", "Code"]);
-      const desc = pickCol(colNames, ["MenuItmDes", "MenuItemDes", "Description", "ItemName"]);
-      if (!code || !desc) continue;
-      locGroups.push({
-        locCode: lc.code,
-        locName: lc.name,
-        rows: rows.map((r) => ({ code: String(r[code] ?? ""), desc: String(r[desc] ?? ""), qty: 0 })),
-      });
-    }
-    if (locGroups.length === 0) {
-      return {
-        success: false,
-        error: `Non-moving items: Sp_ItemMovementNon / view 'dbo.${NON_VIEW}' produced no data for this range.`,
-      };
-    }
-    return { success: true, data: { mode, threshold: N, locationGroups: locGroups } };
+    return { success: true, data: { mode, threshold: N, locationGroups: Array.from(groups.values()) } };
+
   } catch (error) {
     console.error("Item Movement Action Error:", error);
     return actionError(error);
@@ -4756,4 +4531,27 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
     console.error("Performance Report Action Error:", error);
     return actionError(error);
   }
+}
+
+// Invoice Trace — exact invoice and location, independent of the date range.
+export async function getInvoiceTraceAction(invoice: string, location: string) {
+  try {
+    await requireSession();
+    if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
+    const bill=String(invoice ?? "").trim(), loc=String(location ?? "").trim();
+    if (!bill || bill.length > 100 || !loc || loc.length > 20) return {success:false,error:"Select a location and enter a valid invoice number."};
+    const pool=await getPool();
+    const view=process.env.SLIP_TRACE_VIEW || "Vw_SlipPrintDetails";
+    const result=await pool.request().input("bill",sql.VarChar(100),bill).input("loc",sql.VarChar(20),loc).query(`
+      SELECT RefNo, BIRTHNO, BillNo, LocCode, ItemCode, MenuItmDes, Qty, UnitPrice, Amount, Cost,
+        UserName, TableNo, Gross, DisVal, DisPre, GRossAFDis, SerChg, OtherServChg, PackChg,
+        TDL, VAT, OtherVAT, DeleveryChg, NetTotal, CONVERT(varchar(10),TxnDate,23) AS TxnDate, BillType
+      FROM dbo.${view} WITH (NOLOCK)
+      WHERE LTRIM(RTRIM(BillNo))=@bill AND LTRIM(RTRIM(LocCode))=@loc
+      ORDER BY BIRTHNO, RefNo, ItemCode`);
+    const numeric=["Qty","UnitPrice","Amount","Cost","Gross","DisVal","DisPre","GRossAFDis","SerChg","OtherServChg","PackChg","TDL","VAT","OtherVAT","DeleveryChg","NetTotal"];
+    const text=["RefNo","BIRTHNO","BillNo","LocCode","ItemCode","MenuItmDes","UserName","TableNo","TxnDate","BillType"];
+    const rows=result.recordset.map(r=>Object.fromEntries([...numeric.map(k=>[k,r[k]==null?null:Number(r[k])]),...text.map(k=>[k,String(r[k]??"").trim()])]));
+    return {success:true,data:{rows}};
+  } catch(e){console.error("Invoice Trace Action Error:",e);return actionError(e);}
 }

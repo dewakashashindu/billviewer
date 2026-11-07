@@ -15,6 +15,8 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
 export interface PaxDateRow {
   date: string;
+  localPax: number | null;
+  foreignPax: number | null;
   totalPax: number;
   totalBills: number;
   avgPax: number;
@@ -27,6 +29,8 @@ export interface PaxBillRow {
   avgSpending: number;
 }
 export interface PaxTotals {
+  localPax: number | null;
+  foreignPax: number | null;
   totalPax: number;
   totalBills: number;
   avgPax: number;
@@ -45,6 +49,7 @@ export interface PaxData {
   grand: PaxTotals;
 }
 
+const fmtOptional = (n: number | null | undefined) => n == null ? "—" : fmtAmt(n);
 const fmtAmt = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -187,10 +192,10 @@ export default function PaxCountReport({ report }: { report: PaxData }) {
 
           <SectionTable
             head="Average Numbers Of Pax Per (Summary)"
-            cols={["Date", "Total Pax", "Total Bills", "Average Pax Per Bill"]}
+            cols={["Date", "Local Pax", "Foreign Pax", "Total Pax", "Total Bills", "Average Pax Per Bill"]}
             rows={[
-              ...l.summary.map((r) => [r.date, r.totalPax, r.totalBills, r.avgPax] as Array<string | number>),
-              ["Total", l.totals.totalPax, l.totals.totalBills, l.totals.avgPax],
+              ...l.summary.map((r) => [r.date, fmtOptional(r.localPax), fmtOptional(r.foreignPax), r.totalPax, r.totalBills, r.avgPax] as Array<string | number>),
+              ["Total", fmtOptional(l.totals.localPax), fmtOptional(l.totals.foreignPax), l.totals.totalPax, l.totals.totalBills, l.totals.avgPax],
             ]}
           />
           <SectionTable
@@ -298,22 +303,28 @@ export function PaxCountPdfDocument({
 
             <Text style={pStyles.section}>Average Numbers Of Pax Per (Summary)</Text>
             <View style={pStyles.row}>
-              <Text style={[pStyles.th, { width: XW.a }]}>Date</Text>
-              <Text style={[pStyles.th, { width: XW.b }, pStyles.right]}>Total Pax</Text>
+              <Text style={[pStyles.th, { width: 75 }]}>Date</Text>
+              <Text style={[pStyles.th, { width: 60 }, pStyles.right]}>Local Pax</Text>
+              <Text style={[pStyles.th, { width: 60 }, pStyles.right]}>Foreign Pax</Text>
+              <Text style={[pStyles.th, { width: 60 }, pStyles.right]}>Total Pax</Text>
               <Text style={[pStyles.th, { width: XW.c }, pStyles.right]}>Total Bills</Text>
               <Text style={[pStyles.th, { width: XW.d }, pStyles.right]}>Avg Pax Per Bill</Text>
             </View>
             {l.summary.map((r, i) => (
               <View style={pStyles.row} key={i}>
-                <Text style={[pStyles.td, { width: XW.a }]}>{r.date}</Text>
-                <Text style={[pStyles.td, { width: XW.b }, pStyles.right]}>{fmtAmt(r.totalPax)}</Text>
+                <Text style={[pStyles.td, { width: 75 }]}>{r.date}</Text>
+                <Text style={[pStyles.td, { width: 60 }, pStyles.right]}>{fmtOptional(r.localPax)}</Text>
+                <Text style={[pStyles.td, { width: 60 }, pStyles.right]}>{fmtOptional(r.foreignPax)}</Text>
+                <Text style={[pStyles.td, { width: 60 }, pStyles.right]}>{fmtAmt(r.totalPax)}</Text>
                 <Text style={[pStyles.td, { width: XW.c }, pStyles.right]}>{fmtAmt(r.totalBills)}</Text>
                 <Text style={[pStyles.td, { width: XW.d }, pStyles.right]}>{fmtAmt(r.avgPax)}</Text>
               </View>
             ))}
             <View style={pStyles.totalRow}>
-              <Text style={[pStyles.td, { width: XW.a }, pStyles.bold]}>Total</Text>
-              <Text style={[pStyles.td, { width: XW.b }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalPax)}</Text>
+              <Text style={[pStyles.td, { width: 75 }, pStyles.bold]}>Total</Text>
+              <Text style={[pStyles.td, { width: 60 }, pStyles.right, pStyles.bold]}>{fmtOptional(l.totals.localPax)}</Text>
+              <Text style={[pStyles.td, { width: 60 }, pStyles.right, pStyles.bold]}>{fmtOptional(l.totals.foreignPax)}</Text>
+              <Text style={[pStyles.td, { width: 60 }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalPax)}</Text>
               <Text style={[pStyles.td, { width: XW.c }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalBills)}</Text>
               <Text style={[pStyles.td, { width: XW.d }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.avgPax)}</Text>
             </View>

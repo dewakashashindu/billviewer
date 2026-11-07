@@ -8,6 +8,7 @@
 import type { SalesSummaryData } from "./SalesSummaryReport";
 import type { SalesDetailsData } from "./SalesDetailsReport";
 import type { CatSummaryData, CatDetailData } from "./CategoryReports";
+import {categoryLabel} from "@/lib/categoryLabels";
 import type { PaymentSummaryData } from "./PaymentReports";
 import type { BillPayModeGridData } from "./PaymentGridReports";
 import type { TxnSummaryData } from "./TransactionSummaryReport";
@@ -198,7 +199,7 @@ function catSummaryCharts(d: CatSummaryData): ChartModel[] {
   const locs: Array<{ name: string; value: number }> = [];
   for (const loc of d.locationGroups ?? []) {
     locs.push({ name: loc.locName || loc.locCode, value: loc.locTotal });
-    for (const c of loc.cats ?? []) bump(catM, c.level1 || "UNKNOWN", 0, c.total, 1);
+    for (const c of loc.cats ?? []) bump(catM, categoryLabel(c.level1,c.level1Des) || "UNKNOWN", 0, c.total, 1);
   }
   return [
     ...only(pie("cat-pie", "Category Share", toPoints(catM, false), "currency")),
@@ -215,7 +216,7 @@ function catDetailCharts(d: CatDetailData): ChartModel[] {
   for (const loc of d.locationGroups ?? []) {
     locs.push({ name: loc.locName || loc.locCode, value: loc.locTotal });
     for (const c of loc.cats ?? []) {
-      bump(catM, c.level1 || "UNKNOWN", 0, c.total, 1);
+      bump(catM, categoryLabel(c.level1,c.level1Des) || "UNKNOWN", 0, c.total, 1);
       for (const s of c.subs ?? [])
         for (const r of s.rows ?? []) bump(dayM, r.txnDate, 0, r.saleTotal, 1);
     }

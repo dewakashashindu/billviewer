@@ -4,7 +4,7 @@
 // Date range popup — report ekak click kalama wadinna one modal eka
 // ============================================================
 import { useEffect, useState } from "react";
-import { getLocationsAction } from "@/app/actions/reports";
+import { getLocationsAction, getReportPaymentModesAction } from "@/app/actions/reports";
 
 export interface DateRangeFilterSpec {
   param: string; // URL param (om / bt)
@@ -48,10 +48,12 @@ export default function DateRangeModal({
     param: "",
     value: "",
   });
+  const [paymentModes, setPaymentModes] = useState<{ value: string; label: string }[]>([]);
+  const [paymentModesError, setPaymentModesError] = useState("");
   const extra =
     filter && extraSel.param === filter.param
       ? extraSel.value
-      : (filter?.options[0]?.value ?? "");
+      : (filter?.param === "pm" ? "" : (filter?.options[0]?.value ?? ""));
   const [locations, setLocations] = useState<
     { code: string; name: string }[]
   >([]);
@@ -82,6 +84,19 @@ export default function DateRangeModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isPerf]);
+
+  useEffect(() => {
+    if (!open || filter?.param !== "pm") return;
+    let alive = true;
+    setPaymentModes([]);
+    setPaymentModesError("");
+    getReportPaymentModesAction().then(res => {
+      if (!alive) return;
+      if (res.success && Array.isArray(res.data)) setPaymentModes(res.data);
+      else setPaymentModesError(res.error || "Failed to load payment modes");
+    }).catch(() => { if (alive) setPaymentModesError("Failed to load payment modes"); });
+    return () => { alive = false; };
+  }, [open, filter?.param]);
 
   if (!open) return null;
 
@@ -373,12 +388,13 @@ export default function DateRangeModal({
                   }}
                 >
                   <option value="">All {filter.label}s</option>
-                  {filter.options.map((o) => (
+                  {(filter.param === "pm" ? paymentModes : filter.options).map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
                   ))}
                 </select>
+                {filter.param === "pm" && paymentModesError && <p role="alert" style={{ color: "#b91c1c", fontSize: 12 }}>{paymentModesError}</p>}
               </div>
             )}
 

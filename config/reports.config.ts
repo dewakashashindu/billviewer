@@ -231,13 +231,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
       type: "pay-mode",
       param: "pm",
       label: "Pay Mode",
-      options: [
-        { value: "001", label: "CASH" },
-        { value: "002", label: "MASTER CARD" },
-        { value: "003", label: "VISA CARD" },
-        { value: "004", label: "ANEX" },
-        { value: "005", label: "CREDIT" },
-      ],
+      options: [], // Loaded from dbo.Tbl_PaymentModes. 
     },
   },
   // 6.1 — Table Management - Steward Wise
@@ -253,7 +247,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "service-charge": {
     id: "service-charge",
     title: "Service Charge Report",
-    subtitle: "Steward-wise service charge collections (POS 8.1)",
+    subtitle: "Bill-wise dine-in service charge collections (POS 8.1)",
     render: "steward-wise",
     fetchAction: getServiceChargeAction,
     columns: [],
@@ -299,7 +293,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "menu-item-issue": {
     id: "menu-item-issue",
     title: "Menu Item Issue - Item Issue",
-    subtitle: "Sales department wise issued items (POS 4.1)",
+    subtitle: "Item sales by location and price (POS 4.1)",
     render: "mii",
     fetchAction: getMenuIssueAction,
     columns: [],
@@ -308,7 +302,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "menu-item-issue-date": {
     id: "menu-item-issue-date",
     title: "Menu Item Issue By Date",
-    subtitle: "Issued items sectioned by date (POS 4.2)",
+    subtitle: "Item quantities by date (POS 4.2)",
     render: "mii-date",
     fetchAction: getMenuIssueAction,
     columns: [],
@@ -416,7 +410,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "void-report": {
     id: "void-report",
     title: "Void Summery and Detail",
-    subtitle: "Voided items by cashier with sub totals (POS 10)",
+    subtitle: "Voided items by date, order and table (POS 10)",
     render: "void-report",
     fetchAction: getVoidReportAction,
     columns: [],

@@ -56,26 +56,18 @@ export function stewardToRows(d: StewardData): Array<{ date?: string; billNo?: s
 }
 
 // -- search filter --
-export function filterSteward(d: StewardData, q0: string): StewardData {
+export function filterSteward(d: StewardData, q0: string, selectedId?: string): StewardData {
   const q = q0.trim().toLowerCase();
-  if (!q) return d;
-  const stewards = (d.stewards ?? [])
-    .filter((s) => `${s.stewId} ${s.stewName}`.toLowerCase().includes(q) ||
-      s.locs.some((l) => `${l.locCode} ${l.locName}`.toLowerCase().includes(q) ||
-        l.rows.some((r) => r.date.toLowerCase().includes(q))))
-    .map((s) => ({
-      ...s,
-      locs: s.locs
-        .map((l) => ({
-          ...l,
-          rows: `${s.stewId} ${s.stewName}`.toLowerCase().includes(q) || `${l.locCode} ${l.locName}`.toLowerCase().includes(q)
-            ? l.rows
-            : l.rows.filter((r) => r.date.toLowerCase().includes(q)),
-        }))
-        .filter((l) => l.rows.length > 0),
-    }))
-    .filter((s) => s.locs.length > 0);
-  return { ...d, stewards };
+  const sum = (rows: StwTotals[]): StwTotals => rows.reduce((a, r) => ({bills:a.bills+r.bills,pax:a.pax+r.pax,grand:Math.round((a.grand+r.grand)*100)/100,serChg:Math.round((a.serChg+r.serChg)*100)/100}), {bills:0,pax:0,grand:0,serChg:0});
+  const stewards = d.stewards.filter(s => selectedId === undefined || s.stewId === selectedId).map(s => {
+    const locs = s.locs.map(l => {
+      const matches = !q || `${s.stewId} ${s.stewName} ${l.locCode} ${l.locName}`.toLowerCase().includes(q);
+      const rows = matches ? l.rows : l.rows.filter(r => r.date.toLowerCase().includes(q));
+      return {...l, rows, totals: sum(rows)};
+    }).filter(l => l.rows.length > 0);
+    return {...s, locs, stewTotals:sum(locs.map(l=>l.totals))};
+  }).filter(s=>s.locs.length > 0);
+  return {...d, stewards, grand:sum(stewards.map(s=>s.stewTotals))};
 }
 
 // -- flat rows for the shared PDF document --
@@ -142,7 +134,7 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
           >
             <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <IconPin size={13} />
-              {s.stewId} — {s.stewName}
+              {s.stewId ? `${s.stewId}${s.stewName ? ` — ${s.stewName}` : ""}` : "Unassigned steward"}
             </span>
             <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(s.stewTotals.grand)}</span>
           </div>
@@ -187,10 +179,10 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
                   ))}
                   <tr style={{ background: "#FCF7F3", borderTop: "1px solid #907860" }}>
                     <td style={{ ...cell, fontWeight: 800, color: "#684830" }}>Total Steward Collection</td>
-                    <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{s.stewTotals.bills}</td>
-                    <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{s.stewTotals.pax}</td>
-                    <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(s.stewTotals.grand)}</td>
-                    {sc && <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(s.stewTotals.serChg)}</td>}
+                    <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{l.totals.bills}</td>
+                    <td style={{ ...num, fontWeight: 800, color: "#684830" }}>{l.totals.pax}</td>
+                    <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(l.totals.grand)}</td>
+                    {sc && <td style={{ ...num, fontWeight: 800, color: NAVY }}>{fmtAmt(l.totals.serChg)}</td>}
                   </tr>
                 </tbody>
               </table>
@@ -212,7 +204,7 @@ export default function StewardSummaryReport({ report }: { report: StewardData }
           marginTop: 14,
         }}
       >
-        <span>Locationwise Collection (all stewards)</span>
+        <span>Collection Total (shown stewards)</span>
         <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(report.grand.grand)}</span>
       </div>
     </div>
