@@ -5,6 +5,7 @@
 // (Bill viewer pages meka ain — /bill, / me shell eken wenaskai)
 // ============================================================
 import { useEffect, useState, type ReactNode } from "react";
+import InventoryEnterNavigation from "./InventoryEnterNavigation";
 import {ReportPermissionsContext} from "./ReportPermissionsContext";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -308,7 +309,6 @@ const NAV: NavItem[] = [
           { key: "inv-categories", label: "Categories", path: "/inventory/categories" },
           { key: "inv-items", label: "Item Master", path: "/inventory/items" },
           { key: "inv-units", label: "Unit Master", path: "/inventory/units" },
-          { key: "inv-modes", label: "Modes", path: "/inventory/modes" },
           { key: "inv-suppliers", label: "Supplier Master", path: "/inventory/suppliers" },
         ],
       },
@@ -677,17 +677,7 @@ export default function AppShell({
   );
   const [open, setOpen] = useState(true);
   const [mobOpen, setMobOpen] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    reports: true,
-    "cat-performance": true,
-    inventory: true,
-    "system-settings": false,
-    "system-user-settings": false,
-    administration: false,
-    "administration-user-creation": false,
-    "inventory-reference": true,
-    "inventory-transactions": true,
-  });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [modal, setModal] = useState<{
     title: string;
     reportId?: string;
@@ -697,32 +687,6 @@ export default function AppShell({
   // Close mobile drawer automatically on route change
   useEffect(() => {
     setMobOpen(false);
-  }, [pathname]);
-
-  // Auto-expand the category containing the currently active report
-  useEffect(() => {
-    if (pathname.startsWith("/inventory/")) {
-      setExpanded((prev) => ({ ...prev, inventory: true, "inventory-reference": true }));
-    }
-    if (pathname === "/settings/user-groups" || pathname === "/user-creation") setExpanded((prev) => ({...prev, administration: true, "administration-user-creation": true}));
-    if (pathname === "/settings/access-profiles" || pathname === "/settings/assign-profiles") setExpanded((prev) => ({...prev, "system-settings": true, "system-user-settings": true}));
-    if (!pathname.startsWith("/reports/")) return;
-    const reportsNav = NAV.find((n) => n.key === "reports");
-    if (!reportsNav?.children) return;
-    for (const cat of reportsNav.children) {
-      if (
-        cat.children.some(
-          (leaf) => leaf.reportId && pathname === `/reports/${leaf.reportId}`
-        )
-      ) {
-        setExpanded((prev) =>
-          prev.reports && prev[cat.key]
-            ? prev
-            : { ...prev, reports: true, [cat.key]: true }
-        );
-        break;
-      }
-    }
   }, [pathname]);
 
   useEffect(() => {
@@ -1143,6 +1107,7 @@ export default function AppShell({
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#FCF7F3" }}>
       <style>{SHELL_CSS}</style>
+      <InventoryEnterNavigation/>
 
       {sidebar}
       {mobileDrawer}
