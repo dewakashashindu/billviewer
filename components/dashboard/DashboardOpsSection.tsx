@@ -156,6 +156,7 @@ export default function DashboardOpsSection({
   const [error, setError] = useState<string | null>(null);
   const [runId, setRunId] = useState(1);
   const paneRef = useRef<HTMLDivElement | null>(null);
+  const locationInitialized = useRef(false);
 
   const load = useCallback(async (f: string, t: string, l: string) => {
     setLoading(true);
@@ -164,6 +165,7 @@ export default function DashboardOpsSection({
       const res = await getDashboardOpsAction({ from: f, to: t, loc: l });
       if (res.success && res.data) {
         setFetched(res.data);
+        if (!locationInitialized.current) { locationInitialized.current=true; if(res.data.defaultLocation) setLoc(res.data.defaultLocation); }
         setDemo(Boolean(res.demo));
       } else {
         setError(res.error || "Could not load live operations data");

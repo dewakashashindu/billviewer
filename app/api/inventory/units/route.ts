@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
+import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 
@@ -17,7 +18,9 @@ async function authorize(req: NextRequest) {
     const r = await (await getPool()).request().input("uid", sql.Char(10), String(session.userId)).query("SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId,''))) AS GroupId FROM Tbl_UserDetails WHERE LTRIM(RTRIM(UserId)) = LTRIM(RTRIM(@uid))");
     groupId = r.recordset[0]?.GroupId ?? "";
   }
-  return isAdminSession({ ...session, groupId }) ? null : NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  if (!isAdminSession({...session,groupId})) return NextResponse.json({error:'Admin access required.'},{status:403});
+  try { await requireWebPermission(session, `units:${req.method==='GET'?'VIEW':req.method==='DELETE'?'DELETE':'SAVE'}`); } catch { return NextResponse.json({error:'Permission denied.'},{status:403}); }
+  return null;
 }
 function kind(req: NextRequest): "master" | "sub" | "conversion" | null { const k = req.nextUrl.searchParams.get("type"); return k === "master" || k === "sub" || k === "conversion" ? k : null; }
 function fail(e: unknown) {

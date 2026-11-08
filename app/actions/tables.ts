@@ -10,6 +10,7 @@
 // ============================================================
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
+import {requireWebPermission} from "@/lib/webAuthorization";
 
 export interface TableLocationRow {
   locCode: string;
@@ -118,7 +119,8 @@ export async function getTablesDataAction(): Promise<{
   error?: string;
 }> {
   try {
-    await requireSession();
+    const access=await requireWebPermission(await requireSession(),"tableqr:VIEW");
+    const allowed=new Set([...access.mainLocations].map(x=>x.toUpperCase()));
 
     if (!isDbConfigured()) {
       console.warn("DB_* env vars not configured - serving MOCK tables (dev fallback)");
@@ -200,7 +202,7 @@ export async function getTablesDataAction(): Promise<{
 
         for (const r of locRows) {
           const locCode = s(r[lcKey]);
-          if (!locCode) continue;
+          if (!locCode || !allowed.has(locCode.toUpperCase())) continue;
           const locName = (ldKey ? s(r[ldKey]) : "") || locCode;
           const upper = locCode.toUpperCase();
 
@@ -215,7 +217,7 @@ export async function getTablesDataAction(): Promise<{
           }
         }
 
-        mainLocs.sort((a, b) => a.locCode.localeCompare(b.locCode));
+        mainLocs.sort((a, b) => a.locCode.toUpperCase()===access.defaultLocation.toUpperCase() ? -1 : b.locCode.toUpperCase()===access.defaultLocation.toUpperCase() ? 1 : a.locCode.localeCompare(b.locCode));
         allLocs.sort((a, b) => a.locCode.localeCompare(b.locCode));
         locations = mainLocs.length > 0 ? mainLocs : allLocs;
       }

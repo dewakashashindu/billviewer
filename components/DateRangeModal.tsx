@@ -77,6 +77,7 @@ export default function DateRangeModal({
       if (!alive) return;
       if (res.success && Array.isArray(res.data)) {
         setLocations(res.data);
+        if('defaultLocation' in res && res.defaultLocation) setLoc(res.defaultLocation);
       }
     });
     return () => {

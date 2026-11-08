@@ -6,6 +6,7 @@
 // ============================================================
 import { useEffect, useState, type ReactNode } from "react";
 import InventoryEnterNavigation from "./InventoryEnterNavigation";
+import {WebPermissionsContext} from './WebPermissions';
 import {ReportPermissionsContext} from "./ReportPermissionsContext";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -107,6 +108,8 @@ export interface ShellUserInfo {
   userName: string;
   groupId?: string;
   isAdmin: boolean;
+  defaultLocation?: string;
+  defaultLocationName?: string;
 }
 
 const NAV: NavItem[] = [
@@ -590,7 +593,7 @@ function UserBar({
         </button>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: 10, minWidth: 0 }}>
         {name && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <span
@@ -632,6 +635,18 @@ function UserBar({
             )}
           </span>
         )}
+        {user?.defaultLocation && (
+          <span title={`Default location: ${user.defaultLocationName || user.defaultLocation} (${user.defaultLocation})`}
+            aria-label={`Default location: ${user.defaultLocationName || user.defaultLocation}, ${user.defaultLocation}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600,
+              color: "#684830", background: "#F8F4EE", border: "1px solid #E4D6BF", borderRadius: 8,
+              padding: "5px 8px", maxWidth: 220, minWidth: 0 }}>
+            <span aria-hidden="true">⌖</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.defaultLocationName || user.defaultLocation}
+            </span>
+          </span>
+        )}
         <button
           onClick={logout}
           title="Sign out"
@@ -664,11 +679,13 @@ export default function AppShell({
   currentUser,
   canViewDashboard = false,
   reportPermissions = [],
+  webPermissions = [],
 }: {
   children: ReactNode;
   currentUser?: ShellUserInfo;
   canViewDashboard?: boolean;
   reportPermissions?: string[];
+  webPermissions?: string[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -757,12 +774,13 @@ export default function AppShell({
     };
   }, [router, userInfo]);
 
-  const visibleNav = NAV.filter(
-    (item) => (item.key !== "dashboard" || canViewDashboard) && (!item.adminOnly || Boolean(userInfo?.isAdmin))
-  ).map(item => item.key !== 'reports' || !item.children ? item : {
-    ...item,
-    children: item.children.map(cat => ({...cat, children: cat.children.filter(leaf => !leaf.reportId || reportPermissions.includes(`report-${leaf.reportId}:VIEW`))})).filter(cat => cat.children.length > 0),
-  });
+  const pathPermissions:Record<string,string>={
+    '/inventory/locations':'locations:VIEW','/inventory/categories':'categories:VIEW','/inventory/items':'items:VIEW','/inventory/units':'units:VIEW','/inventory/suppliers':'suppliers:VIEW',
+    '/inventory/po':'po:VIEW','/inventory/grn':'grn:VIEW','/inventory/srn':'srn:VIEW','/inventory/damage':'damage:VIEW','/inventory/transfer-requisition':'trq:VIEW','/inventory/transfer-note':'tn:VIEW','/inventory/transfer-return':'tr:VIEW','/inventory/issue-requisition':'irq:VIEW','/inventory/issue-note':'inn:VIEW','/inventory/stock-reconciliation':'recon:VIEW',
+    '/settings/user-groups':'groups:VIEW','/user-creation':'users:VIEW','/settings/access-profiles':'profiles:VIEW','/settings/assign-profiles':'assign:VIEW','/table-qr':'tableqr:VIEW'};
+  const visibleNav = NAV.filter(item => (item.key !== 'dashboard' || canViewDashboard) && (!item.adminOnly || Boolean(userInfo?.isAdmin)) && (!item.path || !pathPermissions[item.path] || webPermissions.includes(pathPermissions[item.path])))
+    .map(item=>!item.children?item:{...item,children:item.children.map(cat=>({...cat,children:cat.children.filter(leaf=>leaf.reportId?reportPermissions.includes(`report-${leaf.reportId}:VIEW`):leaf.path&&pathPermissions[leaf.path]?webPermissions.includes(pathPermissions[leaf.path]):true)})).filter(cat=>cat.children.length>0)})
+    .filter(item=>!item.children || item.children.length>0);
 
   function toggle(key: string) {
     setExpanded((p) => ({ ...p, [key]: !p[key] }));
@@ -1125,7 +1143,7 @@ export default function AppShell({
         }}
       >
         <UserBar user={userInfo} onOpenMobileMenu={() => setMobOpen(true)} />
-        <ReportPermissionsContext.Provider value={reportPermissions}>{children}</ReportPermissionsContext.Provider>
+        <WebPermissionsContext.Provider value={webPermissions}><ReportPermissionsContext.Provider value={reportPermissions}>{children}</ReportPermissionsContext.Provider></WebPermissionsContext.Provider>
       </main>
 
       {/* Date range modal */}

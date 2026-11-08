@@ -9,12 +9,12 @@ const itemRefs: readonly [string,string][] = [
   ['Tbl_SRNDetails','ItemCode'], ['Tbl_DamageDetails','ItemCode'], ['Tbl_ReconcilDetails','ItemCode'],
   ['Tbl_TransferReqDetail','ItemCode'], ['Tbl_TransferNoteDetail','ItemCode'],
   ['Tbl_TransferReturnDetail','ItemCode'], ['Tbl_IssueReqDetail','ItemCode'], ['Tbl_IssueNoteDetail','ItemCode'],
-  ['Tbl_BillDetails','SubItmId'],
+  ['Tbl_BillDetails','SubItmId'], ['Tbl_Recipies','RowItemCode'], ['Tbl_RecipiesSemiFinishedprod','RowItemCode'],
 ];
 const locationRefs: readonly [string,readonly string[]][] = [
   ['Tbl_RowItems',['LocCode']], ['Tbl_UserDetails',['LocCode']], ['Tbl_UserLocationAccess',['LocationID']], ['Tbl_TxnNumbers',['LocCode']],
   ['Tbl_BillHeader',['LocCode']], ['Tbl_BillDetails',['LocCode']], ['Tbl_BillPayTxn',['LocCode']],
-  ['Tbl_TxnMovement',['LocCode']], ['Tbl_TxnSerial',['LocCode']], ['Tbl_RecipiesSemiFinishedprod',['LocCode']], ['Tbl_POHeader',['LocCode']], ['Tbl_PODetails',['LocCode']],
+  ['Tbl_TxnMovement',['LocCode']], ['Tbl_TxnSerial',['LocCode']], ['Tbl_Recipies',['LocCode']], ['Tbl_RecipiesSemiFinishedprod',['LocCode']], ['Tbl_POHeader',['LocCode']], ['Tbl_PODetails',['LocCode']],
   ['Tbl_GRNHeader',['LocCode']], ['Tbl_GRNDetails',['LocCode']],
   ['Tbl_SRNHeader',['LocCode']], ['Tbl_SRNDetails',['LocCode']],
   ['Tbl_DamageHeder',['LocCode']], ['Tbl_DamageDetails',['LocCode']],

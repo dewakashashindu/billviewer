@@ -60,6 +60,7 @@ export interface DashboardOpsData {
   to: string;
   loc: string;
   locations: OpsLocation[];
+  defaultLocation?: string;
   totals: {
     net: number;
     gross: number;
@@ -337,7 +338,7 @@ export async function getDashboardOpsAction(
                  SUM(ISNULL(p.ActAmt, 0)) AS amt
             FROM Tbl_BillPayTxn p WITH (NOLOCK)
             INNER JOIN Tbl_BillHeader h WITH (NOLOCK)
-              ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(p.BillNo))
+              ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(p.BillNo)) AND LTRIM(RTRIM(h.LocCode)) = LTRIM(RTRIM(p.LocCode))
             LEFT JOIN Tbl_PaymentModes pm WITH (NOLOCK)
               ON LTRIM(RTRIM(pm.PayCode)) = LTRIM(RTRIM(p.PayCode))
            WHERE h.Txndate >= @from
@@ -407,7 +408,7 @@ export async function getDashboardOpsAction(
                SUM(ISNULL(d.TotalItmPrice, 0)) AS amt
           FROM Tbl_BillDetails d WITH (NOLOCK)
           INNER JOIN Tbl_BillHeader h WITH (NOLOCK)
-            ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(d.BillNo))
+            ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(d.BillNo)) AND LTRIM(RTRIM(h.LocCode)) = LTRIM(RTRIM(d.LocCode))
           LEFT JOIN Tbl_MenuItems m WITH (NOLOCK)
             ON LTRIM(RTRIM(m.MenuItmId)) = LTRIM(RTRIM(d.SubItmId))
          WHERE h.Txndate >= @from
@@ -495,6 +496,7 @@ export async function getDashboardOpsAction(
         to,
         loc,
         locations,
+        defaultLocation: access.defaultLocation,
         totals,
         hourly,
         payModes,

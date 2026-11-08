@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
+import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 
@@ -12,6 +13,7 @@ async function authorize(req: NextRequest) {
   let groupId = session.groupId ?? "";
   if (!groupId) { const r = await (await getPool()).request().input("uid", sql.Char(10), String(session.userId)).query("SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId,''))) AS GroupId FROM Tbl_UserDetails WHERE LTRIM(RTRIM(UserId))=LTRIM(RTRIM(@uid))"); groupId = r.recordset[0]?.GroupId ?? ""; }
   if (!isAdminSession({ ...session, groupId })) return { error: NextResponse.json({ error: "Admin access required." }, { status: 403 }), session: null };
+  try { await requireWebPermission(session, `suppliers:${req.method==='GET'?'VIEW':req.method==='DELETE'?'DELETE':'SAVE'}`); } catch { return {error:NextResponse.json({error:'Permission denied.'},{status:403}),session:null}; }
   return { error: null, session };
 }
 function validate(x: unknown): x is Supplier {

@@ -21,11 +21,11 @@ function fail(e:unknown){if(e instanceof AccessDeniedError)return NextResponse.j
 export async function GET(req:NextRequest){try{
  const k=kind(req);if(!k)return NextResponse.json({error:'Invalid document type.'},{status:400});
  const a=k==='damage'||k==='srn'||k==='recon'?await damageAuth(req,'VIEW',k):await auth(req);if(a.error)return a.error;
- const access=('access' in a?a.access:null) as {locations:Set<string>}|null,t=tables[k],pool=await getPool(),loc=req.nextUrl.searchParams.get('location')?.trim()||'',id=req.nextUrl.searchParams.get('id')?.trim()||'',view=req.nextUrl.searchParams.get('view');
+ const access=('access' in a?a.access:null) as {locations:Set<string>;defaultLocation:string}|null,t=tables[k],pool=await getPool(),loc=req.nextUrl.searchParams.get('location')?.trim()||'',id=req.nextUrl.searchParams.get('id')?.trim()||'',view=req.nextUrl.searchParams.get('view');
  if(k==='damage'&&view==='masters'){
   const [l,u]=await Promise.all([pool.request().query('SELECT RTRIM(LocCode) AS code,LocDes AS name FROM dbo.Tbl_LocationMaster WHERE Enable=1 ORDER BY LocDes'),pool.request().query('SELECT RTRIM(UnitID) AS code,UnitDes AS name FROM dbo.Tbl_Unit WHERE Enable=1 ORDER BY UnitDes')]);
   const allowed=new Set([...access!.locations].map(x=>x.trim().toUpperCase()));
-  return NextResponse.json({locations:l.recordset.filter(x=>allowed.has(String(x.code).trim().toUpperCase())),items:[],units:u.recordset});
+  return NextResponse.json({defaultLocation:access!.defaultLocation,locations:l.recordset.filter(x=>allowed.has(String(x.code).trim().toUpperCase())),items:[],units:u.recordset});
  }
  if(k==='damage'&&view==='items'){
   if(!loc||loc.length>10)return NextResponse.json({error:'Select a location.'},{status:400});allowedLocation(access!,loc);

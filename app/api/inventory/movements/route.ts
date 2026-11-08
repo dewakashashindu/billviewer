@@ -34,7 +34,7 @@ export async function GET(req:NextRequest){try{
    pool.request().query('SELECT RTRIM(LocCode) AS code,LocDes AS name,SubLoc AS sub,RTRIM(MainLoc) AS parent FROM dbo.Tbl_LocationMaster WHERE Enable=1 ORDER BY LocDes'),
    transfer?Promise.resolve({recordset:[]}):pool.request().query('SELECT RTRIM(MenuItmId) AS code,MenuItmDes AS name,CostPrice AS cost FROM dbo.Tbl_MenuItems WHERE Enable=1 ORDER BY MenuItmDes'),
    pool.request().query('SELECT RTRIM(UnitID) AS code,UnitDes AS name FROM dbo.Tbl_Unit WHERE Enable=1 ORDER BY UnitDes')]);
-  return NextResponse.json({locations:transfer?l.recordset.filter(x=>permitted.has(trim(x.code).toUpperCase())):l.recordset,items:i.recordset,units:u.recordset});
+  return NextResponse.json({defaultLocation:access?.defaultLocation||"",locations:transfer?l.recordset.filter(x=>permitted.has(trim(x.code).toUpperCase())):l.recordset,items:i.recordset,units:u.recordset});
  }
  if(view==='items'){
   if(!transfer)return NextResponse.json({error:'Invalid request.'},{status:400});

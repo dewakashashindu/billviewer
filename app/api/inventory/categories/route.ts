@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
+import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 
@@ -17,6 +18,7 @@ async function authorize(req: NextRequest) {
     groupId = result.recordset[0]?.GroupId ?? "";
   }
   if (!isAdminSession({ ...session, groupId })) return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  try { await requireWebPermission(session, `categories:${req.method==='GET'?'VIEW':req.method==='DELETE'?'DELETE':'SAVE'}`); } catch { return NextResponse.json({error:'Permission denied.'},{status:403}); }
   return null;
 }
 function tableFor(req: NextRequest) {

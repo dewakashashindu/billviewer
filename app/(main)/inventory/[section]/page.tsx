@@ -3,6 +3,8 @@ import RawItemsWorkspace from "@/components/RawItemsWorkspace";
 import CategoryWorkspace from "@/components/CategoryWorkspace";
 import UnitWorkspace from "@/components/UnitWorkspace";
 import {notFound} from "next/navigation";
+import {getSessionFromRequest} from "@/lib/session";
+import {requireWebPermission,AccessDeniedError} from "@/lib/webAuthorization";
 import SupplierWorkspace from "@/components/SupplierWorkspace";
 import PurchasingWorkspace from "@/components/PurchasingWorkspace";
 import StockDocumentsWorkspace from "@/components/StockDocumentsWorkspace";
@@ -17,6 +19,9 @@ const transactionSections = new Set(["po", "grn", "srn", "damage", "transfer-req
 export default async function InventoryPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
   if (section === "modes") notFound();
+  const screen:Record<string,string>={locations:'locations',categories:'categories',items:'items',units:'units',suppliers:'suppliers',po:'po',grn:'grn',srn:'srn',damage:'damage','transfer-requisition':'trq','transfer-note':'tn','transfer-return':'tr','issue-requisition':'irq','issue-note':'inn','stock-reconciliation':'recon'};
+  if (!screen[section]) notFound();
+  try {const session=await getSessionFromRequest();if(!session)throw new AccessDeniedError();await requireWebPermission(session,`${screen[section]}:VIEW`)} catch(error) {if(!(error instanceof AccessDeniedError))console.error('Inventory authorization unavailable:',error);return <main style={{padding:32}}><h1>Access denied</h1><p>Access is not assigned to this screen, or authorization is unavailable.</p></main>}
   if (section === "items") return <RawItemsWorkspace/>;
   const movementKeys = {"transfer-requisition":"trq", "transfer-note":"tn", "transfer-return":"tr", "issue-requisition":"irq", "issue-note":"inn"} as const;
   const movement = movementKeys[section as keyof typeof movementKeys];

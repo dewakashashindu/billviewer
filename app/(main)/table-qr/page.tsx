@@ -1,4 +1,5 @@
 "use client";
+import {PermissionGate} from "@/components/WebPermissions";
 
 // ============================================================
 // LOCATION: app/(main)/table-qr/page.tsx
@@ -944,13 +945,13 @@ export default function TableQrPage() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
+          <PermissionGate permission="tableqr:PRINT"><button
             style={{ ...btnBrown, opacity: created.length ? 1 : 0.5 }}
             disabled={!created.length || busy != null}
             onClick={downloadPdf}
           >
             {busy === "pdf" ? "Preparing…" : `Download all PDF (${created.length})`}
-          </button>
+          </button></PermissionGate>
         </div>
       </div>
 
@@ -1580,20 +1581,20 @@ export default function TableQrPage() {
                       />
                     </ScaleBox>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button
+                      <PermissionGate permission="tableqr:PRINT"><button
                         style={{ ...btnGhost, flex: 1, padding: "8px 10px", fontSize: 12 }}
                         disabled={busy != null}
                         onClick={() => downloadPng(t)}
                       >
                         {busy === key ? "…" : "Download PNG"}
-                      </button>
-                      <button
+                      </button></PermissionGate>
+                      <PermissionGate permission="tableqr:PRINT"><button
                         style={{ ...btnGhost, flex: 1, padding: "8px 10px", fontSize: 12 }}
                         disabled={busy != null}
                         onClick={() => printCard(t)}
                       >
                         {busy === key ? "…" : "Print"}
-                      </button>
+                      </button></PermissionGate>
                     </div>
                   </div>
                 );

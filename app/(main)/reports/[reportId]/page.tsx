@@ -445,6 +445,7 @@ export default function DynamicReportPage() {
       .then((res) => {
         if (alive && res?.success && Array.isArray(res.data)) {
           setAllLocs(res.data);
+          if (!searchParams.get("loc") && 'defaultLocation' in res && res.defaultLocation) setLoc(res.defaultLocation);
         }
       })
       .catch(() => {});
@@ -501,6 +502,7 @@ export default function DynamicReportPage() {
       setError(null);
       try {
         const res = await config.fetchAction({
+          reportId,
           startDate,
           endDate,
           outletId: loc || undefined,

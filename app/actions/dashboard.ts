@@ -82,6 +82,7 @@ export interface DashboardPerfData {
   locations: PerfLocationOption[];
   snapshots: PerfDaySnapshot[];
   source: "database" | "mock";
+  defaultLocation?: string;
 }
 
 const s = (v: unknown): string => (v == null ? "" : String(v).trim());
@@ -449,6 +450,7 @@ export async function getDashboardPerformanceAction(): Promise<{
           locations: mainLocList,
           snapshots: [],
           source: "database",
+          defaultLocation: access.defaultLocation,
         },
       };
     }
@@ -734,6 +736,7 @@ export async function getDashboardPerformanceAction(): Promise<{
         locations,
         snapshots,
         source: "database",
+          defaultLocation: access.defaultLocation,
       },
     };
   } catch (error) {

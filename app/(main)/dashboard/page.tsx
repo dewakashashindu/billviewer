@@ -675,6 +675,7 @@ export default function DashboardPage() {
             snaps.map((s) => s.locCode.toUpperCase())
           );
           const defaultLoc =
+            locs.find((l) => l.locCode.toUpperCase() === res.data?.defaultLocation?.toUpperCase())?.locCode ??
             locs.find((l) => locsWithSnaps.has(l.locCode.toUpperCase()))
               ?.locCode ??
             locs[0]?.locCode ??

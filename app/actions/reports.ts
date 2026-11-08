@@ -8,11 +8,12 @@
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
-import {requireWebPermission} from "@/lib/webAuthorization";
+import {requireWebPermission,loadWebAuthorization,requireWebLocation} from "@/lib/webAuthorization";
 
 export interface ReportFilter {
   startDate: string;
   endDate: string;
+  reportId?: string;
   outletId?: number | string;
   /** Sales Summery – Order Mode Wise (DI/TA/DL/PU) */
   orderMode?: string;
@@ -35,6 +36,23 @@ export interface ReportFilter {
   cusId?: string;
   /** 3.3 Cashier Breakdown Grid — cashier filter */
   cashier?: string;
+}
+
+// Bind escaped XML as one parameter; nodes() supports older SQL Server versions.
+async function scopedReportFilters(filters: ReportFilter, allowedReports: readonly string[]): Promise<ReportFilter> {
+  const access=await loadWebAuthorization(await requireSession());
+  const selected=typeof filters.reportId==='string'?filters.reportId.trim():'';
+  const report=selected || (allowedReports.length===1?allowedReports[0]:'');
+  if (!allowedReports.includes(report) || !access.permissions.has(`report-${report}:VIEW`)) throw new Error('Report access denied.');
+  const requested=String(filters.outletId ?? '').trim();
+  const allowed=[...access.mainLocations];
+  if (!allowed.length || allowed.some(x=>/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(x))) throw new Error('Location scope cannot be safely represented.');
+  const asXml=(codes:string[])=>'<l>'+codes.map(x=>'<i>'+x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</i>').join('')+'</l>';
+  if(requested) {
+    if(!allowed.some(x=>x.toUpperCase()===requested.toUpperCase())) throw new Error('Location access denied.');
+    return {...filters,outletId:asXml([allowed.find(x=>x.toUpperCase()===requested.toUpperCase())!])};
+  }
+  return {...filters,outletId:asXml(allowed)};
 }
 
 const SUMMARY_VIEW = process.env.SALES_SUMMARY_VIEW || "VW_SalesSummery";
@@ -142,7 +160,7 @@ async function getViewColumns(
 
 export async function getTransactionSummaryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['transaction-summary']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -166,6 +184,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     }
 
     const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const date = pickCol(cols, ["Txndate", "TXNdate", "TrnDate", "SalesDate", "BillDate"]);
     if (!loc || !date) {
       return {
@@ -192,7 +211,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     const r = pool.request();
     r.input("startDate", sql.DateTime2, new Date(startDate));
     r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
       SELECT
@@ -214,7 +233,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
       WHERE v.[${date}] >= @startDate
         AND v.[${date}] < DATEADD(day, 1, @endDate)
         ${donot ? `AND ISNULL(v.[${donot}], 0) <> 1` : ""}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       GROUP BY LTRIM(RTRIM(v.[${loc}])), CONVERT(varchar(10), v.[${date}], 103)
       ORDER BY LocCode, TxnDate
     `);
@@ -309,7 +328,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
 // ============================================================
 export async function getSalesSummaryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['sales-summary', 'sales-summary-order-mode', 'sales-summary-bill-type']);
 
     if (!isDbConfigured()) {
       return {
@@ -347,7 +366,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     pf.bind(req);
 
     const txnTimeExpr = cols.has("TxnTime") ? "v.TxnTime" : "NULL";
@@ -374,7 +393,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
       WHERE v.Txndate >= @startDate
         AND v.Txndate < DATEADD(day, 1, @endDate)
         ${pf.sql}
-        ${outletId ? "AND LTRIM(RTRIM(v.LocCode)) = @outletId" : ""}
+        ${outletId ? "AND LTRIM(RTRIM(v.LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
       ORDER BY v.LocCode, v.Txndate, v.BillNo
     `);
 
@@ -489,7 +508,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
 // ============================================================
 export async function getSalesDetailsAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['sales-details', 'sales-details-bill-type', 'sales-details-order-mode', 'complimentary-cost']);
 
     if (!isDbConfigured()) {
       return {
@@ -514,7 +533,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
     req.input("startDate", sql.VarChar(10), startDate);
     req.input("endDate", sql.VarChar(10), endDate);
     if (outletId)
-      req.input("outletId", sql.VarChar(20), String(outletId));
+      req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     pf.bind(req);
 
     const result = await req.query(`
@@ -553,7 +572,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
         ISNULL(NULLIF(LTRIM(RTRIM(lm.LocDes)), ''), LTRIM(RTRIM(h.LocCode))) AS LocDes
       FROM Tbl_BillDetails d WITH (NOLOCK)
       INNER JOIN Tbl_BillHeader h WITH (NOLOCK)
-        ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(d.BillNo))
+        ON LTRIM(RTRIM(h.BillNo)) = LTRIM(RTRIM(d.BillNo)) AND LTRIM(RTRIM(h.LocCode)) = LTRIM(RTRIM(d.LocCode))
       LEFT JOIN Tbl_MenuItems m WITH (NOLOCK)
         ON LTRIM(RTRIM(m.MenuItmId)) = LTRIM(RTRIM(d.SubItmId))
       LEFT JOIN Tbl_UserDetails cu WITH (NOLOCK)
@@ -567,7 +586,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
       WHERE h.Txndate >= @startDate
         AND h.Txndate < DATEADD(day, 1, @endDate)
         ${pf.sql}
-        ${outletId ? "AND LTRIM(RTRIM(h.LocCode)) = @outletId" : ""}
+        ${outletId ? "AND LTRIM(RTRIM(h.LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
       ORDER BY h.Txndate, h.BillNo, d.KOTBOTNO, d.SubItmId;
     `);
 
@@ -723,7 +742,7 @@ export async function getSalesDetailsAction(filters: ReportFilter) {
 // ============================================================
 export async function getLocationsAction() {
   try {
-    await requireSession();
+    const access=await loadWebAuthorization(await requireSession());
 
     if (!isDbConfigured()) {
       return {
@@ -764,7 +783,7 @@ export async function getLocationsAction() {
 
     for (const r of rawRows) {
       const code = String(r[codeKey] ?? "").trim();
-      if (!code) continue;
+      if (!code || ![...access.mainLocations].some(x=>x.toUpperCase()===code.toUpperCase())) continue;
       const rawName = nameKey ? String(r[nameKey] ?? "").trim() : "";
       const name = rawName || code;
       const up = code.toUpperCase();
@@ -780,9 +799,9 @@ export async function getLocationsAction() {
     }
 
     const chosen = mainList.length > 0 ? mainList : allList;
-    chosen.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    chosen.sort((a, b) => (a.code.toUpperCase()===access.defaultLocation.toUpperCase() ? -1 : b.code.toUpperCase()===access.defaultLocation.toUpperCase() ? 1 : a.code.localeCompare(b.code, undefined, { numeric: true })));
 
-    return { success: true, data: chosen };
+    return { success: true, data: chosen, defaultLocation: access.defaultLocation };
   } catch (error) {
     console.error("Locations Action Error:", error);
     return actionError(error);
@@ -966,7 +985,7 @@ function groupCatRows(recordset: CatRowIn[], withRows: boolean) {
 // ── 1.3.1 Summery ──
 export async function getCategorySummaryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['sales-category-summary']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -997,7 +1016,7 @@ export async function getCategorySummaryAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await req.query(`
       SELECT
@@ -1014,7 +1033,7 @@ export async function getCategorySummaryAction(filters: ReportFilter) {
       FROM dbo.${CATEGORY_VIEW} v WITH (NOLOCK)
       WHERE v.[${c.date}] >= @startDate
         AND v.[${c.date}] < DATEADD(day, 1, @endDate)
-        ${outletId ? `AND LTRIM(RTRIM(v.[${c.loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${c.loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       GROUP BY ${locExpr}, ${locDesExpr}, ${l1Expr}, ${l2Expr}, ${l3Expr}, ${itemExpr}
       ORDER BY LocCode, L1, L2, L3, ItemName
     `);
@@ -1028,7 +1047,7 @@ export async function getCategorySummaryAction(filters: ReportFilter) {
 // ── 1.3.2 Detail ──
 export async function getCategoryDetailAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['sales-category-detail']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1067,7 +1086,7 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await req.query(`
       SELECT
@@ -1091,7 +1110,7 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
         AND v.[${c.date}] < DATEADD(day, 1, @endDate)
         ${c.billtype ? `AND ISNULL(LTRIM(RTRIM(v.[${c.billtype}])), '') <> 'CM'` : ""}
         ${c.donot ? `AND ISNULL(v.[${c.donot}], 0) = 0` : ""}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${c.loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${c.loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY L1, L2, L3, ItemName
     `);
 
@@ -1146,7 +1165,7 @@ const PAY_VIEW = process.env.PAYMENT_MODES_VIEW || "Vw_SalesPayModes";
 
 export async function getPaymentSummaryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['payment-summary', 'payment-summary-wise']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1158,6 +1177,7 @@ export async function getPaymentSummaryAction(filters: ReportFilter) {
     }
 
     const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const date = pickCol(cols, ["Txndate", "TrnDate", "SalesDate", "BillDate"]);
     const bill = pickCol(cols, ["BillNo", "BillNO", "Bill"]);
     const payDes = pickCol(cols, ["PayDes", "PaymentDes", "PaymentDescription", "PayMode", "ModeDes", "PaymentMode", "Description"]);
@@ -1184,7 +1204,7 @@ export async function getPaymentSummaryAction(filters: ReportFilter) {
     const r = pool.request();
     r.input("startDate", sql.DateTime2, new Date(startDate));
     r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (payMode && payCode) r.input("pm", sql.VarChar(10), String(payMode));
 
     const result = await r.query(`
@@ -1202,7 +1222,7 @@ export async function getPaymentSummaryAction(filters: ReportFilter) {
         AND v.[${date}] < DATEADD(day, 1, @endDate)
         ${donot ? `AND ISNULL(v.[${donot}], 0) = 0` : ""}
         ${payMode && payCode ? `AND LTRIM(RTRIM(v.[${payCode}])) = @pm` : ""}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY v.[${loc}], v.[${date}], BillNo
     `);
 
@@ -1274,7 +1294,7 @@ const GRID_VIEW = process.env.BILL_PAYMODE_GRID_VIEW || "Vw_PayModes";
 
 export async function getBillPayModeGridAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['payment-bill-paymode-grid']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1309,6 +1329,7 @@ export async function getBillPayModeGridAction(filters: ReportFilter) {
     }
 
     const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const date = pickCol(cols, ["Txndate", "TrnDate", "SalesDate", "BillDate"]);
     const bill = pickCol(cols, ["BillNo", "BillNO", "Bill"]);
     const payDes = pickCol(cols, ["PayDes", "PaymentDes", "PaymentDescription", "PayMode", "ModeDes", "PaymentMode", "Description"]);
@@ -1332,7 +1353,7 @@ export async function getBillPayModeGridAction(filters: ReportFilter) {
     const r = pool.request();
     r.input("startDate", sql.DateTime2, new Date(startDate));
     r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
       SELECT
@@ -1347,7 +1368,7 @@ export async function getBillPayModeGridAction(filters: ReportFilter) {
       WHERE v.[${date}] >= @startDate
         AND v.[${date}] < DATEADD(day, 1, @endDate)
         ${donot ? `AND ISNULL(v.[${donot}], 0) <> 1` : ""}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY v.[${loc}], v.[${bill}], ${payCode ? `v.[${payCode}]` : `v.[${payDes}]`}
     `);
 
@@ -1438,6 +1459,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
     return { success: false, error: `View 'dbo.${SUMMARY_VIEW}' not found in database` };
   }
   const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
   const date = pickCol(cols, ["TenDate", "Txndate", "TrnDate", "SalesDate", "BillDate"]);
   const stewId = pickCol(cols, ["StewID", "StewardID", "Steward", "CasherID"]);
   if (!loc || !date || !stewId) {
@@ -1459,7 +1481,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
   const r = pool.request();
   r.input("startDate", sql.DateTime2, new Date(startDate));
   r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-  if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+  if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
   const result = await r.query(`
     SELECT
@@ -1479,7 +1501,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
       ${donot ? `AND ISNULL(v.[${donot}], 0) <> 1` : ""}
       ${serCharge && btC ? `AND ISNULL(LTRIM(RTRIM(v.[${btC}])), '') <> 'CM'` : ""}
       ${serCharge && omC ? `AND ISNULL(LTRIM(RTRIM(v.[${omC}])), '') <> 'DI'` : ""}
-      ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+      ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
     GROUP BY LTRIM(RTRIM(v.[${loc}])), ${locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}]))), ` : ""}LTRIM(RTRIM(v.[${stewId}])), CONVERT(varchar(10), v.[${date}], 103)
     ORDER BY StewId, LocCode, TxnDate
   `);
@@ -1549,7 +1571,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
 
 export async function getStewardWiseAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['steward-wise']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1562,11 +1584,11 @@ export async function getStewardWiseAction(filters: ReportFilter) {
 
 export async function getServiceChargeAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['service-charge']);
     if (!isDbConfigured()) return {success:false, error:"Database not configured (DB_* env vars missing)"};
     const pool = await getPool();
     const request = pool.request().input("startDate", sql.Date, filters.startDate).input("endDate", sql.Date, filters.endDate);
-    if (filters.outletId) request.input("outletId", sql.VarChar(20), String(filters.outletId));
+    if (filters.outletId) request.input("outletId", sql.NVarChar(sql.MAX), String(filters.outletId));
     const result = await request.query(`
       SELECT LTRIM(RTRIM(LocCode)) AS locCode, LTRIM(RTRIM(LocDes)) AS locName,
         LTRIM(RTRIM(BillNo)) AS billNo, CONVERT(varchar(10), TxnDate, 23) AS txnDate,
@@ -1575,7 +1597,7 @@ export async function getServiceChargeAction(filters: ReportFilter) {
       FROM dbo.${SUMMARY_VIEW} WITH (NOLOCK)
       WHERE DoNotShowInSales <> 1 AND BillType <> 'CM' AND OrderMode = 'DI'
         AND TxnDate >= @startDate AND TxnDate < DATEADD(day, 1, @endDate)
-        ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) = @outletId" : ""}
+        ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
       ORDER BY LocCode, StewID, TxnDate, BillNo`);
     const users = await pool.request().query(`SELECT LTRIM(RTRIM(LocCode)) AS loc, LTRIM(RTRIM(UserId)) AS id, LTRIM(RTRIM(UserName)) AS name FROM dbo.Tbl_UserDetails`);
     const local = new Map<string, Set<string>>(), global = new Map<string, Set<string>>();
@@ -1604,7 +1626,7 @@ export async function getServiceChargeAction(filters: ReportFilter) {
 // ============================================================
 export async function getTaxVatAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['tax-vat']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1615,6 +1637,7 @@ export async function getTaxVatAction(filters: ReportFilter) {
       return { success: false, error: `View 'dbo.${SUMMARY_VIEW}' not found in database` };
     }
     const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const date = pickCol(cols, ["TenDate", "Txndate", "TrnDate", "SalesDate", "BillDate"]);
     const bill = pickCol(cols, ["BillNo", "BILLNO", "BillNO", "Bill"]);
     if (!loc || !date || !bill) {
@@ -1637,7 +1660,7 @@ export async function getTaxVatAction(filters: ReportFilter) {
     const r = pool.request();
     r.input("startDate", sql.DateTime2, new Date(startDate));
     r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
       SELECT
@@ -1655,7 +1678,7 @@ export async function getTaxVatAction(filters: ReportFilter) {
         AND v.[${date}] < DATEADD(day, 1, @endDate)
         ${donot ? `AND ISNULL(v.[${donot}], 0) <> 1` : ""}
         ${btC ? `AND ISNULL(LTRIM(RTRIM(v.[${btC}])), '') <> 'CM'` : ""}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       GROUP BY LTRIM(RTRIM(v.[${loc}])), ${locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}]))), ` : ""}LTRIM(RTRIM(v.[${bill}])), CONVERT(varchar(10), v.[${date}], 103)
       ORDER BY LocCode, TxnDate, BillNo
     `);
@@ -1707,11 +1730,11 @@ export async function getTaxVatAction(filters: ReportFilter) {
 // ============================================================
 export async function getVoidReportAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['void-report']);
     if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
     const pool=await getPool();
     const req=pool.request().input("startDate",sql.Date,filters.startDate).input("endDate",sql.Date,filters.endDate);
-    if(filters.outletId) req.input("loc",sql.VarChar(20),String(filters.outletId));
+    if(filters.outletId) req.input("loc",sql.NVarChar(sql.MAX),String(filters.outletId));
     const result=await req.query(`SELECT LTRIM(RTRIM(LOCCODE)) AS loc, CONVERT(varchar(10),TxnDate,23) AS txnDate,
       LTRIM(RTRIM(TableNo)) AS tableNo, TRACENO AS traceNo, LTRIM(RTRIM(OrderMode)) AS orderMode,
       LTRIM(RTRIM(VOIDTYPE)) AS voidType, LTRIM(RTRIM(ItemCode)) AS itemCode, LTRIM(RTRIM(ItemDes)) AS itemDes,
@@ -1721,7 +1744,7 @@ export async function getVoidReportAction(filters: ReportFilter) {
       LTRIM(RTRIM(VOIDREMARKS)) AS remarks
       FROM dbo.Vw_VoidBeforeSettlement WITH (NOLOCK)
       WHERE TxnDate >= @startDate AND TxnDate < DATEADD(day,1,@endDate)
-      ${filters.outletId ? "AND LTRIM(RTRIM(LOCCODE))=@loc" : ""}
+      ${filters.outletId ? "AND LTRIM(RTRIM(LOCCODE)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@loc AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
       ORDER BY LOCCODE, TxnDate, TRACENO, TableNo, ItemDes`);
     const locations=await pool.request().query(`SELECT LTRIM(RTRIM(LocCode)) AS code, MAX(LTRIM(RTRIM(LocDes))) AS name FROM dbo.Tbl_LocationMaster GROUP BY LTRIM(RTRIM(LocCode))`);
     const names=new Map<string,string>(locations.recordset.map(x=>[String(x.code??""),String(x.name??"")]));
@@ -1739,7 +1762,7 @@ export async function getVoidReportAction(filters: ReportFilter) {
 // ============================================================
 export async function getPaxCountAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['pax-count']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1751,6 +1774,7 @@ export async function getPaxCountAction(filters: ReportFilter) {
       return { success: false, error: `View 'dbo.${PAX_VIEW}' not found in database` };
     }
     const loc = pickCol(cols, ["LOCCODE", "LocCode", "Loc", "Location", "Outlet"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const date = pickCol(cols, ["TXNDATE", "Txndate", "TrnDate"]);
     const pax = pickCol(cols, ["TotalPax", "NoPax", "Pax", "NOPax", "LocalPax"]);
     const spending = pickCol(cols, ["TotalSpending", "Spending", "NetTotal", "SaleTotal", "Value"]);
@@ -1769,7 +1793,7 @@ export async function getPaxCountAction(filters: ReportFilter) {
     const r = pool.request();
     r.input("startDate", sql.DateTime2, new Date(startDate));
     r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
       SELECT
@@ -1784,7 +1808,7 @@ export async function getPaxCountAction(filters: ReportFilter) {
       FROM dbo.${PAX_VIEW} v WITH (NOLOCK)
       WHERE v.[${date}] >= @startDate
         AND v.[${date}] < DATEADD(day, 1, @endDate)
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY LocCode, PDate, BillNo
     `);
 
@@ -1861,7 +1885,7 @@ export async function getPaxCountAction(filters: ReportFilter) {
 // ============================================================
 export async function getOpenTablesAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['open-tables']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1888,10 +1912,11 @@ export async function getOpenTablesAction(filters: ReportFilter) {
     const cancel = pickCol(cols, ["CANCEL", "Cancel", "Cancelled"]);
     const cashier = pickCol(cols, ["CashierName", "CasherName", "CASHER", "Casher", "CASHERID"]);
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "Loc"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
 
     if (outletId && !loc) return {success: false, error: "Open tables view has no location column; cannot apply location filter."};
     const r = pool.request();
-    if (outletId && loc) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId && loc) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     const result = await r.query(`
       SELECT
         ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `''`} AS LocCode,
@@ -1905,7 +1930,7 @@ export async function getOpenTablesAction(filters: ReportFilter) {
         ${cancel ? `LTRIM(RTRIM(CONVERT(varchar(20), v.[${cancel}])))` : `''`} AS Cancel,
         ${cashier ? `LTRIM(RTRIM(v.[${cashier}]))` : `''`} AS Cashier
       FROM dbo.${OPEN_VIEW} v WITH (NOLOCK)
-      ${loc && outletId ? `WHERE LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+      ${loc && outletId ? `WHERE LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY Code
     `);
 
@@ -1945,7 +1970,7 @@ export async function getOpenTablesAction(filters: ReportFilter) {
 // ============================================================
 export async function getSlipTraceAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['slip-trace']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -1957,6 +1982,7 @@ export async function getSlipTraceAction(filters: ReportFilter) {
       return { success: false, error: `View 'dbo.${TRACE_VIEW}' not found in database` };
     }
     const loc = pickCol(cols, ["locCode", "LOCCODE", "LocCode", "Loc"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const bill = pickCol(cols, ["BillNo", "BILLNO", "BillNO", "Bill"]);
     if (!loc || !bill) {
       return {
@@ -1980,7 +2006,7 @@ export async function getSlipTraceAction(filters: ReportFilter) {
     const r = pool.request();
     r.input("startDate", sql.DateTime2, new Date(startDate));
     r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
       SELECT
@@ -2000,7 +2026,7 @@ export async function getSlipTraceAction(filters: ReportFilter) {
         ${status ? `LTRIM(RTRIM(v.[${status}]))` : `''`} AS Status
       FROM dbo.${TRACE_VIEW} v WITH (NOLOCK)
       WHERE ${date ? `v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)` : "1 = 1"}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY LocCode, BillNo, Birth, Ref
     `);
 
@@ -2049,7 +2075,7 @@ export async function getSlipTraceAction(filters: ReportFilter) {
 // ============================================================
 export async function getCreditSummaryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['credit-summary']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2073,11 +2099,12 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
     const isCredit = pickCol(cols, ["creditcustomer", "CreditCustomer"]);
     if (!isCredit) return {success:false, error:"CreditCustomer column missing from credit view."};
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     if (outletId && !loc) return {success:false,error:"Credit view has no location column; cannot filter by location."};
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
 
     const r = pool.request();
-    if (outletId && loc) r.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId && loc) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     const result = await r.query(`
       SELECT
         ${loc ? `LTRIM(RTRIM(v.[${loc}])) AS LocCode,` : `'ALL' AS LocCode,`}
@@ -2089,7 +2116,7 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
       FROM dbo.${CRED_VIEW} v WITH (NOLOCK)
       WHERE v.[${total}] <> 0
         AND v.[${isCredit}] = 1
-        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY LocCode, Code
     `);
 
@@ -2141,6 +2168,7 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
     return { success: false, error: `View 'dbo.${viewName}' not found in database` };
   }
   const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
   const code = pickCol(cols, ["CustCode", "Custcode", "CUSTCODE", "CustCI", "Code"]);
   const amt = pickCol(cols, ["TranAmt", "TrsAmt", "Amount", "PayAmt"]);
   if (!code || !amt) {
@@ -2162,7 +2190,7 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
   const r = pool.request();
   r.input("startDate", sql.DateTime2, new Date(startDate));
   r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-  if (outletId && loc) r.input("outletId", sql.VarChar(20), String(outletId));
+  if (outletId && loc) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
   const result = await r.query(`
     SELECT
@@ -2180,7 +2208,7 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
       ${user ? `LTRIM(RTRIM(v.[${user}]))` : `''`} AS TUser
     FROM dbo.${viewName} v WITH (NOLOCK)
     WHERE ${date ? `v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)` : "1 = 1"}
-      ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+      ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
     ORDER BY LocCode, Code, TDate
   `);
 
@@ -2220,19 +2248,19 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
 
 export async function getCreditHistoryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['credit-history']);
     if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
     const pool = await getPool();
     const view = process.env.CREDIT_HISTORY_VIEW || "Vw_CreditHistory";
     const req = pool.request().input("from",sql.Date,filters.startDate).input("to",sql.Date,filters.endDate);
-    if (filters.outletId) req.input("loc",sql.VarChar(20),String(filters.outletId));
+    if (filters.outletId) req.input("loc",sql.NVarChar(sql.MAX),String(filters.outletId));
     const result = await req.query(`SELECT LTRIM(RTRIM(LocCode)) AS loc, LTRIM(RTRIM(LocDes)) AS locName,
       LTRIM(RTRIM(CusID)) AS cus, LTRIM(RTRIM(CusName)) AS cusName, LTRIM(RTRIM(RegTel)) AS phone,
       LTRIM(RTRIM(BillNo)) AS bill, CONVERT(varchar(10),solddate,23) AS billDate,
       CONVERT(varchar(10),TxnDate,23) AS txnDate, PrevAmt, TxnAmt, FinalAmt, PaidAmount, ToBePaid
       FROM dbo.${view} WITH (NOLOCK)
       WHERE TxnDate >= @from AND TxnDate < DATEADD(day,1,@to)
-      ${filters.outletId ? "AND LTRIM(RTRIM(LocCode))=@loc" : ""}
+      ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@loc AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
       ORDER BY LocCode, CusID, TxnDate, BillNo`);
     const rows = result.recordset.map(r=>({loc:String(r.loc??"").trim(),locName:String(r.locName??"").trim(),cus:String(r.cus??"").trim(),cusName:String(r.cusName??"").trim(),phone:String(r.phone??"").trim(),bill:String(r.bill??"").trim(),billDate:String(r.billDate??""),txnDate:String(r.txnDate??""),prev:r.PrevAmt==null?null:Number(r.PrevAmt),txn:r.TxnAmt==null?null:Number(r.TxnAmt),final:r.FinalAmt==null?null:Number(r.FinalAmt),paid:r.PaidAmount==null?null:Number(r.PaidAmount),due:r.ToBePaid==null?null:Number(r.ToBePaid)}));
     return {success:true,data:{rows}};
@@ -2241,7 +2269,7 @@ export async function getCreditHistoryAction(filters: ReportFilter) {
 
 export async function getCreditPayHistoryAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['credit-pay-history']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2262,6 +2290,7 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
       return { success: false, error: "View 'dbo.Vw_creditPaymentHistory' not found in database" };
     }
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const cus = pickCol(cols, ["CusID", "CustID", "CustCode", "Custcode", "CUSTCODE"]);
     const cusName = pickCol(cols, ["CusName", "CustName", "Name"]);
@@ -2281,15 +2310,15 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
       };
     }
     let customers: Array<{ id: string; des: string }> = [];
-    const cr = await pool.request().query(
-      `SELECT DISTINCT LTRIM(RTRIM(v.[${cus}])) AS CID, ${cusName ? `LTRIM(RTRIM(v.[${cusName}]))` : `LTRIM(RTRIM(v.[${cus}]))`} AS CDes FROM dbo.${view} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${cus}])) <> '' ORDER BY CID`
+    const cr = await pool.request().input("scope",sql.NVarChar(sql.MAX),String(outletId)).query(
+      `SELECT DISTINCT LTRIM(RTRIM(v.[${cus}])) AS CID, ${cusName ? `LTRIM(RTRIM(v.[${cusName}]))` : `LTRIM(RTRIM(v.[${cus}]))`} AS CDes FROM dbo.${view} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${cus}])) <> '' AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@scope AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v)) ORDER BY CID`
     );
     customers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
 
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.cusId) req.input("cusId", sql.VarChar(20), String(filters.cusId));
     const result = await req.query(`
       SELECT
@@ -2308,7 +2337,7 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
         ${soldDate ? `CONVERT(varchar(10), v.[${soldDate}], 103)` : `''`} AS TSold
       FROM dbo.${view} v WITH (NOLOCK)
       WHERE ${paidDate ? `v.[${paidDate}] >= @startDate AND v.[${paidDate}] < DATEADD(day, 1, @endDate)` : "1 = 1"}
-        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         ${filters.cusId ? `AND LTRIM(RTRIM(v.[${cus}])) = @cusId` : ""}
       ORDER BY LocCode, Code, TPaidDate
     `);
@@ -2430,7 +2459,7 @@ function hourOf(raw: unknown): number | null {
 
 export async function getHourlySalesAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['hourly-sales']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2465,6 +2494,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
     let usedView = false;
     if (hCols.size > 0) {
       const loc = pickCol(hCols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
       const hour = pickCol(hCols, ["Hour", "Hr", "SaleHour", "TimeHour", "HH"]);
       const val = pickCol(hCols, ["Sales", "SaleTotal", "TotalSales", "SalesValue", "Value", "Amount"]);
       if (hour && val) {
@@ -2474,7 +2504,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
         const req = pool.request();
         req.input("startDate", sql.DateTime2, new Date(startDate));
         req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-        if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+        if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
         const result = await req.query(`
           SELECT
             ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `'ALL'`} AS LocCode,
@@ -2484,7 +2514,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
             ${bills ? `ISNULL(v.[${bills}], 0)` : "1"} AS Bills
           FROM dbo.${HOURLY_VIEW} v WITH (NOLOCK)
           WHERE ${date ? `v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)` : "1 = 1"}
-            ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+            ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         `);
         for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
           bump(String(row.LocCode ?? ""), String(row.LocDes ?? ""), hourOf(row.Hr), Number(row.Val ?? 0), Number(row.Bills ?? 1));
@@ -2512,7 +2542,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
       const req = pool.request();
       req.input("startDate", sql.DateTime2, new Date(startDate));
       req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-      if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+      if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
       pf.bind(req);
       const result = await req.query(`
         SELECT
@@ -2523,7 +2553,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
         FROM dbo.${SUMMARY_VIEW} v WITH (NOLOCK)
         WHERE v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)
           ${pf.sql}
-          ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) = @outletId` : ""}
+          ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       `);
       for (const row of result.recordset as Array<{ [k: string]: unknown }>) {
         bump(String(row.LocCode ?? ""), String(row.LocDes ?? ""), hourOf(row.Hr), Number(row.Val ?? 0), 1);
@@ -2568,7 +2598,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
 // ============================================================
 export async function getBillTypePaymentAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['payment-billtype']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2590,7 +2620,7 @@ export async function getBillTypePaymentAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     pf.bind(req);
     const result = await req.query(`
       SELECT
@@ -2603,7 +2633,7 @@ export async function getBillTypePaymentAction(filters: ReportFilter) {
       WHERE v.[${pickCol(cols, ["Txndate", "TrnDate", "SalesDate"])}] >= @startDate
         AND v.[${pickCol(cols, ["Txndate", "TrnDate", "SalesDate"])}] < DATEADD(day, 1, @endDate)
         ${pf.sql}
-        ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       GROUP BY LTRIM(RTRIM(v.LocCode)), ISNULL(NULLIF(LTRIM(RTRIM(v.LocDes)), ''), LTRIM(RTRIM(v.LocCode))), ISNULL(NULLIF(LTRIM(RTRIM(v.[${bt}])), ''), 'UNKNOWN')
       ORDER BY LocCode, BType
     `);
@@ -2642,7 +2672,7 @@ export async function getBillTypePaymentAction(filters: ReportFilter) {
 // ============================================================
 export async function getCashierCollectionAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['cashier-collection']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2667,7 +2697,7 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     pf.bind(req);
     const result = await req.query(`
       SELECT
@@ -2681,7 +2711,7 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
       FROM dbo.${SUMMARY_VIEW} v WITH (NOLOCK)
       WHERE v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)
         ${pf.sql}
-        ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY LocCode, CCash, v.[${date}]
     `);
     // Resolve names separately so duplicate user rows cannot multiply sales rows.
@@ -2737,7 +2767,7 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
 // ============================================================
 export async function getCashierBreakdownAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['cashier-payment-breakdown']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2761,7 +2791,7 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     const result = await req.query(`
       SELECT
         LTRIM(RTRIM(v.LocCode)) AS LocCode,
@@ -2773,7 +2803,7 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
         ${time ? `CONVERT(varchar(8), v.[${time}], 108)` : `''`} AS TTime
       FROM dbo.${PAY_VIEW} v WITH (NOLOCK)
       WHERE v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)
-        ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
       ORDER BY LocCode, CCash, PMode, v.[${date}]
     `);
     const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -2831,13 +2861,13 @@ function dmyOf(iso: string): string {
 // 4.1 / 4.2 use the source of the supplied POS procedures directly.
 export async function getMenuIssueAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['menu-item-issue', 'menu-item-issue-date']);
     if (!isDbConfigured()) return { success: false, error: "Database not configured (DB_* env vars missing)" };
     const pool = await getPool();
     const req = pool.request();
     req.input("startDate", sql.Date, filters.startDate);
     req.input("endDate", sql.Date, filters.endDate);
-    if (filters.outletId) req.input("outletId", sql.VarChar(20), String(filters.outletId));
+    if (filters.outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(filters.outletId));
     // Equivalent source and measures from the supplied POS procedures, without
     // writing to the shared Tbl_Temp_SalesItemIssue[_Ext] tables.
     const result = await req.query(`
@@ -2849,7 +2879,7 @@ export async function getMenuIssueAction(filters: ReportFilter) {
         CostPrice, SUM(CostPrice * Qty) AS CostOfSales
       FROM dbo.Vw_SalesDetail
       WHERE Txndate >= @startDate AND Txndate < DATEADD(day, 1, @endDate)
-        ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) = @outletId" : ""}
+        ${filters.outletId ? "AND LTRIM(RTRIM(LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
       GROUP BY LTRIM(RTRIM(LocCode)), ${filters.menuIssueByDate ? "CONVERT(varchar(10), Txndate, 23)," : ""}
         LTRIM(RTRIM(SubItmId)), LTRIM(RTRIM(MenuItmDes)), SalesPrice, CostPrice
       ORDER BY LocCode, TDate, Code, SalesPrice, CostPrice`);
@@ -2881,7 +2911,7 @@ export async function getMenuIssueAction(filters: ReportFilter) {
 // ============================================================
 export async function getItemMovementAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['item-movement']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -2909,11 +2939,12 @@ export async function getItemMovementAction(filters: ReportFilter) {
         };
       }
       const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
       const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
       const req = pool.request();
       req.input("startDate", sql.DateTime2, new Date(startDate));
       req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-      if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+      if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
       const result = await req.query(`
         SELECT
           ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `'ALL'`} AS LocCode,
@@ -2923,7 +2954,7 @@ export async function getItemMovementAction(filters: ReportFilter) {
           SUM(ISNULL(v.[${qty}], 0)) AS IMQty
         FROM dbo.${IMV_VIEW} v WITH (NOLOCK)
         WHERE v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)
-          ${outletId && loc ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+          ${outletId && loc ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         GROUP BY
           ${loc ? `LTRIM(RTRIM(v.[${loc}]))` : `'ALL'`},
           ${loc && locDes ? `ISNULL(NULLIF(LTRIM(RTRIM(v.[${locDes}])), ''), LTRIM(RTRIM(v.[${loc}])))` : `'All Locations'`},
@@ -2953,13 +2984,13 @@ export async function getItemMovementAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.Date, startDate);
     req.input("endDate", sql.Date, endDate);
-    if (outletId) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     const result = await req.query(`
       WITH locations AS (
         SELECT LTRIM(RTRIM(LocCode)) AS LocCode,
           MAX(ISNULL(NULLIF(LTRIM(RTRIM(LocDes)), ''), LTRIM(RTRIM(LocCode)))) AS LocDes
         FROM dbo.${SUMMARY_VIEW}
-        ${outletId ? "WHERE LTRIM(RTRIM(LocCode)) = @outletId" : ""}
+        ${outletId ? "WHERE LTRIM(RTRIM(LocCode)) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))" : ""}
         GROUP BY LTRIM(RTRIM(LocCode))
       ), items AS (
         SELECT LTRIM(RTRIM(MenuItmId)) AS ItemCode,
@@ -3001,7 +3032,7 @@ export async function getItemMovementAction(filters: ReportFilter) {
 // ============================================================
 export async function getCashInOutAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['cash-inout']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -3022,6 +3053,7 @@ export async function getCashInOutAction(filters: ReportFilter) {
       };
     }
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const txnid = pickCol(cols, ["TxnID", "TxnId", "ID", "TxnNo"]);
     const time = pickCol(cols, ["TxnTime", "Time", "Tm"]);
@@ -3033,8 +3065,8 @@ export async function getCashInOutAction(filters: ReportFilter) {
     // full category list for the filter dropdown (POS combo)
     let categories: Array<{ id: string; des: string }> = [];
     if (catid) {
-      const cr = await pool.request().query(
-        `SELECT DISTINCT LTRIM(RTRIM(v.[${catid}])) AS CID, ${cat ? `LTRIM(RTRIM(v.[${cat}]))` : `LTRIM(RTRIM(v.[${catid}]))`} AS CDes FROM dbo.${CIO_VIEW} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${catid}])) <> '' ORDER BY CID`
+      const cr = await pool.request().input("scope",sql.NVarChar(sql.MAX),String(outletId)).query(
+        `SELECT DISTINCT LTRIM(RTRIM(v.[${catid}])) AS CID, ${cat ? `LTRIM(RTRIM(v.[${cat}]))` : `LTRIM(RTRIM(v.[${catid}]))`} AS CDes FROM dbo.${CIO_VIEW} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${catid}])) <> '' AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@scope AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v)) ORDER BY CID`
       );
       categories = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
     }
@@ -3042,7 +3074,7 @@ export async function getCashInOutAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.payCat && catid) req.input("payCat", sql.VarChar(20), String(filters.payCat));
     const result = await req.query(`
       SELECT
@@ -3058,7 +3090,7 @@ export async function getCashInOutAction(filters: ReportFilter) {
         ${user ? `LTRIM(RTRIM(v.[${user}]))` : `''`} AS Usr
       FROM dbo.${CIO_VIEW} v WITH (NOLOCK)
       WHERE v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)
-        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         ${filters.payCat && catid ? `AND LTRIM(RTRIM(v.[${catid}])) = @payCat` : ""}
       ORDER BY LocCode, v.[${date}], TTime
     `);
@@ -3125,7 +3157,7 @@ export async function getCashInOutAction(filters: ReportFilter) {
 // ============================================================
 export async function getKotBotAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['kot-bot']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -3137,6 +3169,7 @@ export async function getKotBotAction(filters: ReportFilter) {
       return { success: false, error: `View 'dbo.${KOT_VIEW}' not found in database` };
     }
     const loc = pickCol(cols, ["LOCCODE", "LocCode", "locCode"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName", "Venue"]);
     const txnDate = pickCol(cols, ["TxnDate", "TrnDate", "Txndate"]);
     const kbdate = pickCol(cols, ["kbdate", "KOTDate", "KbotDate", "KBDate", "KDate"]);
@@ -3177,7 +3210,7 @@ export async function getKotBotAction(filters: ReportFilter) {
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (trc.code && typ) req.input("trcType", sql.VarChar(10), trc.code);
     const result = await req.query(`
       SELECT
@@ -3196,7 +3229,7 @@ export async function getKotBotAction(filters: ReportFilter) {
         ${remark ? `LTRIM(RTRIM(v.[${remark}]))` : `''`} AS Rem
       FROM dbo.${KOT_VIEW} v WITH (NOLOCK)
       WHERE v.[${filterDate}] >= @startDate AND v.[${filterDate}] < DATEADD(day, 1, @endDate)
-        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         ${trc.code && typ ? `AND LTRIM(RTRIM(v.[${typ}])) = @trcType` : ""}
       ORDER BY v.[${dateCol}], v.[${orderno}]
     `);
@@ -3288,7 +3321,7 @@ export async function getKotBotAction(filters: ReportFilter) {
 // ============================================================
 export async function getCreditAccountDetailAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['credit-account-detail']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -3309,6 +3342,7 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
       return { success: false, error: "View 'dbo.Vw_Credit_SettelementHistory_Details' not found in database" };
     }
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
+    if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const cus = pickCol(cols, ["CusID", "CustID", "CustCode", "Custcode", "CUSTCODE"]);
     const cusName = pickCol(cols, ["CusName", "CustName", "Name"]);
@@ -3325,15 +3359,15 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
       };
     }
     let customers: Array<{ id: string; des: string }> = [];
-    const cr = await pool.request().query(
-      `SELECT DISTINCT LTRIM(RTRIM(v.[${cus}])) AS CID, ${cusName ? `LTRIM(RTRIM(v.[${cusName}]))` : `LTRIM(RTRIM(v.[${cus}]))`} AS CDes FROM dbo.${view} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${cus}])) <> '' ORDER BY CID`
+    const cr = await pool.request().input("scope",sql.NVarChar(sql.MAX),String(outletId)).query(
+      `SELECT DISTINCT LTRIM(RTRIM(v.[${cus}])) AS CID, ${cusName ? `LTRIM(RTRIM(v.[${cusName}]))` : `LTRIM(RTRIM(v.[${cus}]))`} AS CDes FROM dbo.${view} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${cus}])) <> '' AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@scope AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v)) ORDER BY CID`
     );
     customers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
 
     const req = pool.request();
     req.input("startDate", sql.DateTime2, new Date(startDate));
     req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId && loc) req.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.cusId) req.input("cusId", sql.VarChar(20), String(filters.cusId));
     const result = await req.query(`
       SELECT
@@ -3349,7 +3383,7 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
         ${balAmt ? `ISNULL(v.[${balAmt}], 0)` : "0"} AS TBal
       FROM dbo.${view} v WITH (NOLOCK)
       WHERE ${trnDate ? `v.[${trnDate}] >= @startDate AND v.[${trnDate}] < DATEADD(day, 1, @endDate)` : "1 = 1"}
-        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${loc && outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         ${filters.cusId ? `AND LTRIM(RTRIM(v.[${cus}])) = @cusId` : ""}
       ORDER BY LocCode, Code, TDate
     `);
@@ -3394,7 +3428,7 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
 // ============================================================
 export async function getCashierBreakdownGridAction(filters: ReportFilter) {
   try {
-    await requireSession();
+    filters = await scopedReportFilters(filters, ['cashier-breakdown-grid']);
     if (!isDbConfigured()) {
       return { success: false, error: "Database not configured (DB_* env vars missing)" };
     }
@@ -3436,8 +3470,8 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
 
     let cashiers: Array<{ id: string; des: string }> = [];
     if (cash) {
-      const cr = await pool.request().query(
-        `SELECT DISTINCT LTRIM(RTRIM(v.[${cash}])) AS CID, ${cashName ? `LTRIM(RTRIM(v.[${cashName}]))` : `LTRIM(RTRIM(v.[${cash}]))`} AS CDes FROM dbo.${view} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${cash}])) <> '' ORDER BY CID`
+      const cr = await pool.request().input("scope",sql.NVarChar(sql.MAX),String(outletId)).query(
+        `SELECT DISTINCT LTRIM(RTRIM(v.[${cash}])) AS CID, ${cashName ? `LTRIM(RTRIM(v.[${cashName}]))` : `LTRIM(RTRIM(v.[${cash}]))`} AS CDes FROM dbo.${view} v WITH (NOLOCK) WHERE LTRIM(RTRIM(v.[${cash}])) <> '' AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@scope AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v)) ORDER BY CID`
       );
       cashiers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
     }
@@ -3445,7 +3479,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
     const r0 = pool.request();
     r0.input("startDate", sql.DateTime2, new Date(startDate));
     r0.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
-    if (outletId) r0.input("outletId", sql.VarChar(20), String(outletId));
+    if (outletId) r0.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.cashier && cash) r0.input("cashier", sql.VarChar(20), String(filters.cashier));
     const result = await r0.query(`
       SELECT
@@ -3461,7 +3495,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
       FROM dbo.${view} v WITH (NOLOCK)
       WHERE v.[${date}] >= @startDate AND v.[${date}] < DATEADD(day, 1, @endDate)
         ${donot ? `AND ISNULL(v.[${donot}], 0) <> 1` : ""}
-        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) = @outletId` : ""}
+        ${outletId ? `AND LTRIM(RTRIM(v.[${loc}])) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))` : ""}
         ${filters.cashier && cash ? `AND LTRIM(RTRIM(v.[${cash}])) = @cashier` : ""}
       ORDER BY v.[${loc}], Cashier, v.[${bill}]
     `);
@@ -3543,7 +3577,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
 export async function getPerformanceReportAction(filters: ReportFilter) {
   try {
     const session = await requireSession();
-    await requireWebPermission(session, 'report-performance-report:VIEW');
+    const access=await requireWebPermission(session, 'report-performance-report:VIEW');
     if (!isDbConfigured()) {
       return {
         success: false,
@@ -3685,6 +3719,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
       }
     }
 
+    mainLocs=mainLocs.filter(l=>[...access.mainLocations].some(x=>x.toUpperCase()===l.code.toUpperCase()));
     const locByCode = new Map<string, LocMeta>();
     for (const l of mainLocs) locByCode.set(l.code.toUpperCase(), l);
 
@@ -3694,12 +3729,13 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
       .split(",")
       .map((c) => c.trim())
       .filter(Boolean);
+    if(rawRequested.some(code=>!locByCode.has(code.toUpperCase()))) throw new Error('Location access denied.');
     const targetLocCodes: string[] =
       rawRequested.length > 0
         ? rawRequested
         : mainLocs.length > 0
-          ? [mainLocs[0].code]
-          : [""];
+          ? [access.defaultLocation]
+          : [];
 
     const bhGrossAfterDis = pickCol(bhCols, ["GrossAfterDis", "Gross"]);
     const bhSerChg = pickCol(bhCols, ["SerChg", "ServiceCharge"]);
@@ -3789,6 +3825,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
       }>;
     };
 
+    if (!bhLoc) throw new Error("Performance source has no location column; access cannot be enforced.");
     const buildForLocation = async (locCode: string): Promise<{
       locCode: string;
       locName: string;
@@ -3826,7 +3863,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
         const sortCol = pickCol(perfCols, ["SortingOrder"]);
         const txnCol = pickCol(perfCols, ["TxnDate"]);
         const locIdCol = pickCol(perfCols, ["LocID", "LocCode"]);
-        if (!pDesCol || !vDesCol) return null;
+        if (!pDesCol || !vDesCol || !locIdCol) return null;
         const tr = pool.request();
         if (trimmedLoc && locIdCol) {
           tr.input("ploc", sql.VarChar(20), trimmedLoc);
@@ -3898,7 +3935,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
           ]);
           const pvDoNot = pickCol(pvCols, ["DoNotShowInSales"]);
           const pvBt = pickCol(pvCols, ["BillType", "BILLTYPE"]);
-          if (pvDate && pvDes && pvAmt) {
+          if (pvDate && pvDes && pvAmt && pvLoc) {
             const pr = pool.request();
             pr.input("startDate", sql.VarChar(10), sIsoClean);
             pr.input("endDate", sql.VarChar(10), eIsoClean);
@@ -3925,11 +3962,12 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
         if (!payFallbackMeta) return null;
         const { bptCols, pmCols } = payFallbackMeta;
         const bptBill = pickCol(bptCols, ["BillNo", "BILLNO"]);
+        const bptLoc = pickCol(bptCols, ["LocCode", "LOCCODE", "Loc"]);
         const bptCode = pickCol(bptCols, ["PayCode", "ModeCode"]);
         const bptAmt = pickCol(bptCols, ["ActAmt", "Amount", "TenderedAmt"]);
         const pmCode = pickCol(pmCols, ["PayCode", "ModeCode"]);
         const pmDes = pickCol(pmCols, ["PayDes", "Description"]);
-        if (!bptBill || !bptCode || !bptAmt) return null;
+        if (!bptBill || !bptCode || !bptAmt || !bptLoc) return null;
         const expr =
           pmCode && pmDes
             ? `UPPER(ISNULL(NULLIF(LTRIM(RTRIM(pm.[${pmDes}])), ''), LTRIM(RTRIM(p.[${bptCode}]))))`
@@ -3941,7 +3979,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
               SUM(ISNULL(CAST(p.[${bptAmt}] AS float), 0)) AS Amt
             FROM dbo.Tbl_BillPayTxn p WITH (NOLOCK)
             INNER JOIN dbo.Tbl_BillHeader h WITH (NOLOCK)
-              ON LTRIM(RTRIM(p.[${bptBill}])) = LTRIM(RTRIM(h.[${bhBill}]))
+              ON LTRIM(RTRIM(p.[${bptBill}])) = LTRIM(RTRIM(h.[${bhBill}])) AND LTRIM(RTRIM(p.[${bptLoc}])) = LTRIM(RTRIM(h.[${bhLoc}]))
             ${
               pmCode && pmDes
                 ? `LEFT JOIN dbo.Tbl_PaymentModes pm WITH (NOLOCK) ON LTRIM(RTRIM(p.[${bptCode}])) = LTRIM(RTRIM(pm.[${pmCode}]))`
@@ -4017,7 +4055,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
         const oVal = pickCol(openCols, ["ItemPrice", "Value", "Amount", "Total"]);
         const oLoc = pickCol(openCols, ["LocCode", "LOCCODE", "Loc"]);
         const oCancel = pickCol(openCols, ["CANCEL", "Cancel", "Cancelled"]);
-        if (!oCode || !oVal) return null;
+        if (!oCode || !oVal || !oLoc) return null;
         const or = pool.request();
         if (trimmedLoc && oLoc) {
           or.input("outletId", sql.VarChar(20), trimmedLoc);
@@ -4060,7 +4098,7 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
         ]);
         const cDoNot = pickCol(catCols, ["DoNotShowInSales"]);
         const cBt = pickCol(catCols, ["BillType", "BILLTYPE"]);
-        if (!cDate || !cMain || !cTot) return { mg: null, fg: null };
+        if (!cDate || !cMain || !cTot || !cLoc) return { mg: null, fg: null };
 
         const catWhere = [
           `v.[${cDate}] >= CAST(@startDate AS datetime)`,
@@ -4536,7 +4574,8 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
 // Invoice Trace — exact invoice and location, independent of the date range.
 export async function getInvoiceTraceAction(invoice: string, location: string) {
   try {
-    await requireSession();
+    const access=await requireWebPermission(await requireSession(), "report-invoice-trace:VIEW");
+    requireWebLocation({locations:access.mainLocations},location);
     if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
     const bill=String(invoice ?? "").trim(), loc=String(location ?? "").trim();
     if (!bill || bill.length > 100 || !loc || loc.length > 20) return {success:false,error:"Select a location and enter a valid invoice number."};
