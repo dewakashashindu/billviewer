@@ -51,7 +51,7 @@ const labels: Record<string, [string, string][]> = {
   suppliers: [["code", "Supplier ID"], ["name", "Supplier Name"], ["address", "Address"], ["phone", "Contact Number"], ["email", "Email(s)"], ["website", "Website"], ["debt", "Debt / Outstanding Amount (LKR)"], ["remarks", "Remarks"]],
 };
 const colors = { ink: "#45301D", brown: "#684830", muted: "#806B56", border: "#E4D6BF", pale: "#F4EAD9", bg: "#FCF7F3" };
-declare global { interface Window { __inventoryCanLeave?: (message?: string) => boolean } }
+declare global { interface Window { __inventoryCanLeave?: (message?: string) => boolean | Promise<boolean> } }
 
 export default function InventoryWorkspace() {
   const pathname = usePathname();

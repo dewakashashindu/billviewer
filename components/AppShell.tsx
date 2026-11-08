@@ -12,7 +12,7 @@ import Image from "next/image";
 import DateRangeModal, { type DateRangeFilterSpec } from "./DateRangeModal";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 
-declare global { interface Window { __inventoryCanLeave?: (message?: string) => boolean } }
+declare global { interface Window { __inventoryCanLeave?: (message?: string) => boolean | Promise<boolean> } }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -289,7 +289,7 @@ const NAV: NavItem[] = [
           { key: "r-cred-ccs", label: "Current Credit Summery", reportId: "credit-summary" },
           { key: "r-cred-history", label: "Credit History", reportId: "credit-history" },
           { key: "r-cred-pay", label: "Payment History", reportId: "credit-pay-history" },
-          
+          { key: "r-cred-payhistory", label: "Payment History", reportId: "credit-pay-history" },
           { key: "r-cred-account", label: "Account Detail", reportId: "credit-account-detail" },
         ],
       },
@@ -546,7 +546,7 @@ function UserBar({
   const name = user?.userName || user?.loginName || "";
 
   async function logout() {
-    if (typeof window !== "undefined" && window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave without saving?")) return;
+    if (typeof window !== "undefined" && window.__inventoryCanLeave && !(await window.__inventoryCanLeave("Leave without saving?"))) return;
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
@@ -818,8 +818,8 @@ export default function AppShell({
                 key={item.key}
                 title={item.label}
                 className={`sh-group-btn icon-mode ${activeItem ? "active" : ""}`}
-                onClick={() => {
-                  if (isDirect && item.path) { if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return; router.push(item.path); }
+                onClick={async () => {
+                  if (isDirect && item.path) { if (window.__inventoryCanLeave && !(await window.__inventoryCanLeave("Leave page without saving?"))) return; router.push(item.path); }
                   else {
                     setOpen(true);
                     setExpanded((p) => ({ ...p, [item.key]: true }));
@@ -836,10 +836,10 @@ export default function AppShell({
               {/* Level 1 — Main Topic (Light Brown Highlighted!) */}
               <button
                 className={`sh-group-btn row-mode ${activeItem ? "active" : ""}`}
-                onClick={() => {
+                onClick={async () => {
                   if (isDirect && item.path) {
                     setMobOpen(false);
-                    if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return;
+                    if (window.__inventoryCanLeave && !(await window.__inventoryCanLeave("Leave page without saving?"))) return;
                     router.push(item.path);
                   } else {
                     toggle(item.key);
@@ -940,10 +940,10 @@ export default function AppShell({
                                   <button
                                     key={leaf.key}
                                     className={`sh-leaf-btn ${active ? "active" : ""}`}
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (leaf.path) {
                                         setMobOpen(false);
-                                        if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return;
+                                        if (window.__inventoryCanLeave && !(await window.__inventoryCanLeave("Leave page without saving?"))) return;
                                         router.push(leaf.path);
                                       } else {
                                         openReport(leaf.label, leaf.reportId);
@@ -1135,8 +1135,8 @@ export default function AppShell({
         linked={modal?.reportId != null}
         filter={modal?.filter}
         onClose={() => setModal(null)}
-        onApply={(from, to, loc, extra) => {
-          if (window.__inventoryCanLeave && !window.__inventoryCanLeave("Leave page without saving?")) return;
+        onApply={async (from, to, loc, extra) => {
+          if (window.__inventoryCanLeave && !(await window.__inventoryCanLeave("Leave page without saving?"))) return;
           const id = modal?.reportId;
           setModal(null);
           if (id)

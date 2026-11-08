@@ -1,4 +1,5 @@
 "use client";
+import {inventoryNotice,inventoryConfirm} from "@/components/InventoryDialog";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
@@ -23,12 +24,12 @@ export default function CategoryWorkspace() {
     return (payload.data as Category[]).map(r => ({ code: String(r.code ?? "").trim(), name: String(r.name ?? ""), enabled: Boolean(r.enabled) }));
   }, []);
   useEffect(() => { const controller = new AbortController(); setLoading(true); setError(""); setRows([]); setOriginal(null); setForm(blank()); setIsNew(false); setSearch(""); load(level, controller.signal).then(data => { setRows(data); }).catch(e => { if (e.name !== "AbortError") setError(e.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [level, load]);
-  useEffect(() => { window.__inventoryCanLeave = (msg = "Leave without saving?") => !busy && (!dirty || window.confirm(msg)); const before = (e: BeforeUnloadEvent) => { if (dirty || busy) { e.preventDefault(); e.returnValue = ""; } }; window.addEventListener("beforeunload", before); return () => { delete window.__inventoryCanLeave; window.removeEventListener("beforeunload", before); }; }, [dirty, busy]);
+  useEffect(() => { window.__inventoryCanLeave = async (msg = "Leave without saving?") => !busy && (!dirty || await inventoryConfirm(msg)); const before = (e: BeforeUnloadEvent) => { if (dirty || busy) { e.preventDefault(); e.returnValue = ""; } }; window.addEventListener("beforeunload", before); return () => { delete window.__inventoryCanLeave; window.removeEventListener("beforeunload", before); }; }, [dirty, busy]);
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(""), 3000); return () => window.clearTimeout(timer); }, [notice]);
-  function canLeave() { return !busy && (!dirty || window.confirm("Discard unsaved changes?")); }
-  function changeLevel(index: number) { if (index !== level && canLeave()) setLevel(index); }
-  function select(row: Category) { if (original?.code === row.code && !isNew) return; if (!canLeave()) return; setForm({ ...row }); setOriginal({ ...row }); setIsNew(false); setError(""); }
-  function create() { if (!canLeave()) return; setOriginal(null); setForm(blank()); setIsNew(true); setError(""); }
+  async function canLeave() { return !busy && (!dirty || await inventoryConfirm("Discard unsaved changes?")); }
+  async function changeLevel(index: number) { if (index !== level && await canLeave()) setLevel(index); }
+  async function select(row: Category) { if (original?.code === row.code && !isNew) return; if (!(await canLeave())) return; setForm({ ...row }); setOriginal({ ...row }); setIsNew(false); setError(""); }
+  async function create() { if (!(await canLeave())) return; setOriginal(null); setForm(blank()); setIsNew(true); setError(""); }
   async function save() {
     if (busy || loading || (!isNew && !original)) return;
     const code = form.code.trim(), name = form.name.trim(); if (!code || !name) { setError("Category code and description are required."); return; }
@@ -37,11 +38,11 @@ export default function CategoryWorkspace() {
       const response = await fetch(`/api/inventory/categories?level=${level}`, { method: isNew ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name, enabled: form.enabled }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not save category.");
       const saved = { code, name, enabled: form.enabled }; setOriginal(saved); setForm(saved); setIsNew(false);
-      try { setRows(await load(level)); setNotice("Category saved successfully."); } catch { setError("Saved successfully, but the list could not be refreshed. Reload the page to see the latest data."); }
+      try { setRows(await load(level)); setNotice("Category saved successfully.");inventoryNotice("Category saved successfully."); } catch { setError("Saved successfully, but the list could not be refreshed. Reload the page to see the latest data."); }
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save category."); } finally { setBusy(false); }
   }
   async function remove() {
-    if (!original || isNew || busy || !window.confirm(`Delete "${original.name}" (${original.code}) from ${levels[level]}? This cannot be undone.`)) return;
+    if (!original || isNew || busy || !await inventoryConfirm(`Delete "${original.name}" (${original.code}) from ${levels[level]}? This cannot be undone.`)) return;
     setBusy(true); setError("");
     try {
       const response = await fetch(`/api/inventory/categories?level=${level}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: original.code }) });
