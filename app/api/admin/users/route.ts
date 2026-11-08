@@ -27,7 +27,7 @@ export async function GET(req:NextRequest){try{
   }
   const [users,locations,groups]=await Promise.all([
     pool.request().query(`SELECT LTRIM(RTRIM(LOCCODE)) AS locCode,LTRIM(RTRIM(UserId)) AS userId,LTRIM(RTRIM(UserName)) AS userName,LTRIM(RTRIM(ISNULL(LoginNameWeb,''))) AS loginNameWeb,CASE WHEN PasswordWeb LIKE 'scrypt$%$%' THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS hasPassword,Enable AS enabled FROM dbo.Tbl_UserDetails ORDER BY UserName,UserId,LOCCODE`),
-    pool.request().query(`SELECT LTRIM(RTRIM(LocCode)) AS code,LTRIM(RTRIM(LocDes)) AS name FROM dbo.Tbl_LocationMaster ORDER BY LocDes,LocCode`),
+    pool.request().query(`SELECT LTRIM(RTRIM(LocCode)) AS code,LTRIM(RTRIM(LocDes)) AS name FROM dbo.Tbl_LocationMaster WHERE ISNULL(SubLoc,0)=0 AND Enable=1 ORDER BY LocDes,LocCode`),
     pool.request().query(`SELECT LTRIM(RTRIM(GroupId)) AS id,LTRIM(RTRIM(GroupDes)) AS name FROM dbo.Tbl_UserGroups ORDER BY GroupDes,GroupId`)]);
   return NextResponse.json({data:users.recordset,locations:locations.recordset,groups:groups.recordset},{headers:{'Cache-Control':'no-store'}});
 }catch(e){return fail(e)}}
@@ -41,11 +41,11 @@ async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|und
   let picture:Buffer|undefined;try{picture=imageOf(b.picture)}catch(e){return NextResponse.json({error:(e as Error).message},{status:400})}
   tx=new sql.Transaction(await getPool());await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
   const req1=new sql.Request(tx).input('loc',sql.VarChar(10),loc).input('id',sql.VarChar(10),id).input('login',sql.VarChar(50),login);
-  const current=await req1.query(`SELECT LTRIM(RTRIM(LocCode)) AS loc,LTRIM(RTRIM(UserId)) AS id,LTRIM(RTRIM(ISNULL(LoginNameWeb,''))) AS login,PasswordWeb FROM dbo.Tbl_UserDetails WITH (TABLOCKX,HOLDLOCK) WHERE (LTRIM(RTRIM(LocCode))=@loc AND LTRIM(RTRIM(UserId))=@id) OR (@login<>'' AND LOWER(LTRIM(RTRIM(ISNULL(LoginNameWeb,''))))=LOWER(@login))`);
+  const current=await req1.query(`SELECT LTRIM(RTRIM(LocCode)) AS loc,LTRIM(RTRIM(UserId)) AS id,LTRIM(RTRIM(ISNULL(LoginNameWeb,''))) AS login,PasswordWeb FROM dbo.Tbl_UserDetails WITH (TABLOCKX,HOLDLOCK) WHERE LTRIM(RTRIM(UserId))=@id OR (@login<>'' AND LOWER(LTRIM(RTRIM(ISNULL(LoginNameWeb,''))))=LOWER(@login))`);
   const self=current.recordset.filter(x=>String(x.loc).toUpperCase()===loc.toUpperCase()&&String(x.id).toUpperCase()===id.toUpperCase());
   if((creating&&self.length)||(!creating&&self.length!==1)){await tx.rollback();tx=undefined;return NextResponse.json({error:creating?'This location and user ID already exist.':'User not found or not unique.'},{status:409});}
-  if(current.recordset.some(x=>!(String(x.loc).toUpperCase()===loc.toUpperCase()&&String(x.id).toUpperCase()===id.toUpperCase()))){await tx.rollback();tx=undefined;return NextResponse.json({error:'Web username is already in use.'},{status:409});}
-  const valid=await new sql.Request(tx).input('loc',sql.VarChar(10),loc).input('grp',sql.VarChar(10),group).query(`SELECT (SELECT COUNT(*) FROM dbo.Tbl_LocationMaster WITH (HOLDLOCK) WHERE LTRIM(RTRIM(LocCode))=@loc) AS locs,(SELECT COUNT(*) FROM dbo.Tbl_UserGroups WITH (HOLDLOCK) WHERE LTRIM(RTRIM(GroupId))=@grp) AS groups`);
+  if(current.recordset.some(x=>!(String(x.loc).toUpperCase()===loc.toUpperCase()&&String(x.id).toUpperCase()===id.toUpperCase()))){await tx.rollback();tx=undefined;return NextResponse.json({error:'User ID or web username is already in use.'},{status:409});}
+  const valid=await new sql.Request(tx).input('loc',sql.VarChar(10),loc).input('grp',sql.VarChar(10),group).query(`SELECT (SELECT COUNT(*) FROM dbo.Tbl_LocationMaster WITH (HOLDLOCK) WHERE LTRIM(RTRIM(LocCode))=@loc AND ISNULL(SubLoc,0)=0 AND Enable=1) AS locs,(SELECT COUNT(*) FROM dbo.Tbl_UserGroups WITH (HOLDLOCK) WHERE LTRIM(RTRIM(GroupId))=@grp) AS groups`);
   if(valid.recordset[0].locs!==1||valid.recordset[0].groups!==1){await tx.rollback();tx=undefined;return NextResponse.json({error:'Select an existing unique location and user group.'},{status:400});}
   const r=new sql.Request(tx).input('loc',sql.VarChar(10),loc).input('id',sql.VarChar(10),id).input('group',sql.VarChar(10),group).input('name',sql.VarChar(200),name).input('login',sql.VarChar(50),login||' ').input('enable',sql.Bit,Boolean(b.enabled)).input('creator',sql.VarChar(10),String(auth.session!.userId||' ').slice(0,10));
   for(const [key,max] of fields)r.input(key,sql.VarChar(max),clean(b[key])||' ');
@@ -53,6 +53,7 @@ async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|und
   if(password)r.input('pw',sql.VarChar(255),hashPassword(password));if(picture)r.input('picture',sql.VarBinary(sql.MAX),picture);
   if(creating){await r.query(`INSERT INTO dbo.Tbl_UserDetails (LOCCODE,UserId,NIC,LogName,PSW,GroupId,UserName,Rmks,Add1,Add2,Add3,Add4,ContNo,Email,DOB,DOJ,DOL,CreateUser,Picture,Enable,ByPassGroupTable,Password,LoginName,Uploaded,PasswordWeb,LoginNameWeb) VALUES (@loc,@id,@nic,' ',' ',@group,@name,@remarks,@add1,@add2,@add3,@add4,@contact,@email,@dob,@doj,@dol,@creator,${picture?'@picture':'NULL'},@enable,0,' ',' ',0,${password?'@pw':"' '"},@login)`);}
   else {await r.query(`UPDATE dbo.Tbl_UserDetails SET NIC=@nic,GroupId=@group,UserName=@name,Rmks=@remarks,Add1=@add1,Add2=@add2,Add3=@add3,Add4=@add4,ContNo=@contact,Email=@email,DOB=@dob,DOJ=@doj,DOL=@dol,Enable=@enable,LoginNameWeb=@login ${password?',PasswordWeb=@pw':''} ${picture?',Picture=@picture':''} WHERE LTRIM(RTRIM(LOCCODE))=@loc AND LTRIM(RTRIM(UserId))=@id`);}
+  if(creating){await new sql.Request(tx).input('id',sql.Char(10),id).input('loc',sql.Char(10),loc).query(`INSERT dbo.Tbl_UserLocationAccess(UserID,LocationID,LocationDescription,IsDefault) SELECT @id,LocCode,COALESCE(NULLIF(LTRIM(RTRIM(LocDes)),''),LTRIM(RTRIM(LocCode))),1 FROM dbo.Tbl_LocationMaster WHERE LocCode=@loc AND ISNULL(SubLoc,0)=0 AND Enable=1`);}
   await tx.commit();tx=undefined;return NextResponse.json({success:true});
 }catch(e){if(tx)try{await tx.rollback()}catch{}return fail(e)}}
 export async function POST(req:NextRequest){return save(req,true)}

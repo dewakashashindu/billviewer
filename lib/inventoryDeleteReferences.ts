@@ -12,7 +12,7 @@ const itemRefs: readonly [string,string][] = [
   ['Tbl_BillDetails','SubItmId'],
 ];
 const locationRefs: readonly [string,readonly string[]][] = [
-  ['Tbl_RowItems',['LocCode']], ['Tbl_UserDetails',['LocCode']], ['Tbl_TxnNumbers',['LocCode']],
+  ['Tbl_RowItems',['LocCode']], ['Tbl_UserDetails',['LocCode']], ['Tbl_UserLocationAccess',['LocationID']], ['Tbl_TxnNumbers',['LocCode']],
   ['Tbl_BillHeader',['LocCode']], ['Tbl_BillDetails',['LocCode']], ['Tbl_BillPayTxn',['LocCode']],
   ['Tbl_TxnMovement',['LocCode']], ['Tbl_TxnSerial',['LocCode']], ['Tbl_RecipiesSemiFinishedprod',['LocCode']], ['Tbl_POHeader',['LocCode']], ['Tbl_PODetails',['LocCode']],
   ['Tbl_GRNHeader',['LocCode']], ['Tbl_GRNDetails',['LocCode']],

@@ -18,9 +18,11 @@ export async function loadWebAuthorization(session:SessionUser){
   const userId=clean(session.userId);
   if(!userId || userId.length>10)throw new AccessDeniedError();
   const pool=await getPool();
-  const [users,entries]=await Promise.all([
+  const [users,entries,assigned,master]=await Promise.all([
     pool.request().input('id',sql.Char(10),userId).query('SELECT RTRIM(LOCCODE) AS homeLocation, Enable AS enabled FROM dbo.Tbl_UserDetails WHERE UserId=@id'),
-    pool.request().input('id',sql.Char(10),userId).query('SELECT FuncID,Auth,Module,ACCESS FROM dbo.Tbl_UserAuthorizationWeb WHERE UserID=@id')
+    pool.request().input('id',sql.Char(10),userId).query('SELECT FuncID,Auth,Module,ACCESS FROM dbo.Tbl_UserAuthorizationWeb WHERE UserID=@id'),
+    pool.request().input('id',sql.Char(10),userId).query('SELECT RTRIM(LocationID) AS code,IsDefault FROM dbo.Tbl_UserLocationAccess WHERE UserID=@id'),
+    pool.request().query('SELECT RTRIM(LocCode) AS code,RTRIM(MainLoc) AS parent,SubLoc,Enable FROM dbo.Tbl_LocationMaster')
   ]);
   if(users.recordset.length!==1 || !users.recordset[0].enabled)throw new AccessDeniedError();
   const home=clean(users.recordset[0].homeLocation);
@@ -30,7 +32,7 @@ export async function loadWebAuthorization(session:SessionUser){
   for(const row of entries.recordset){
     const module=clean(row.Module);
     if(module==='APF'){decryptAccess(clean(row.FuncID));continue}
-    if(module==='LOC'){const loc=decryptAccess(clean(row.FuncID));if(!loc||loc.length>10)throw new AccessDeniedError();if(row.Auth)locations.add(loc);continue}
+    if(module==='LOC')continue; // Legacy assignments are not authoritative after migration.
     const id=decryptAccess(clean(row.FuncID));
     if(id==='reports'&&module==='Reports'){if(legacyReports!==null)throw new AccessDeniedError();legacyReports=decryptAccess(clean(row.ACCESS));if(!/^[01]{2}$/.test(legacyReports))throw new AccessDeniedError();continue}
     if(module==='Reports')hasIndividualReports=true;
@@ -48,10 +50,12 @@ export async function loadWebAuthorization(session:SessionUser){
       if(legacyReports[1]==='1')permissions.add(`${report.id}:PRINT`);
     }
   }
-  // No assigned locations: fall back only to a non-empty home location.
-  // If neither exists, keep the set empty so location-scoped operations deny access.
-  if(locations.size===0 && home)locations.add(home);
-  return {permissions,locations};
+  const defaults=assigned.recordset.filter(r=>r.IsDefault);
+  if(defaults.length!==1 || clean(defaults[0].code).toUpperCase()!==home.toUpperCase())throw new AccessDeniedError();
+  const mainLocations=new Set<string>();
+  for(const row of assigned.recordset){const id=clean(row.code);const match=master.recordset.filter(m=>clean(m.code).toUpperCase()===id.toUpperCase());if(!id||match.length!==1||!match[0].Enable||match[0].SubLoc)throw new AccessDeniedError();mainLocations.add(clean(match[0].code));locations.add(clean(match[0].code));}
+  for(const row of master.recordset){if(row.Enable&&row.SubLoc&&[...mainLocations].some(m=>m.toUpperCase()===clean(row.parent).toUpperCase()))locations.add(clean(row.code));}
+  return {permissions,locations,mainLocations,defaultLocation:home};
 }
 export async function requireWebPermission(session:SessionUser,key:string){
   if(!WEB_ACCESS_KEYS.has(key))throw new AccessDeniedError();
@@ -61,6 +65,6 @@ export async function requireWebPermission(session:SessionUser,key:string){
 }
 export function requireWebLocation(access:{locations:Set<string>},location:string){
   const loc=clean(location);
-  if(!loc||!access.locations.has(loc))throw new AccessDeniedError();
+  if(!loc||![...access.locations].some(x=>x.toUpperCase()===loc.toUpperCase()))throw new AccessDeniedError();
   return loc;
 }
