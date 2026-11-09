@@ -105,8 +105,8 @@ export default function PaymentSummaryPdfDocument({
                         <Text style={{ width: 80 }}>{pi === 0 ? b.billNo : ""}</Text>
                         <Text style={{ width: 140 }}>{p.desc}</Text>
                         <Text style={{ width: 80, textAlign: "right" }}>{fmt(p.amount)}</Text>
-                        <Text style={{ width: 90, paddingLeft: 8 }}>{pi === 0 ? b.remarks : ""}</Text>
-                        <Text style={{ paddingLeft: 8 }}>{pi === 0 ? b.casher : ""}</Text>
+                        <Text style={{ width: 90, paddingLeft: 8 }}>{p.remarks}</Text>
+                        <Text style={{ paddingLeft: 8 }}>{p.casher}</Text>
                       </View>
                     ))}
                     <View style={styles.btot}>

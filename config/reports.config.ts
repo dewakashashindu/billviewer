@@ -18,6 +18,7 @@ import {
   getCreditPayHistoryAction,
   getHourlySalesAction,
   getBillTypePaymentAction,
+  getPaymentDailyModesAction,
   getCashierCollectionAction,
   getCashierBreakdownAction,
   getMenuIssueAction,
@@ -67,6 +68,8 @@ export interface ReportConfig {
     | "credit-account-detail"
     | "hourly-sales"
     | "billtype"
+    | "payment-types"
+    | "payment-daily"
     | "cashier-collection"
     | "cashier-breakdown"
     | "mii"
@@ -311,16 +314,20 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "payment-billtype": {
     id: "payment-billtype",
     title: "Payment - Bill Type Wise",
-    subtitle: "Collections grouped by bill type (POS 2.4)",
-    render: "billtype",
+    subtitle: "Payment categories: cash, card, credit and voucher (POS 2.4)",
+    render: "payment-types",
     fetchAction: getBillTypePaymentAction,
     columns: [],
+  },
+  "payment-daily-modes": {
+    id: "payment-daily-modes", title: "Sales By Pay Types", subtitle: "Daily payment mode collections (POS Sp_SalesPayment)",
+    render: "payment-daily", fetchAction: getPaymentDailyModesAction, columns: [],
   },
   // 3.1 — Cashier Collection - Cashier Wise Sales
   "cashier-collection": {
     id: "cashier-collection",
     title: "Cashier Wise Sales",
-    subtitle: "Per-cashier bill collections, ordered by date (POS 3.1)",
+    subtitle: "Daily bill collections grouped by location and cashier (POS 3.1)",
     render: "cashier-collection",
     fetchAction: getCashierCollectionAction,
     columns: [],

@@ -548,25 +548,18 @@ function kotCharts(d: KotData): ChartModel[] {
   const locs: Array<{ name: string; value: number }> = [];
   let hasTime = false;
   for (const l of d.locations ?? []) {
-    locs.push({ name: l.locName || l.locCode, value: l.total });
-    for (const s of l.servers ?? [])
-      for (const t of s.types ?? []) {
-        bump(typM, t.orderTyp, 0, t.count, 1);
-        for (const r of t.rows ?? []) {
-          bump(itemM, r.item || "Unknown", 0, r.qty, 1);
-          const hm = String(r.issueTime || "").match(/^(\d{1,2}):/);
-          if (hm) {
-            hasTime = true;
-            bump(hourM, `${String(Number(hm[1])).padStart(2, "0")}:00`, 0, 1, 1);
-          }
-        }
-      }
+    let count=0;
+    for(const day of l.days ?? []) for(const bill of day.bills ?? []) for(const r of bill.rows ?? []) {
+      count++; bump(typM,r.type || "Unknown",0,1,1);bump(itemM,r.item || "Unknown",0,r.qty,1);
+      const hm=String(r.issueTime||"").match(/^(\d{1,2}):/);if(hm){hasTime=true;bump(hourM,`${String(Number(hm[1])).padStart(2,"0")}:00`,0,1,1)}
+    }
+    locs.push({name:l.locName||l.locCode,value:count});
   }
   const hourPts = Array.from(hourM.entries())
     .sort((x, y) => x[0].localeCompare(y[0]))
     .map(([label, values]) => ({ label, values }));
   return [
-    ...only(hbars("kot-typ", "KOT vs BOT Issues", toPoints(typM, true), "number")),
+    ...only(hbars("kot-typ", "Issues by Type", toPoints(typM, true), "number")),
     ...(hasTime ? only({ id: "kot-hour", title: "KOT/BOT Issues by Hour", kind: "bars", series: ["Issues"], points: hourPts, unit: "number" }) : []),
     ...only(hbars("kot-item", "Top Issued Items (qty)", toPoints(itemM, false).slice(0, 10), "number")),
     ...only(locHbars("kot-loc", "Location-wise Issues", locs, "number")),

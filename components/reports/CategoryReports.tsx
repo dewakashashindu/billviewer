@@ -44,6 +44,7 @@ export interface CatSummaryData {
 
 export interface CatDetRow {
   billNo: string;
+  itemCode: string;
   item: string;
   saleTotal: number;
   orderMode: string;
@@ -152,7 +153,7 @@ export function filterCategoryDetail(d: CatDetailData, q0: string): CatDetailDat
           const subs = (c.subs ?? [])
             .map((s) => {
               const rows = (s.rows ?? []).filter((r) =>
-                `${categoryLabel(c.level1,c.level1Des)} ${subcategoryLabels(s)} ${r.billNo} ${r.item} ${r.orderMode} ${r.steward}`
+                `${categoryLabel(c.level1,c.level1Des)} ${subcategoryLabels(s)} ${r.billNo} ${r.itemCode} ${r.item} ${r.orderMode} ${r.steward}`
                   .toLowerCase()
                   .includes(q)
               );
@@ -280,33 +281,13 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
                 {categoryLabel(c.level1,c.level1Des)}
               </div>
 
-              {/* item rows — level2/level3 + item name + total */}
-              {c.subs.map((sub, si) =>
-                sub.items.map((it, ii) => (
-                  <div
-                    key={`${si}-${ii}`}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "200px 1fr 150px",
-                      gap: 10,
-                      padding: "4px 14px",
-                      borderBottom: "1px solid #FCF7F3",
-                      fontSize: 11.5,
-                      fontFamily: "Inter, sans-serif",
-                      color: "#45301D",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ color: "#907860", fontSize: 10.5, overflowWrap: "anywhere" }}>
-                      {subcategoryLabels(sub)}
-                    </span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.name}>
-                      {it.name}
-                    </span>
-                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtAmt(it.total)}</span>
-                  </div>
-                ))
-              )}
+              {/* POS summary has one row per category-description combination, not per menu item. */}
+              {c.subs.map((sub, si) => (
+                <div key={si} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"5px 14px 5px 28px",fontSize:11.5,color:"#45301D"}}>
+                  <span style={{overflowWrap:"anywhere"}}>{subcategoryLabels(sub)}</span>
+                  <span style={{whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{fmtAmt(sub.total)}</span>
+                </div>
+              ))}
 
               {/* category total — print eke wage bold + top border */}
               <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 14px", borderTop: "1px solid #907860", fontWeight: 800, fontSize: 12, color: "#684830", fontFamily: "Inter, sans-serif" }}>
@@ -343,9 +324,10 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
           <div style={{overflowX:"auto", maxWidth:"100%"}}><table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", marginTop: 8 }}>
             <thead>
               <tr style={thRow}>
-                <th style={{ ...cell, textAlign: "left", width: 90 }}>BillNO</th>
-                <th style={{ ...cell, textAlign: "left" }}>MenuitemNM</th>
-                <th style={{ ...cell, textAlign: "right", width: 110 }}>SaleTotal</th>
+                <th style={{ ...cell, textAlign: "left", width: 75 }}>SubItm</th>
+                <th style={{ ...cell, textAlign: "left" }}>MenuItmDes</th>
+                <th style={{ ...cell, textAlign: "right", width: 110 }}>Item Total</th>
+                <th style={{ ...cell, textAlign: "left", width: 90 }}>BillNo</th>
                 <th style={{ ...cell, textAlign: "left", width: 90 }}>OrderMode</th>
                 <th style={{ ...cell, textAlign: "left", width: 150 }}>TxnTime</th>
                 <th style={{ ...cell, textAlign: "left", width: 90 }}>Steward</th>
@@ -355,7 +337,7 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
               {loc.cats.map((c) => (
                 <Fragment key={c.level1}>
                   <tr>
-                    <td colSpan={6} style={{padding:"8px 0 0"}}><div style={catBar}>
+                    <td colSpan={7} style={{padding:"8px 0 0"}}><div style={catBar}>
                       <span style={{overflowWrap:"anywhere"}}>{categoryLabel(c.level1,c.level1Des)}</span>
                       <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace:"nowrap", marginLeft:"auto" }}>{fmtAmt(c.total)}</span>
                     </div></td>
@@ -363,16 +345,17 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
                   {c.subs.map((s, si) => (
                     <Fragment key={`${c.level1}-${si}`}>
                       <tr>
-                        <td colSpan={6} style={{padding:0}}><div style={subBar}>
+                        <td colSpan={7} style={{padding:0}}><div style={subBar}>
                           <span style={{overflowWrap:"anywhere"}}>{subcategoryLabels(s) || "—"}</span>
                           <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace:"nowrap", marginLeft:"auto" }}>Sub Total {fmtAmt(s.total)}</span>
                         </div></td>
                       </tr>
                       {s.rows.map((r, ri) => (
                         <tr key={`${r.billNo}-${ri}`} style={{ background: ri % 2 === 1 ? "#FCF7F3" : "#fff" }}>
-                          <td style={cell}>{r.billNo}</td>
+                          <td style={cell}>{r.itemCode}</td>
                           <td style={cell}>{r.item}</td>
                           <td style={num}>{fmtAmt(r.saleTotal)}</td>
+                          <td style={cell}>{r.billNo}</td>
                           <td style={cell}>{r.orderMode}</td>
                           <td style={cell}>{r.txnDate} {r.txnTime}</td>
                           <td style={cell}>{r.steward}</td>
@@ -384,7 +367,7 @@ export function CategoryDetailReport({ report }: { report: CatDetailData }) {
                     <td colSpan={2} style={{ ...cell, fontWeight: 800, color: NAVY, background: "#F0E8D8" }}>
                       Main Category Total
                     </td>
-                    <td colSpan={4} style={{ ...num, fontWeight: 800, color: NAVY, background: "#F0E8D8" }}>
+                    <td colSpan={5} style={{ ...num, fontWeight: 800, color: NAVY, background: "#F0E8D8" }}>
                       {fmtAmt(c.total)}
                     </td>
                   </tr>

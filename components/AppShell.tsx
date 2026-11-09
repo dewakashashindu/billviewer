@@ -183,6 +183,7 @@ const NAV: NavItem[] = [
         children: [
           { key: "r-pay-summary", label: "Payment Summery", reportId: "payment-summary" },
           { key: "r-pay-mode", label: "Pay Mode Wise", reportId: "payment-summary-wise" },
+          { key: "r-pay-daily", label: "Sales By Pay Types", reportId: "payment-daily-modes" },
           { key: "r-pay-grid", label: "Bill Pay Mode Wise Grid", reportId: "payment-bill-paymode-grid" },
           { key: "r-pay-billtype", label: "Bill Type Wise", reportId: "payment-billtype" },
         ],

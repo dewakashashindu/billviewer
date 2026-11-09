@@ -14,6 +14,8 @@ import { IconPin } from "./ReportIcons";
 export interface PayPayment {
   desc: string;
   amount: number;
+  remarks: string;
+  casher: string;
 }
 export interface PayBill {
   billNo: string;
@@ -72,7 +74,7 @@ export function filterPayments(d: PaymentSummaryData, q0: string): PaymentSummar
           const bills = (g.bills ?? [])
             .map((b) => {
               const payments = (b.payments ?? []).filter((p) =>
-                `${b.billNo} ${p.desc} ${b.casher} ${b.remarks}`.toLowerCase().includes(q)
+                `${b.billNo} ${p.desc} ${p.casher} ${p.remarks}`.toLowerCase().includes(q)
               );
               return {
                 ...b,
@@ -178,16 +180,8 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                           )}
                           <td style={cell}>{p.desc}</td>
                           <td style={num}>{fmtAmt(p.amount)}</td>
-                          {pi === 0 && (
-                            <td rowSpan={b.payments.length} style={cell}>
-                              {b.remarks}
-                            </td>
-                          )}
-                          {pi === 0 && (
-                            <td rowSpan={b.payments.length} style={cell}>
-                              {b.casher}
-                            </td>
-                          )}
+                          <td style={cell}>{p.remarks}</td>
+                          <td style={cell}>{p.casher}</td>
                         </tr>
                       ))}
                       <tr key={`${b.billNo}-t`} style={{ background: "#eee3d4", borderTop:"1px solid #dccdbb", borderBottom:"2px solid #d5c1a8" }}>

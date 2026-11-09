@@ -42,6 +42,7 @@ import PaymentSummaryReport, {
   filterPayments,
   type PaymentSummaryData,
 } from "@/components/reports/PaymentReports";
+import {PaymentTypes,DailyPayments,PaymentTotalsPdf,filterTypes,filterDaily,type TypesData,type DailyData} from "@/components/reports/PaymentPosTotals";
 import PaymentSummaryPdfDocument from "@/components/reports/PaymentPdfDocument";
 import BillPayModeGridReport, {
   filterPayGrid,
@@ -1436,8 +1437,7 @@ export default function DynamicReportPage() {
             <option value="bay4">Bay 4</option>
             <option value="bay5">Bay 5</option>
             <option value="bay6">Bay 6</option>
-            <option value="bay7">Bay 7</option>
-            <option value="head">Head</option>
+            <option value="head">Heap</option>
           </select>
         </div>
         <div id="report-zoom-area" style={{ flex: 1 }}>
@@ -1745,6 +1745,14 @@ export default function DynamicReportPage() {
   }
 
   // ── 2.4 Payment - Bill Type Wise ──
+  if (config.render === "payment-types" || config.render === "payment-daily") {
+    const types=config.render === "payment-types" && objectData ? filterTypes(objectData as unknown as TypesData,search) : undefined;
+    const daily=config.render === "payment-daily" && objectData ? filterDaily(objectData as unknown as DailyData,search) : undefined;
+    const data=types || daily; const hasData=!loading && !error && !!data?.locationGroups.length;
+    const pdf=hasData ? <PaymentTotalsPdf title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} types={types} daily={daily}/> : undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search payment, date, location..." pdfDocument={pdf} pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}/>{filterBarNode}<div id="report-zoom-area">{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:types?<PaymentTypes data={types}/>:daily?<DailyPayments data={daily}/>:null}</div></>;
+  }
+
   if (config.render === "billtype") {
     const btData = objectData ? (objectData as unknown as BillTypeData) : null;
     const filteredBT = btData ? filterBillType(btData, search) : null;

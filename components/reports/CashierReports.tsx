@@ -52,23 +52,30 @@ export function ccToRows(d: CcData): Array<{ date?: string; billNo?: string; des
       for (const b of c.bills ?? []) out.push({ date: b.dateTime, billNo: b.billNo, desc: c.name ? `${c.code} — ${c.name}` : c.code, value: b.value, loc: l.locName });
   return out;
 }
+// Data stays bill-level. Group on the SQL-formatted transaction date, never on
+// the cashier or time, so each location/date/cashier has its own subtotal.
+export function ccDateGroups(l: CcLocation): Array<{date:string;cashiers:CcCashier[];total:number}> {
+  const dates=new Map<string,{date:string;cashiers:Map<string,CcCashier>;total:number}>();
+  for(const c of l.cashiers ?? []) for(const b of c.bills ?? []) {
+    const date=b.dateTime.trim().split(/\s+/)[0] || 'Unknown date';
+    let d=dates.get(date);if(!d){d={date,cashiers:new Map(),total:0};dates.set(date,d)}
+    let cashier=d.cashiers.get(c.code);if(!cashier){cashier={code:c.code,name:c.name,bills:[],total:0};d.cashiers.set(c.code,cashier)}
+    cashier.bills.push(b);cashier.total=r2(cashier.total+b.value);d.total=r2(d.total+b.value);
+  }
+  const key=(d:string)=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);return m?`${m[3]}-${m[2]}-${m[1]}`:'9999-'+d};
+  return Array.from(dates.values()).sort((a,b)=>key(a.date).localeCompare(key(b.date))).map(d=>({date:d.date,total:d.total,cashiers:Array.from(d.cashiers.values()).sort((a,b)=>a.code.localeCompare(b.code))}));
+}
 export function filterCc(d: CcData, q0: string): CcData {
-  const q = q0.trim().toLowerCase();
-  if (!q) return d;
-  const locationGroups = (d.locationGroups ?? [])
-    .map((l) => ({
-      ...l,
-      cashiers: (l.cashiers ?? [])
-        .map((c) => ({
-          ...c,
-          bills: `${c.code} ${c.name ?? ""} ${l.locCode} ${l.locName}`.toLowerCase().includes(q)
-            ? c.bills
-            : (c.bills ?? []).filter((b) => `${b.billNo} ${b.dateTime}`.toLowerCase().includes(q)),
-        }))
-        .filter((c) => (c.bills ?? []).length > 0),
-    }))
-    .filter((l) => l.cashiers.length > 0);
-  return { ...d, locationGroups };
+  const q=q0.trim().toLowerCase();if(!q)return d;
+  const locationGroups=(d.locationGroups??[]).map(l=>{
+    const cashiers=(l.cashiers??[]).map(c=>{
+      const all=`${c.code} ${c.name??''} ${l.locCode} ${l.locName}`.toLowerCase().includes(q);
+      const bills=all?c.bills:(c.bills??[]).filter(b=>`${b.billNo} ${b.dateTime}`.toLowerCase().includes(q));
+      return {...c,bills,total:r2(bills.reduce((sum,b)=>sum+b.value,0))};
+    }).filter(c=>c.bills.length>0);
+    return {...l,cashiers,locTotal:r2(cashiers.reduce((sum,c)=>sum+c.total,0))};
+  }).filter(l=>l.cashiers.length>0);
+  return {...d,locationGroups,grandTotal:r2(locationGroups.reduce((sum,l)=>sum+l.locTotal,0))};
 }
 
 // ── 3.2 Payment Break Down ──
@@ -231,7 +238,10 @@ export function CashierCollectionReport({ report }: { report: CcData }) {
             </span>
             <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(l.locTotal)}</span>
           </div>
-          {l.cashiers.map((c) => (
+          {ccDateGroups(l).map((d) => (
+            <div key={d.date}>
+              <div style={{...locBar,background:"#e7dac7",marginTop:12}}><span>DATE — {d.date}</span><span>Daily Total: {fmtAmt(d.total)}</span></div>
+              {d.cashiers.map((c) => (
             <div key={c.code}>
               <div style={band}>
                 <span>CASHIER — {c.code}{c.name ? ` — ${c.name}` : ""}</span>
@@ -260,6 +270,9 @@ export function CashierCollectionReport({ report }: { report: CcData }) {
                   </tr>
                 </tbody>
               </table>
+            </div>
+              ))}
+              <div style={{...band,justifyContent:"space-between",fontWeight:800}}><span>Daily Total — {d.date}</span><span>{fmtAmt(d.total)}</span></div>
             </div>
           ))}
         </div>
@@ -410,7 +423,10 @@ export function CashierCollectionPdfDocument({ title, printDate, printTime, from
         {data.locationGroups.map((l) => (
           <View key={l.locCode}>
             <Text style={pStyles.location}>{l.locCode}   {l.locName}</Text>
-            {l.cashiers.map((c) => (
+            {ccDateGroups(l).map((d) => (
+              <View key={d.date}>
+                <Text style={pStyles.band}>DATE - {d.date}</Text>
+                {d.cashiers.map((c) => (
               <View key={c.code}>
                 <Text style={pStyles.band}>CASHIER - {c.code}{c.name ? ` - ${c.name}` : ""}</Text>
                 <View style={pStyles.row}>
@@ -429,6 +445,9 @@ export function CashierCollectionPdfDocument({ title, printDate, printTime, from
                   <Text style={[pStyles.td, { width: CW.bill }, pStyles.bold]}>Cashier Collection</Text>
                   <Text style={[pStyles.td, { width: CW.value }, pStyles.right, pStyles.bold]}>{fmtAmt(c.total)}</Text>
                 </View>
+              </View>
+                ))}
+                <View style={pStyles.totalRow}><Text style={[pStyles.td,{width:CW.bill},pStyles.bold]}>Daily Total</Text><Text style={[pStyles.td,{width:CW.value},pStyles.right,pStyles.bold]}>{fmtAmt(d.total)}</Text></View>
               </View>
             ))}
           </View>

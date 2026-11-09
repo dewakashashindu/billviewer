@@ -12,8 +12,8 @@ import { sendSms, isSmsConfigured } from "@/lib/sms";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 const HOUR_MS = 60 * 60_000;
-const IP_LIMIT = 3; // per IP, per hour
-const USER_LIMIT = 2; // per login name, per hour
+const IP_LIMIT = 12; // per IP, per hour
+const USER_LIMIT = 6; // per login name, per hour
 
 /** The ONE response shape — identical for every outcome. */
 const uniformResponse = () =>

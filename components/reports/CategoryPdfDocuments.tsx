@@ -117,19 +117,9 @@ export function CategorySummaryPdfDocument({
                   <Text>{fmt(c.total)}</Text>
                 </View>
                 {c.subs.map((s, si) => (
-                  <View key={si}>
-                    {(s.level2 || s.level3) && (
-                      <View style={styles.sub}>
-                        <Text>{subcategoryLabels(s)}</Text>
-                        <Text>{fmt(s.total)}</Text>
-                      </View>
-                    )}
-                    {s.items.map((it, ii) => (
-                      <View style={styles.row} key={ii}>
-                        <Text>{it.name}</Text>
-                        <Text>{fmt(it.total)}</Text>
-                      </View>
-                    ))}
+                  <View style={styles.sub} key={si}>
+                    <Text>{subcategoryLabels(s)}</Text>
+                    <Text>{fmt(s.total)}</Text>
                   </View>
                 ))}
                 <View style={styles.tot}>
@@ -178,9 +168,10 @@ export function CategoryDetailPdfDocument({
               <Text>{fmt(loc.locTotal)}</Text>
             </View>
             <View style={styles.dHead}>
-              <Text style={{ width: 70 }}>BillNO</Text>
-              <Text style={{ width: 150 }}>MenuitemNM</Text>
-              <Text style={{ width: 70, textAlign: "right" }}>SaleTotal</Text>
+              <Text style={{ width: 50 }}>SubItm</Text>
+              <Text style={{ width: 120 }}>MenuItmDes</Text>
+              <Text style={{ width: 70, textAlign: "right" }}>Item Total</Text>
+              <Text style={{ width: 60, paddingLeft: 4 }}>BillNo</Text>
               <Text style={{ width: 70, paddingLeft: 8 }}>OrderMode</Text>
               <Text style={{ width: 120, paddingLeft: 8 }}>TxnTime</Text>
               <Text style={{ paddingLeft: 8 }}>Steward</Text>
@@ -199,9 +190,10 @@ export function CategoryDetailPdfDocument({
                     </View>
                     {s.rows.map((r, ri) => (
                       <View style={styles.dRow} key={ri}>
-                        <Text style={{ width: 70 }}>{r.billNo}</Text>
-                        <Text style={{ width: 150 }}>{r.item}</Text>
+                        <Text style={{ width: 50 }}>{r.itemCode}</Text>
+                        <Text style={{ width: 120 }}>{r.item}</Text>
                         <Text style={{ width: 70, textAlign: "right" }}>{fmt(r.saleTotal)}</Text>
+                        <Text style={{ width: 60, paddingLeft: 4 }}>{r.billNo}</Text>
                         <Text style={{ width: 70, paddingLeft: 8 }}>{r.orderMode}</Text>
                         <Text style={{ width: 120, paddingLeft: 8 }}>{r.txnDate} {r.txnTime}</Text>
                         <Text style={{ paddingLeft: 8 }}>{r.steward}</Text>

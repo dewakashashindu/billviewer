@@ -36,4 +36,5 @@ export const REPORT_ACCESS_SCREENS = [
   {id: "report-cashier-breakdown-grid", name: "Payment Break Down \u2013 Grid", actions: ['VIEW','PRINT'] as const},
   {id: "report-kot-bot", name: "KOT/BOT Tracing", actions: ['VIEW','PRINT'] as const},
   {id: "report-performance-report", name: "Performance Report", actions: ['VIEW','PRINT'] as const},
+  {id: "report-payment-daily-modes", name: "Sales By Pay Types", actions: ['VIEW','PRINT'] as const},
 ] as const;
