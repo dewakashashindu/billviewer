@@ -1,4 +1,5 @@
 "use client";
+import "@/components/reports/report-screen-font.css";
 import {useFeedbackState} from "@/components/FeedbackPopup";
 import {displayMessage} from "@/lib/displayMessage";
 import {TableStewardReport,TableStewardPdf,filterTableSteward,type TableStewardData} from "@/components/reports/TableStewardReport";

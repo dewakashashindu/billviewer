@@ -44,6 +44,7 @@ export default function DateRangeModal({
   const now = new Date();
   const [from, setFrom] = useState(iso(new Date(now.getFullYear(), 0, 1)));
   const [to, setTo] = useState(iso(now));
+  const [clickedPreset, setClickedPreset] = useState<string | null>(null);
   const [err, setErr] = useFeedbackState<string | null>(null,'error');
   const [loc, setLoc] = useState(""); // "" = All Locations
   const [extraSel, setExtraSel] = useState<{ param: string; value: string }>({
@@ -139,6 +140,13 @@ export default function DateRangeModal({
     },
   ];
   const presets = isPerf ? allPresets.slice(0, 2) : allPresets;
+  const presetMatches = (p: {label:string;get:()=>[string,string]}) => {
+    const [f,t] = p.get();
+    return isPerf ? f === from : f === from && t === to;
+  };
+  const activePreset = clickedPreset && presets.some(p => p.label === clickedPreset && presetMatches(p))
+    ? clickedPreset : presets.find(presetMatches)?.label ?? null;
+
 
   const apply = () => {
     if (isPerf) {
@@ -285,12 +293,13 @@ export default function DateRangeModal({
             >
               {presets.map((p) => {
                 const [pf, pt] = p.get();
-                const active = isPerf ? pf === from : pf === from && pt === to;
+                const active = p.label === activePreset;
                 return (
                   <button
                     key={p.label}
                     type="button"
                     onClick={() => {
+                      setClickedPreset(p.label);
                       setFrom(pf);
                       setTo(isPerf ? pf : pt);
                       setErr(null);
@@ -419,6 +428,7 @@ export default function DateRangeModal({
                   type="date"
                   value={from}
                   onChange={(e) => {
+                    setClickedPreset(null);
                     setFrom(e.target.value);
                     setTo(e.target.value);
                     setErr(null);
@@ -453,6 +463,7 @@ export default function DateRangeModal({
                     type="date"
                     value={from}
                     onChange={(e) => {
+                      setClickedPreset(null);
                       setFrom(e.target.value);
                       setErr(null);
                     }}
@@ -484,6 +495,7 @@ export default function DateRangeModal({
                     type="date"
                     value={to}
                     onChange={(e) => {
+                      setClickedPreset(null);
                       setTo(e.target.value);
                       setErr(null);
                     }}

@@ -1,0 +1,7 @@
+/* Screen report content only. Keep toolbar, filters, charts and PDFs unchanged. */
+#report-zoom-area {
+  font-size: 11.5px;
+}
+#report-zoom-area :is(div, span, p, table, th, td, strong, b, h1, h2, h3, h4, label):not(.report-chart-view):not(.report-chart-view *) {
+  font-size: 11.5px !important;
+}

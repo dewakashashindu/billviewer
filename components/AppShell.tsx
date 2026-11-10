@@ -293,11 +293,16 @@ const NAV: NavItem[] = [
           { key: "r-cred-ccs", label: "Current Credit Summery", reportId: "credit-summary" },
           { key: "r-cred-history", label: "Credit History", reportId: "credit-history" },
           { key: "r-cred-pay", label: "Payment History", reportId: "credit-pay-history" },
-          { key: "r-cred-payhistory", label: "Payment History", reportId: "credit-pay-history" },
           { key: "r-cred-account", label: "Account Detail", reportId: "credit-account-detail" },
         ],
       },
     ],
+  },
+  {
+    key: "billing-control",
+    label: "Billing Control",
+    icon: <IChart />,
+    children: [{ key: "billing-actions", label: "Billing Control", children: [{ key: "void-approval", label: "Void Approval", path: "/billing-control/void-approval" }] }],
   },
   {
     key: "inventory",
@@ -778,7 +783,7 @@ export default function AppShell({
   const pathPermissions:Record<string,string>={
     '/inventory/locations':'locations:VIEW','/inventory/categories':'categories:VIEW','/inventory/items':'items:VIEW','/inventory/units':'units:VIEW','/inventory/suppliers':'suppliers:VIEW',
     '/inventory/po':'po:VIEW','/inventory/grn':'grn:VIEW','/inventory/srn':'srn:VIEW','/inventory/damage':'damage:VIEW','/inventory/transfer-requisition':'trq:VIEW','/inventory/transfer-note':'tn:VIEW','/inventory/transfer-return':'tr:VIEW','/inventory/issue-requisition':'irq:VIEW','/inventory/issue-note':'inn:VIEW','/inventory/stock-reconciliation':'recon:VIEW',
-    '/settings/user-groups':'groups:VIEW','/user-creation':'users:VIEW','/settings/access-profiles':'profiles:VIEW','/settings/assign-profiles':'assign:VIEW','/table-qr':'tableqr:VIEW'};
+    '/billing-control/void-approval':'void-approval:VIEW','/settings/user-groups':'groups:VIEW','/user-creation':'users:VIEW','/settings/access-profiles':'profiles:VIEW','/settings/assign-profiles':'assign:VIEW','/table-qr':'tableqr:VIEW'};
   const visibleNav = NAV.filter(item => (item.key !== 'dashboard' || canViewDashboard) && (!item.adminOnly || Boolean(userInfo?.isAdmin)) && (!item.path || !pathPermissions[item.path] || webPermissions.includes(pathPermissions[item.path])))
     .map(item=>!item.children?item:{...item,children:item.children.map(cat=>({...cat,children:cat.children.filter(leaf=>leaf.reportId?reportPermissions.includes(`report-${leaf.reportId}:VIEW`):leaf.path&&pathPermissions[leaf.path]?webPermissions.includes(pathPermissions[leaf.path]):true)})).filter(cat=>cat.children.length>0)})
     .filter(item=>!item.children || item.children.length>0);

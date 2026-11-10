@@ -175,6 +175,7 @@ export default function ReportToolbar({
   const params = useParams<{reportId:string}>();
   const pdfDocument = reportPermissions.includes(`report-${params?.reportId}:PRINT`) ? suppliedPdfDocument : undefined;
   const [zoom, setZoom] = useState(100);
+  const [clickedChip, setClickedChip] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareMsg, setShareMsg] = useFeedbackState<string | null>(null,'status');
   const [pdfPrep, setPdfPrep] = useState<{
@@ -446,6 +447,14 @@ export default function ReportToolbar({
     },
   ];
 
+  const ranges = singleDate ? QUICK_RANGES.slice(0, 2) : QUICK_RANGES;
+  const rangeMatches = (r: QuickRange) => {
+    const [f, t] = r.get();
+    return singleDate ? f === from : f === from && t === to;
+  };
+  const activeLabel = clickedChip && ranges.some(r => r.label === clickedChip && rangeMatches(r))
+    ? clickedChip : ranges.find(rangeMatches)?.label ?? null;
+
   return (
     <div
       style={{
@@ -617,6 +626,7 @@ export default function ReportToolbar({
               type="date"
               value={from}
               onChange={(e) => {
+                setClickedChip(null);
                 if (e.target.value) onRangeChange(e.target.value, e.target.value);
               }}
               style={{ ...dateInput, border: "none", padding: 0, width: 122 }}
@@ -640,14 +650,14 @@ export default function ReportToolbar({
             <input
               type="date"
               value={from}
-              onChange={(e) => onRangeChange(e.target.value, to)}
+              onChange={(e) => { setClickedChip(null); onRangeChange(e.target.value, to); }}
               style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
             />
             <span style={{ color: "#C8B8A8", fontSize: 11 }}>to</span>
             <input
               type="date"
               value={to}
-              onChange={(e) => onRangeChange(from, e.target.value)}
+              onChange={(e) => { setClickedChip(null); onRangeChange(from, e.target.value); }}
               style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
             />
           </div>
@@ -900,13 +910,13 @@ export default function ReportToolbar({
           flexWrap: "wrap",
         }}
       >
-        {(singleDate ? QUICK_RANGES.slice(0, 2) : QUICK_RANGES).map((r) => {
+        {ranges.map((r) => {
           const [f, t] = r.get();
-          const active = singleDate ? f === from : f === from && t === to;
+          const active = r.label === activeLabel;
           return (
             <button
               key={r.label}
-              onClick={() => onRangeChange(f, singleDate ? f : t)}
+              onClick={() => { setClickedChip(r.label); onRangeChange(f, singleDate ? f : t); }}
               style={{
                 border: "1px solid",
                 borderColor: active ? "transparent" : "#E4D6BF",

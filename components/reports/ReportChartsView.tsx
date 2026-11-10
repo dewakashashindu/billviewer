@@ -160,12 +160,12 @@ function HBarsChart({ chart }: { chart: ChartModel }) {
 export default function ReportChartsView({ charts, title }: { charts: ChartModel[]; title: string }) {
   if (charts.length === 0)
     return (
-      <p style={{ padding: 40, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
+      <p className="report-chart-view" style={{ padding: 40, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         No chart data for this report yet.
       </p>
     );
   return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="report-chart-view" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
       <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#6B543E", fontFamily: "Inter, sans-serif" }}>
         {title} — charts from this report's data
       </p>
