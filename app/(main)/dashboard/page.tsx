@@ -14,6 +14,7 @@ import {
 
 // ── NEW: dashboard tabs (Live | Performance Analytics | Kitchen) ──
 import DashboardTabs from "@/components/dashboard/DashboardTabs";
+import {PerformanceCharts, UnclosedSummary} from "@/components/dashboard/PerformanceExtras";
 
 function shiftIsoDays(baseIso: string, deltaDays: number): string {
   const m = baseIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -660,6 +661,7 @@ export default function DashboardPage() {
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [famMode, setFamMode] = useState<"amt" | "qty">("amt");
+  const [unclosedOpen, setUnclosedOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -768,6 +770,12 @@ export default function DashboardPage() {
       return true;
     });
   }, [locSnapshots, normFrom, normTo]);
+
+  const sourceRangeSnapshots = useMemo(() => snapshots.filter(s =>
+    (!selectedLoc || selectedLoc === "ALL_LOCS" || s.locCode.toUpperCase() === selectedLoc.toUpperCase()) &&
+    (!normFrom || s.dateIso >= normFrom) && (!normTo || s.dateIso <= normTo)
+  ).sort((a,b)=>a.dateIso.localeCompare(b.dateIso) || a.locName.localeCompare(b.locName)), [snapshots, selectedLoc, normFrom, normTo]);
+  useEffect(() => { setUnclosedOpen(false); }, [selectedLoc,normFrom,normTo]);
 
   /* Key that re-triggers smooth stretch/sweep/draw animations when filters load or change */
   const animKey = `${selectedLoc}|${normFrom}|${normTo}|${rangeSnapshots.length}`;
@@ -1510,6 +1518,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          <PerformanceCharts rows={sourceRangeSnapshots} />
+
           {/* ROW 3 (#1 & #2): Daily Bills & Guest Trend + Local vs Foreign Guest Split */}
           <div className="perf-row-2-1">
             {/* Added Chart #1: Daily Bills & Guest (Pax) Trend */}
@@ -2046,8 +2056,7 @@ export default function DashboardPage() {
                     {activeData.billCount} Closed Bills
                   </div>
                   <div style={st.opsSub}>
-                    Unclosed: {activeData.unclosedCount} (
-                    {fmtRs(activeData.unclosedAmt)}) · Avg/Day:{" "}
+                    <button type="button" onClick={()=>setUnclosedOpen(true)} style={{background:'none',border:0,padding:0,color:'#684830',font:'inherit',fontWeight:700,textDecoration:'underline',cursor:'pointer'}} aria-label="View unclosed bill summary">Unclosed: {activeData.unclosedCount} ({fmtRs(activeData.unclosedAmt)})</button> · Avg/Day:{" "}
                     {fmtRs(
                       activeData.salesVolume /
                         Math.max(1, rangeSnapshots.length)
@@ -2057,6 +2066,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+          <UnclosedSummary open={unclosedOpen} onClose={()=>setUnclosedOpen(false)} rows={sourceRangeSnapshots} count={activeData.unclosedCount} amount={activeData.unclosedAmt} location={activeLocObj?.locName || (selectedLoc === 'ALL_LOCS' ? 'All Locations' : selectedLoc)} from={normFrom} to={normTo} />
         </>
       )}
       </DashboardTabs>

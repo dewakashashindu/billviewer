@@ -5,7 +5,7 @@ import {useFeedbackState} from '@/components/FeedbackPopup';
 type Value=string|number|boolean|null;
 type Row=Record<string,Value>&{LocCode:string;TableNo:string;VoidApproved:boolean};
 type Location={code:string;name:string};
-const cols=[['StewId','Steward ID'],['ItemCode','Item Code'],['ItemDes','Item Description'],['Qty','Qty'],['SalesPrice','Sales Price'],['KOTBOT','KOT/BOT'],['PrintedQty','Printed Qty'],['OrderMode','Order Mode'],['ItmCost','Item Cost'],['MgrId','Manager ID'],['CusType','Customer Type'],['CusId','Customer ID'],['CusName','Customer Name'],['NOPax','No. of Pax'],['TxnDate','Transaction Date'],['TxnTime','Transaction Time'],['VOIDREMARKS','Void Remarks'],['CASHERID','Cashier ID']] as const;
+const cols=[['StewardName','Steward'],['ItemDes','Item Description'],['Qty','Qty'],['SalesPrice','Sales Price'],['OrderMode','Order Mode'],['TxnDate','Transaction Date'],['TxnTime','Transaction Time'],['VOIDREMARKS','Void Remarks'],['CashierName','Cashier']] as const;
 const field={padding:'9px 10px',borderBottom:'1px solid #eee2d5',whiteSpace:'nowrap' as const};
 const input={padding:'9px 12px',border:'1px solid #dbcbb7',borderRadius:8,background:'#fff',color:'#45301d'};
 function show(v:Value){if(v===null||v===undefined||v==='')return '—';if(typeof v==='number')return v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});return String(v)}

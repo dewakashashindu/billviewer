@@ -25,10 +25,12 @@ export async function GET(req:NextRequest){try{
  const result=await pool.request().input('loc',sql.Char(10),loc).query(`SELECT
   ${textColumns.map(c=>`LTRIM(RTRIM([${c}])) AS [${c}]`).join(',')},
   ${numColumns.map(c=>`[${c}]`).join(',')}, CONVERT(varchar(50),[ITEMNO]) AS ITEMNO,
-  CONVERT(varchar(23),[TxnDate],121) AS TxnDate,CONVERT(varchar(23),[TxnTime],121) AS TxnTime,[VoidApproved]
-  FROM dbo.Tbl_HoldUps WHERE LocCode=@loc AND TableNo='ff'
+  CONVERT(varchar(23),[TxnDate],121) AS TxnDate,CONVERT(varchar(23),[TxnTime],121) AS TxnTime,[VoidApproved],
+  (SELECT CASE WHEN COUNT(*)=1 THEN MAX(NULLIF(LTRIM(RTRIM(u.UserName)),'')) END FROM dbo.Tbl_UserDetails u WHERE u.UserId=h.StewId) AS StewardName,
+  (SELECT CASE WHEN COUNT(*)=1 THEN MAX(NULLIF(LTRIM(RTRIM(u.UserName)),'')) END FROM dbo.Tbl_UserDetails u WHERE u.UserId=h.CASHERID) AS CashierName
+  FROM dbo.Tbl_HoldUps h WHERE LocCode=@loc AND TableNo='ff' 
   ORDER BY TxnDate DESC, TxnTime DESC, SerialNo DESC, ITEMNO DESC`);
- const rows=result.recordset.map(r=>({...r,VoidApproved:Boolean(r.VoidApproved)}));
+ const rows=result.recordset.map(r=>({...r,StewardName:asText(r.StewardName)||asText(r.StewId),CashierName:asText(r.CashierName)||asText(r.CASHERID),VoidApproved:Boolean(r.VoidApproved)}));
  return NextResponse.json({locations,defaultLocation:access.defaultLocation,rows,truncated:false},{headers:{'Cache-Control':'no-store'}});
 }catch(e){return fail(e)}}
 export async function POST(req:NextRequest){let tx:sql.Transaction|undefined;try{

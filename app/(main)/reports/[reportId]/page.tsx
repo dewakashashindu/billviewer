@@ -412,6 +412,7 @@ export default function DynamicReportPage() {
   const [billType, setBillType] = useState(searchParams.get("bt") || "");
   const [payMode, setPayMode] = useState(searchParams.get("pm") || "");
   const [miiCost, setMiiCost] = useState(false);
+  const [miiSort, setMiiSort] = useState<'description'|'quantity'>('description');
   const [miiDept, setMiiDept] = useState('');
   const [imvMode, setImvMode] = useState<ImvMode>("fast");
   const [imvThr, setImvThr] = useState(10);
@@ -1637,6 +1638,7 @@ export default function DynamicReportPage() {
         to={fmtDMonY(endDate)}
         data={filteredMII}
         byDate={config.render === "mii-date"}
+        sort={miiSort}
         withCost={miiCost}
         days={rangeDays}
       />
@@ -1692,7 +1694,7 @@ export default function DynamicReportPage() {
             <ReportChartsView charts={chartsMII} title={config.title} />
           ) : filteredMII ? (
             config.render === "mii-date" ? (
-              <MenuItemIssueByDateReport report={filteredMII} />
+              <MenuItemIssueByDateReport report={filteredMII} sort={miiSort} onSortChange={setMiiSort} />
             ) : (
               <MenuItemIssueReport report={filteredMII} withCost={miiCost} days={rangeDays} />
             )

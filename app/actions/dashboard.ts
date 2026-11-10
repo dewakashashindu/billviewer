@@ -70,6 +70,7 @@ export interface PerfDaySnapshot {
   spendPax: number;
   avgPax: number;
   avgTime: string;
+  trendValues?: { spendBill: number | null; spendPax: number | null; avgPax: number | null; avgTime: string | null };
   mainGroups: PerfAmountItem[];
   families: PerfFamilyItem[];
   mtdModes: PerfAmountItem[];
@@ -590,6 +591,7 @@ export async function getDashboardPerformanceAction(): Promise<{
         spendPax: 0,
         avgPax: 0,
         avgTime: "—",
+        trendValues: { spendBill: null, spendPax: null, avgPax: null, avgTime: null },
         mainGroups: [],
         families: [],
         mtdModes: [],
@@ -663,13 +665,17 @@ export async function getDashboardPerformanceAction(): Promise<{
           snap.unclosedAmt = amtNum;
         } else if (so === 42 || pdUpper === "SPENDING PER BILL") {
           snap.spendBill = amtNum;
+          if (snap.trendValues) snap.trendValues.spendBill = pa.trim() && Number.isFinite(Number(pa.replace(/,/g, ""))) ? Number(pa.replace(/,/g, "")) : null;
         } else if (so === 43 || pdUpper === "SPENDING PER PAX") {
           snap.spendPax = amtNum;
+          if (snap.trendValues) snap.trendValues.spendPax = pa.trim() && Number.isFinite(Number(pa.replace(/,/g, ""))) ? Number(pa.replace(/,/g, "")) : null;
         } else if (so === 44 || pdUpper === "AVG PAX PER BILL") {
           snap.avgPax = amtNum;
+          if (snap.trendValues) snap.trendValues.avgPax = pa.trim() && Number.isFinite(Number(pa.replace(/,/g, ""))) ? Number(pa.replace(/,/g, "")) : null;
         } else if (so === 45 || pdUpper === "AVG TIME PER BILL") {
           const timeText = pa || vd;
           if (timeText) snap.avgTime = timeText;
+          if (snap.trendValues) snap.trendValues.avgTime = [pa, vd].find(v => /[hms:]/i.test(v)) || null;
         } else if (so === 48) {
           addNamedAmt(snap.mainGroups, pd, amtNum);
         } else if (so === 52) {
