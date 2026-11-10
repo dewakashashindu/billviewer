@@ -598,6 +598,7 @@ export function ComboChart({
   labels,
   area,
   bars,
+  cumulative,
   height = 196,
   areaName = "Revenue",
   barName = "Bills",
@@ -605,6 +606,7 @@ export function ComboChart({
   labels: string[];
   area: number[];
   bars: number[];
+  cumulative?: number[];
   height?: number;
   areaName?: string;
   barName?: string;
@@ -619,15 +621,20 @@ export function ComboChart({
   const padT = 12;
   const iw = w - padL - 8;
   const ih = height - padB - padT;
-  const maxA = Math.max(...area, 1);
+  const cumulativeValid = cumulative?.length === n ? cumulative : [];
+  const maxA = Math.max(...area, ...cumulativeValid, 0);
+  const minA = Math.min(...area, ...cumulativeValid, 0);
+  const rangeA = maxA - minA || 1;
+  const toY = (v: number) => padT + ((maxA - v) / rangeA) * ih;
+  const zeroY = toY(0);
   const maxB = Math.max(...bars, 1);
   const step = n > 1 ? iw / (n - 1) : iw;
-  const pts = area.map((v, i) => [padL + i * (n > 1 ? step : 0), padT + ih - (v / maxA) * ih] as const);
+  const pts = area.map((v, i) => [padL + i * (n > 1 ? step : 0), toY(v)] as const);
   const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   const areaPath =
-    `M${pts[0][0].toFixed(1)},${(padT + ih).toFixed(1)} L` +
+    `M${pts[0][0].toFixed(1)},${zeroY.toFixed(1)} L` +
     pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L") +
-    ` L${pts[n - 1][0].toFixed(1)},${(padT + ih).toFixed(1)} Z`;
+    ` L${pts[n - 1][0].toFixed(1)},${zeroY.toFixed(1)} Z`;
   const bw = Math.max(2.5, (iw / Math.max(n - 1, 1)) * 0.34);
 
   return (
@@ -676,6 +683,10 @@ export function ComboChart({
           <title>{`${labels[i]} — ${fmtRs(area[i])} ${areaName.toLowerCase()}`}</title>
         </circle>
       ))}
+      {cumulativeValid.length > 0 && <>
+        <polyline points={cumulativeValid.map((v,i)=>`${(padL+i*(n>1?step:0)).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')} fill="none" stroke="#b86b2b" strokeWidth={2.2} strokeLinejoin="round" />
+        {cumulativeValid.map((v,i)=><circle key={`cumulative-${i}`} cx={padL+i*(n>1?step:0)} cy={toY(v)} r={2.8} fill="#fff" stroke="#b86b2b" strokeWidth={1.8}><title>{`${labels[i]} — ${fmtRs(v)} cumulative revenue`}</title></circle>)}
+      </>}
       {[0, 1, 2, 3].map((k) => {
         const gy = padT + (ih * k) / 3;
         return (
@@ -690,7 +701,7 @@ export function ComboChart({
               strokeDasharray="3 3"
             />
             <text x={padL - 6} y={gy + 3} textAnchor="end" fontSize={8.5} fill={DASH.muted}>
-              {fmtShort(maxA * (1 - k / 3))}
+              {fmtShort(maxA - rangeA * k / 3)}
             </text>
           </g>
         );

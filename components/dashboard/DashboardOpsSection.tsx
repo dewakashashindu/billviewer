@@ -214,10 +214,12 @@ export default function DashboardOpsSection({
   const busy = demoOnly ? false : loading;
 
   /* derived */
-  const hours = data?.hourly ?? [];
+  const hours = [...(data?.hourly ?? [])].sort((a,b)=>a.hour-b.hour);
   const hourlyLabels = hours.map((h) => HOUR_LABEL[h.hour] ?? String(h.hour));
   const hourlyNet = hours.map((h) => h.net);
   const hourlyBills = hours.map((h) => h.bills);
+  let runningRevenue = 0;
+  const cumulativeRevenue = hourlyNet.map(value => (runningRevenue += value));
 
   const heatDays = data?.days ?? [];
   const heatValues = heatDays.map((day) =>
@@ -344,19 +346,24 @@ export default function DashboardOpsSection({
 
             <div style={gridStyle}>
               <ChartCard
-                title="Sales & Order Flow"
-                sub="Revenue by hour with bill count"
+                title="Sales & Revenue Flow"
+                sub="Hourly revenue and cumulative revenue · bill counts shown as bars"
                 span={2}
                 delay={0.05}
               >
                 {hours.length ? (
+                  <>
+                  <div style={{display:'flex',gap:14,flexWrap:'wrap',padding:'0 8px 8px',fontSize:11,color:'#6b543e'}}><span>● Hourly revenue</span><span style={{color:'#b86b2b'}}>● Cumulative revenue</span><span>▮ Bill count (separate scale)</span></div>
                   <ComboChart
                     labels={hourlyLabels}
                     area={hourlyNet}
                     bars={hourlyBills}
-                    areaName="Revenue"
+                    cumulative={cumulativeRevenue}
+                    areaName="Hourly revenue"
                     barName="Bills"
                   />
+                  <div style={{fontSize:10,color:'#907860',padding:'2px 8px 0'}}>For multiple days, values are grouped by hour across the selected period. The cumulative line adds these hourly groups in hour order.</div>
+                  </>
                 ) : (
                   <EmptyBlock />
                 )}
