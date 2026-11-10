@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/CategoryReports.tsx
@@ -251,11 +252,7 @@ function LocHead({ loc }: { loc: { locCode: string; locName: string; locTotal: n
 // ═══════════════ 1.3.1 SUMMARY (POS "Category Wise Sales" print eke widiyatama) ═══════════════
 export default function CategorySummaryReport({ report }: { report: CatSummaryData }) {
   if ((report.locationGroups ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No category sales found for this range.
-      </p>
-    );
+    return <ReportEmptyState>No category sales found for this range.</ReportEmptyState>;
   return (
     <div style={{ background: "#fff", border: `1px solid ${"#E4D6BF"}`, borderRadius: 10, overflow: "hidden" }}>
       {/* column header — POS print eke light-blue header eka wage */}
@@ -311,11 +308,7 @@ export default function CategorySummaryReport({ report }: { report: CatSummaryDa
 // ═══════════════ 1.3.2 DETAIL ═══════════════
 export function CategoryDetailReport({ report }: { report: CatDetailData }) {
   if ((report.locationGroups ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No category sales found for this range.
-      </p>
-    );
+    return <ReportEmptyState>No category sales found for this range.</ReportEmptyState>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.locationGroups.map((loc) => (

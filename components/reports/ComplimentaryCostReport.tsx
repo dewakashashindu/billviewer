@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 import {Document,Page,Text,View,StyleSheet} from '@react-pdf/renderer';
 export type CostItem={id:string;name:string;qty:number;costPrice:number;itemCost:number};
 export type CostBill={billNo:string;items:CostItem[]};
@@ -17,7 +18,7 @@ export function filterComplimentaryCost(data:ComplimentaryCostData,search:string
 const section={background:'#e4d6bf',color:'#684830',padding:'8px 10px',fontWeight:700,marginTop:12,borderRadius:5};
 const cell={padding:'6px 8px',borderBottom:'1px solid #eee2d5'};
 export function ComplimentaryCostReport({data}:{data:ComplimentaryCostData}){
- if(!data.locations.length)return <p style={{padding:24}}>No complimentary items found for this range.</p>;
+ if(!data.locations.length)return <ReportEmptyState>No complimentary items found for this range.</ReportEmptyState>;
  return <div>{data.locations.map(l=><div key={l.locCode}><div style={section}>{l.locCode} — {l.locName}</div>{l.days.map(d=><div key={d.date}><div style={{...section,background:'#f0e8d8'}}>{dateLabel(d.date)}</div>{d.bills.map((b,i)=><div key={i}><div style={{padding:'8px',fontWeight:700}}>Bill No: {b.billNo||'—'}</div><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr style={{background:'#f0e8d8'}}>{['Menu ID','Menu Items','Qty','Cost Price','Item Cost'].map((h,j)=><th key={h} style={{...cell,textAlign:j<2?'left':'right'}}>{h}</th>)}</tr></thead><tbody>{b.items.map((it,j)=><tr key={j}>{[it.id,it.name,money(it.qty),money(it.costPrice),money(it.itemCost)].map((v,k)=><td key={k} style={{...cell,textAlign:k<2?'left':'right'}}>{v}</td>)}</tr>)}</tbody></table></div><div style={{textAlign:'right',padding:8,fontWeight:700}}>Bill Wise Cost: {money(billTotal(b))}</div></div>)}<div style={{textAlign:'right',padding:8,fontWeight:700}}>Daily Cost: {money(dayTotal(d))}</div></div>)}<div style={{textAlign:'right',padding:8,fontWeight:800}}>Locational Cost: {money(locationTotal(l))}</div></div>)}</div>;
 }
 const p=StyleSheet.create({page:{padding:28,fontSize:9,fontFamily:'Helvetica',color:'#45301d'},title:{fontSize:14,fontFamily:'Helvetica-Bold',textAlign:'center',marginBottom:8},group:{backgroundColor:'#e4d6bf',padding:5,marginTop:8,fontFamily:'Helvetica-Bold'},bill:{padding:5,fontFamily:'Helvetica-Bold'},row:{flexDirection:'row'},head:{backgroundColor:'#f0e8d8',padding:4,fontFamily:'Helvetica-Bold'},cell:{padding:4,borderBottomWidth:.3,borderBottomColor:'#ddd'},right:{textAlign:'right'},total:{textAlign:'right',padding:5,fontFamily:'Helvetica-Bold'}});

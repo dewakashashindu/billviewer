@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/StewardReports.tsx
@@ -106,11 +107,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 
 export default function StewardSummaryReport({ report }: { report: StewardData }) {
   if ((report.stewards ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No records found for this range.
-      </p>
-    );
+    return <ReportEmptyState>No records found for this range.</ReportEmptyState>;
   const sc = report.includeSerChg;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

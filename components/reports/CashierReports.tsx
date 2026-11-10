@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/CashierReports.tsx
@@ -167,13 +168,7 @@ const grand: CSSProperties = {
   marginTop: 14,
 };
 
-function Empty({ text }: { text: string }) {
-  return (
-    <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-      {text}
-    </p>
-  );
-}
+function Empty({ text }: { text: string }) { return <ReportEmptyState>{text}</ReportEmptyState>; }
 
 // ═══════════════ 2.4 BILL TYPE WISE ═══════════════
 export function BillTypeReport({ report }: { report: BillTypeData }) {

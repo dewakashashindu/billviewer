@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/PaxCountReport.tsx
@@ -171,11 +172,7 @@ function SectionTable({
 
 export default function PaxCountReport({ report }: { report: PaxData }) {
   if ((report.locationGroups ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No pax records found for this range.
-      </p>
-    );
+    return <ReportEmptyState>No pax records found for this range.</ReportEmptyState>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.locationGroups.map((l) => (

@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/OpenTablesReport.tsx
@@ -71,11 +72,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 
 export default function OpenTablesReport({ report }: { report: OpenTablesData }) {
   if ((report.sections ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No open tables right now.
-      </p>
-    );
+    return <ReportEmptyState>No open tables right now.</ReportEmptyState>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.sections.map((s) => (

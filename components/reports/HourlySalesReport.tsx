@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/HourlySalesReport.tsx
@@ -69,13 +70,9 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 
 export default function HourlySalesReport({ report }: { report: HourlySalesData }) {
   if ((report.locationGroups ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        {report.slotsDefined
+    return <ReportEmptyState>{report.slotsDefined
           ? "No sales found in the defined time slots for this range."
-          : "No time slots are available for this range."}
-      </p>
-    );
+          : "No time slots are available for this range."}</ReportEmptyState>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.locationGroups.map((l) => {

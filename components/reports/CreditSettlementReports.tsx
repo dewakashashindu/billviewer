@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/CreditSettlementReports.tsx
@@ -158,9 +159,7 @@ const cell: CSSProperties = {
   verticalAlign: "top",
 };
 const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
-const emptyMsg = (t: string) => (
-  <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>{t}</p>
-);
+const emptyMsg = (t: string) => <ReportEmptyState>{t}</ReportEmptyState>;
 
 function CustBand({ left, right }: { left: string; right?: string }) {
   return (

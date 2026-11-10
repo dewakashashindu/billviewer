@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/CreditSummaryReport.tsx
@@ -67,11 +68,7 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 
 export default function CreditSummaryReport({ report }: { report: CreditSummaryData }) {
   if ((report.locationGroups ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        No customers with used credit.
-      </p>
-    );
+    return <ReportEmptyState>No customers with used credit.</ReportEmptyState>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.locationGroups.map((l) => (

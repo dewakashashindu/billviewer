@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
 export interface MiiRow { code: string; desc: string; qty: number; weight: number; unitValue: number; lastPrice: number; total: number; costPrice?: number; costTotal?: number }
@@ -39,11 +40,11 @@ const group: React.CSSProperties = {background:"#f0e8d8", padding:"9px 12px", ma
 function quantityItems(dep:MiiDept){const m=new Map<string,{code:string;desc:string;qty:number;costTotal:number}>();for(const r of dep.rows){const key=JSON.stringify([r.code,r.desc]);let it=m.get(key);if(!it){it={code:r.code,desc:r.desc,qty:0,costTotal:0};m.set(key,it)}it.qty+=r.qty;it.costTotal+=r.costTotal??0}return [...m.values()].sort((a,b)=>a.code.localeCompare(b.code))}
 const average=(qty:number,days:number)=>days>0?(Math.round((qty/days)*100)/100).toFixed(4):'—';
 export default function MenuItemIssueReport({report,withCost=false,days}:{report:MiiData;withCost?:boolean;days:number}) {
-  if (!report.locationGroups.length) return <p>No menu item issues for this range.</p>;
+  if (!report.locationGroups.length) return <ReportEmptyState>No menu item issues for this range.</ReportEmptyState>;
   return <div>{report.locationGroups.map(l=><div key={l.locCode}><div style={group}>{l.locName}</div>{l.dates.flatMap(d=>d.depts).map((dep,di)=><section key={di}><div style={group}>{dep.dept}</div><div style={{overflowX:"auto"}}><table style={{width:"100%",minWidth:600,borderCollapse:"collapse"}}><thead><tr>{["Menu Item ID","Description","Qty",`Average Qty For ${days} Day/s`,...(withCost?["Cost of Sales"]:[])].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead><tbody>{quantityItems(dep).map((r,i)=><tr key={i}>{[r.code,r.desc,fmt(r.qty),average(r.qty,days),...(withCost?[fmt(r.costTotal)]:[])].map((v,j)=><td key={j} style={td}>{v}</td>)}</tr>)}</tbody></table></div></section>)}</div>)}{days===0&&<p style={{padding:12,color:'#806b56'}}>Average is unavailable when the date range is zero days.</p>}</div>;
 }
 export function MenuItemIssueByDateReport({report}:{report:MiiData}) {
-  if (!report.locationGroups.length) return <p>No menu item issues for this range.</p>;
+  if (!report.locationGroups.length) return <ReportEmptyState>No menu item issues for this range.</ReportEmptyState>;
   return <div>{report.locationGroups.map(l=>{const p=pivot(l);return <div key={l.locCode}><div style={group}>{l.locCode} — {l.locName} · quantities</div><div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",minWidth:"100%"}}><thead><tr>{["Item Code","Description",...p.dates,"Total Qty"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead><tbody>{p.rows.map((r,i)=><tr key={i}>{[r.code,r.desc,...p.dates.map(d=>fmt(r.values[d]||0)),fmt(r.total)].map((v,j)=><td key={j} style={td}>{v}</td>)}</tr>)}</tbody></table></div></div>})}</div>;
 }
 const ps=StyleSheet.create({page:{padding:24,fontSize:8,fontFamily:"Helvetica",color:"#45301D"},title:{fontSize:14,fontFamily:"Helvetica-Bold",marginBottom:8},loc:{fontSize:10,fontFamily:"Helvetica-Bold",marginTop:12,marginBottom:5},row:{flexDirection:"row"},head:{backgroundColor:"#e4d6bf",padding:4,fontFamily:"Helvetica-Bold"},cell:{padding:4,borderBottomWidth:.4,borderBottomColor:"#ddd"}});

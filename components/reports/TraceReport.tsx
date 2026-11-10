@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
 // LOCATION: components/reports/TraceReport.tsx
@@ -92,13 +93,9 @@ const num: CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "t
 
 export default function TraceReport({ report, invoiceHint }: { report: TraceData; invoiceHint?: boolean }) {
   if ((report.locationGroups ?? []).length === 0)
-    return (
-      <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
-        {invoiceHint
+    return <ReportEmptyState>{invoiceHint
           ? "Type an invoice number in the search box to trace it."
-          : "No trace records found for this range."}
-      </p>
-    );
+          : "No trace records found for this range."}</ReportEmptyState>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {report.locationGroups.map((l) => (

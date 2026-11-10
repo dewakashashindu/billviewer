@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from './ReportEmptyState';
 import {Document,Page,Text,View,StyleSheet} from '@react-pdf/renderer';
 export type TableRow={date:string;tableNo:string;netTotal:number;pax:number};
 export type Steward={id:string;name:string;rows:TableRow[]};
@@ -14,7 +15,7 @@ export function filterTableSteward(data:TableStewardData,selection:string,search
 const bar={background:'#e4d6bf',color:'#684830',fontWeight:700,padding:'8px 10px',marginTop:12,borderRadius:5};
 const cell={padding:'7px 9px',borderBottom:'1px solid #eee2d5'};
 export function TableStewardReport({data}:{data:TableStewardData}){
- if(!data.locations.length)return <p style={{padding:24}}>No dining table records found for this range.</p>;
+ if(!data.locations.length)return <ReportEmptyState>No dining table records found for this range.</ReportEmptyState>;
  return <div>{data.locations.map(l=><section key={l.code}><div style={bar}>{l.code} — {l.name}</div>{l.stewards.map((s,i)=>{const total=sum(s.rows);return <div key={i}><div style={{...bar,background:'#f0e8d8'}}>{s.id||'Unassigned'}{s.name?` — ${s.name}`:''}</div><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr>{['Date','Table No','Net Total','No Of Pax'].map((h,j)=><th key={h} style={{...cell,background:'#f0e8d8',textAlign:j<2?'left':'right'}}>{h}</th>)}</tr></thead><tbody>{s.rows.map((r,j)=><tr key={j}>{[date(r.date),r.tableNo,fmt(r.netTotal),fmt(r.pax)].map((v,k)=><td key={k} style={{...cell,textAlign:k<2?'left':'right'}}>{v}</td>)}</tr>)}<tr style={{fontWeight:700}}><td colSpan={2} style={cell}>Steward Total</td><td style={{...cell,textAlign:'right'}}>{fmt(total.netTotal)}</td><td style={{...cell,textAlign:'right'}}>{fmt(total.pax)}</td></tr></tbody></table></div></div>})}{(()=>{const t=sum(allRows(l));return <div style={{textAlign:'right',padding:10,fontWeight:800}}>Locational Total: {fmt(t.netTotal)} &nbsp; · &nbsp; Pax: {fmt(t.pax)}</div>})()}</section>)}</div>;
 }
 const p=StyleSheet.create({page:{padding:28,fontSize:9,fontFamily:'Helvetica',color:'#45301d'},title:{textAlign:'center',fontSize:14,fontFamily:'Helvetica-Bold',marginBottom:8},group:{backgroundColor:'#e4d6bf',padding:5,marginTop:10,fontFamily:'Helvetica-Bold'},steward:{backgroundColor:'#f0e8d8',padding:5,marginTop:5,fontFamily:'Helvetica-Bold'},row:{flexDirection:'row'},head:{backgroundColor:'#f0e8d8',padding:5,fontFamily:'Helvetica-Bold'},cell:{padding:5,borderBottomWidth:.3,borderBottomColor:'#e4d6bf'},total:{fontFamily:'Helvetica-Bold',borderTopWidth:1,borderTopColor:'#684830'},right:{textAlign:'right'}});

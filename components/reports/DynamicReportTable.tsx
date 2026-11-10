@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from "./ReportEmptyState";
 
 // ============================================================
 // LOCATION: components/reports/DynamicReportTable.tsx
@@ -107,6 +108,8 @@ export default function DynamicReportTable({ columns, data }: DynamicTableProps)
     borderRight: "1px solid #FCF7F3",
     fontVariantNumeric: isNum(col.type) ? ("tabular-nums" as const) : undefined,
   });
+
+  if (sorted.length === 0) return <ReportEmptyState>No report data available.</ReportEmptyState>;
 
   return (
     <div style={{ padding: "20px 24px 28px", fontFamily: "Inter, sans-serif" }}>

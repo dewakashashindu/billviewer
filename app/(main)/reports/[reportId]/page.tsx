@@ -1,4 +1,5 @@
 "use client";
+import ReportEmptyState from "@/components/reports/ReportEmptyState";
 import "@/components/reports/report-screen-font.css";
 import {useFeedbackState} from "@/components/FeedbackPopup";
 import {displayMessage} from "@/lib/displayMessage";
@@ -2034,7 +2035,7 @@ export default function DynamicReportPage() {
     return <><ReportToolbar title={config.title} subtitle="Find an invoice by location and exact invoice number" from={startDate} to={endDate} onRangeChange={rangeChange} hideDates searchable={false} search="" onSearchChange={()=>{}} pdfDocument={pdf} pdfFileName="invoice-trace.pdf" />
       {filterBarNode}
       <form onSubmit={e=>{e.preventDefault(); void run();}} style={{padding:"14px 24px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",color:"#684830",fontSize:12}}><label htmlFor="invoice-number">Invoice Number:</label><input id="invoice-number" value={invoiceNo} maxLength={100} onChange={e=>{invoiceRequest.current++; setInvoiceBusy(false); setInvoiceData(null); setInvoiceError(""); setInvoiceNo(e.target.value);}} style={{height:36,padding:"0 10px",border:"1px solid #decbb0",borderRadius:8}}/><button type="submit" disabled={invoiceBusy} style={{height:36,padding:"0 16px",background:"#684830",color:"white",border:0,borderRadius:8,cursor:"pointer"}}>Trace Invoice</button><span>Select a location above.</span></form>
-      <div id="report-zoom-area" style={{flex:1}}>{invoiceBusy ? <LoadingBlock/> : invoiceError ? <ErrorBlock message={invoiceError}/> : invoiceData ? invoiceData.rows.length ? <InvoiceTraceReport data={invoiceData}/> : <p style={{padding:30,textAlign:"center"}}>No records found for this invoice and location.</p> : <p style={{padding:30,textAlign:"center"}}>Select a location and enter an invoice number.</p>}</div>
+      <div id="report-zoom-area" style={{flex:1}}>{invoiceBusy ? <LoadingBlock/> : invoiceError ? <ErrorBlock message={invoiceError}/> : invoiceData ? invoiceData.rows.length ? <InvoiceTraceReport data={invoiceData}/> : <ReportEmptyState hint="Check the invoice number and location.">No records found for this invoice and location.</ReportEmptyState> : <p style={{padding:30,textAlign:"center"}}>Select a location and enter an invoice number.</p>}</div>
     </>;
   }
 
@@ -2105,7 +2106,7 @@ export default function DynamicReportPage() {
       search={search} onSearchChange={setSearch} searchPlaceholder="Search saved rows..."
       pdfDocument={pdf} pdfFileName={`performance-report-${startDate}.pdf`}/>
       {perfData && <div style={{display:'flex',gap:8,flexWrap:'wrap',padding:'12px 24px 0'}}>{perfData.locations.map(location=><button key={location.code} type="button" onClick={()=>setLoc(location.code)} style={{padding:'9px 14px',borderRadius:8,border:'1px solid #decbb0',cursor:'pointer',background:perfData.location===location.code?'#684830':'white',color:perfData.location===location.code?'white':'#45301d'}}>{location.name}</button>)}</div>}
-      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<p style={{padding:30,textAlign:'center'}}>No matching rows for this search.</p>:filtered?<PerformanceReport report={filtered}/>:null}</div></>;
+      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<ReportEmptyState>No matching rows for this search.</ReportEmptyState>:filtered?<PerformanceReport report={filtered}/>:null}</div></>;
   }
 
   // ── Generic reports (Transaction Summary etc.) ──
