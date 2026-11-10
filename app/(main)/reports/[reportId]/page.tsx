@@ -1,4 +1,8 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
+import {TableStewardReport,TableStewardPdf,filterTableSteward,type TableStewardData} from "@/components/reports/TableStewardReport";
+import { ComplimentaryCostReport, ComplimentaryCostPdf, filterComplimentaryCost, type ComplimentaryCostData } from "@/components/reports/ComplimentaryCostReport";
 
 // ============================================================
 // LOCATION: app/(main)/reports/[reportId]/page.tsx
@@ -64,11 +68,7 @@ import StewardSummaryReport, {
   STW_PDF_COLUMNS,
   type StewardData,
 } from "@/components/reports/StewardReports";
-import TaxVatReport, {
-  filterTaxVat,
-  type TaxVatData,
-} from "@/components/reports/TaxVatReport";
-import TaxVatPdfDocument from "@/components/reports/TaxVatPdfDocument";
+import {TaxPosReport,TaxPosPdf,filterTaxPos,type TaxPosData} from "@/components/reports/TaxPosReport";
 import VoidPosReport, { VoidPosPdf, filterVoidPos, type VoidPosData } from "@/components/reports/VoidPosReport";
 import PaxCountReport, {
   filterPax,
@@ -168,7 +168,6 @@ import {
   getReportPaymentModesAction,
   getInvoiceTraceAction,
   getLocationsAction,
-  getMainLocationsAction,
 } from "@/app/actions/reports";
 import type { DateRangeFilterSpec } from "@/components/DateRangeModal";
 
@@ -226,7 +225,7 @@ function ErrorBlock({ message }: { message: string }) {
           padding: "11px 15px",
         }}
       >
-        {message}
+        {displayMessage(message)}
       </div>
     </div>
   );
@@ -381,14 +380,14 @@ export default function DynamicReportPage() {
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useFeedbackState<string | null>(null,'error');
   const [search, setSearch] = useState("");
   const [chartMode, setChartMode] = useState(false);
   const [printedAt] = useState(() => new Date());
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
-  const [invoiceError, setInvoiceError] = useState("");
+  const [invoiceError, setInvoiceError] = useFeedbackState<string>("",'error');
   const invoiceRequest = useRef(0);
 
   // URL params: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sidebar date popup eken)
@@ -411,6 +410,7 @@ export default function DynamicReportPage() {
   const [billType, setBillType] = useState(searchParams.get("bt") || "");
   const [payMode, setPayMode] = useState(searchParams.get("pm") || "");
   const [miiCost, setMiiCost] = useState(false);
+  const [miiDept, setMiiDept] = useState('');
   const [imvMode, setImvMode] = useState<ImvMode>("fast");
   const [imvThr, setImvThr] = useState(10);
   const [cioCat, setCioCat] = useState("");
@@ -420,10 +420,8 @@ export default function DynamicReportPage() {
   const [stewardSelection, setStewardSelection] = useState("all");
   const [creditCustomerSelection, setCreditCustomerSelection] = useState("all");
   const [voidDetail, setVoidDetail] = useState(false);
-  const [perfLocs, setPerfLocs] = useState<{ code: string; name: string }[]>([]);
-  const [perfCompare, setPerfCompare] = useState(false);
   const [paymentModes, setPaymentModes] = useState<{ value: string; label: string }[]>([]);
-  const [paymentModesError, setPaymentModesError] = useState("");
+  const [paymentModesError, setPaymentModesError] = useFeedbackState<string>("",'error');
   const [allLocs, setAllLocs] = useState<{ code: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -441,6 +439,7 @@ export default function DynamicReportPage() {
 
   // Load main outlets once so every report page can switch All Locations / Loc 1 / Loc 2 on screen
   useEffect(() => {
+    if (reportId === "performance-report") return;
     let alive = true;
     getLocationsAction()
       .then((res) => {
@@ -454,21 +453,6 @@ export default function DynamicReportPage() {
       alive = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (reportId !== "performance-report") return;
-    let alive = true;
-    getMainLocationsAction()
-      .then((res) => {
-        if (alive && res?.success && Array.isArray(res.data)) {
-          setPerfLocs(res.data);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [reportId]);
 
   // URL change (sidebar modal eken aluth range) -> state update
   useEffect(() => {
@@ -512,6 +496,7 @@ export default function DynamicReportPage() {
           payMode: payMode || undefined,
           withCost: miiCost || undefined,
           menuIssueByDate: config.render === "mii-date",
+          salesDept: config.render === "mii" ? miiDept || undefined : undefined,
           movement: imvMode,
           threshold: imvThr,
           payCat: cioCat || undefined,
@@ -545,7 +530,7 @@ export default function DynamicReportPage() {
     return () => {
       alive = false;
     };
-  }, [reportId, config, startDate, endDate, loc, orderMode, billType, payMode, miiCost, imvMode, imvThr, cioCat, kotType, credCus, cashSel, router]);
+  }, [reportId, config, startDate, endDate, loc, orderMode, billType, payMode, miiCost, miiDept, imvMode, imvThr, cioCat, kotType, credCus, cashSel, router]);
 
   useEffect(() => {
     invoiceRequest.current++;
@@ -558,7 +543,6 @@ export default function DynamicReportPage() {
     setStewardSelection("all");
     setCreditCustomerSelection("all");
     setChartMode(false);
-    setPerfCompare(false);
   }, [reportId]);
 
   // generic rows (array data) + search filter
@@ -643,7 +627,7 @@ export default function DynamicReportPage() {
         extraValue={extraValue}
         onExtraChange={handleExtraChange}
       />
-      {paymentModesError && reportId === "payment-summary-wise" && <p role="alert" style={{ color: "#b91c1c", padding: "0 24px" }}>{paymentModesError}</p>}
+      {paymentModesError && reportId === "payment-summary-wise" && <p role="alert" style={{ color: "#b91c1c", padding: "0 24px" }}>{displayMessage(paymentModesError)}</p>}
       </>
     ) : null;
 
@@ -703,6 +687,13 @@ export default function DynamicReportPage() {
   }
 
   // ── Sales Details (custom render — bill-wise items + totals box) ──
+  if (config.render === "complimentary-cost") {
+    const data=objectData ? filterComplimentaryCost(objectData as unknown as ComplimentaryCostData,search) : null;
+    const hasData=!!data?.locations.length;
+    const pdf=hasData&&data?<ComplimentaryCostPdf title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} printDate={printDate} printTime={printTime} data={data}/>:undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search location, date, bill or item..." pdfDocument={pdf} pdfFileName={`complimentary-cost-${startDate}_to_${endDate}.pdf`} chartSupported={false} chartMode={false} onChartToggle={()=>{}} />{filterBarNode}<div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:data?<ComplimentaryCostReport data={data}/>:null}</div></>;
+  }
+
   if (config.render === "sales-details") {
     const details = objectData
       ? (objectData as unknown as SalesDetailsData)
@@ -1093,6 +1084,15 @@ export default function DynamicReportPage() {
   }
 
   // ── 6.1 / 8.1 Steward Wise & Service Charge ──
+  if (config.render === "table-steward") {
+    const report=objectData as unknown as TableStewardData | null;
+    const options=new Map<string,string>();for(const l of report?.locations??[])for(const st of l.stewards)options.set(`s:${st.id}`,`${st.id||'Unassigned'}${st.name?` — ${st.name}`:''}`);
+    const filtered=report?filterTableSteward(report,stewardSelection,search):null;
+    const hasData=!!filtered?.locations.length;
+    const pdf=hasData&&filtered?<TableStewardPdf data={filtered} title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} printDate={printDate} printTime={printTime}/>:undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search steward, location, date or table..." pdfDocument={pdf} pdfFileName={`steward-table-${startDate}_to_${endDate}.pdf`} chartSupported={false} chartMode={false} onChartToggle={()=>{}}/>{filterBarNode}<div style={{padding:'10px 24px',color:'#684830',fontSize:12}}><label>Steward: <select aria-label="Steward" value={stewardSelection} onChange={e=>setStewardSelection(e.target.value)} style={{marginLeft:8,padding:'7px 10px',border:'1px solid #decbb0',borderRadius:8,background:'white'}}><option value="all">All Stewards</option>{stewardSelection!=='all'&&!options.has(stewardSelection)&&<option value={stewardSelection}>Selected steward (no records)</option>}{Array.from(options,([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div><div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered?<TableStewardReport data={filtered}/>:null}</div></>;
+  }
+
   if (config.render === "steward-wise") {
     const stwData = objectData
       ? (objectData as unknown as StewardData)
@@ -1156,57 +1156,10 @@ export default function DynamicReportPage() {
 
   // ── 8.2 Tax & VAT Report ──
   if (config.render === "tax-vat") {
-    const tvData = objectData
-      ? (objectData as unknown as TaxVatData)
-      : null;
-    const filteredTv = tvData ? filterTaxVat(tvData, search) : null;
-    const hasTvData =
-      !loading &&
-      !error &&
-      Boolean(filteredTv && (filteredTv.locationGroups?.length ?? 0) > 0);
-    const chartsTv =
-      hasTvData && filteredTv ? buildReportCharts(reportId, filteredTv) : [];
-    const pdfDocTv = hasTvData && filteredTv ? (
-      <TaxVatPdfDocument
-        title={config.title}
-        printDate={printDate}
-        printTime={printTime}
-        from={fmtDMonY(startDate)}
-        to={fmtDMonY(endDate)}
-        data={filteredTv}
-      />
-    ) : undefined;
-    return (
-      <>
-        <ReportToolbar
-          title={config.title}
-          subtitle={config.subtitle}
-          from={startDate}
-          to={endDate}
-          onRangeChange={rangeChange}
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search bill no, date..."
-          pdfDocument={pdfDocTv}
-          pdfFileName={`tax-vat-${startDate}_to_${endDate}.pdf`}
-          chartSupported={hasTvData && chartsTv.length > 0}
-          chartMode={chartMode}
-          onChartToggle={() => setChartMode((c) => !c)}
-        />
-        {filterBarNode}
-        <div id="report-zoom-area" style={{ flex: 1 }}>
-          {loading ? (
-            <LoadingBlock />
-          ) : error ? (
-            <ErrorBlock message={error} />
-          ) : chartMode && hasTvData && chartsTv.length > 0 ? (
-            <ReportChartsView charts={chartsTv} title={config.title} />
-          ) : filteredTv ? (
-            <TaxVatReport report={filteredTv} />
-          ) : null}
-        </div>
-      </>
-    );
+    const data=objectData as TaxPosData | null;
+    const rows=data?filterTaxPos(data.rows,search):[];
+    const pdf=rows.length?<TaxPosPdf rows={rows} title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} printDate={printDate} printTime={printTime}/>:undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search location, date, bill or mode..." pdfDocument={pdf} pdfFileName={`tax-vat-${startDate}_to_${endDate}.pdf`} chartSupported={false} chartMode={false} onChartToggle={()=>{}}/>{filterBarNode}<div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:data?<TaxPosReport rows={rows}/>:null}</div></>;
   }
 
   // 10 Void Summary and Detail — Vw_VoidBeforeSettlement.
@@ -1666,6 +1619,7 @@ export default function DynamicReportPage() {
   if (config.render === "mii" || config.render === "mii-date") {
     const miiData = objectData ? (objectData as unknown as MiiData) : null;
     const filteredMII = miiData ? filterMii(miiData, search) : null;
+    const rangeDays=Math.max(0,Math.round((Date.parse(endDate+'T00:00:00Z')-Date.parse(startDate+'T00:00:00Z'))/86400000));
     const hasMiiData =
       !loading &&
       !error &&
@@ -1682,6 +1636,7 @@ export default function DynamicReportPage() {
         data={filteredMII}
         byDate={config.render === "mii-date"}
         withCost={miiCost}
+        days={rangeDays}
       />
     ) : undefined;
     return (
@@ -1713,6 +1668,7 @@ export default function DynamicReportPage() {
             alignItems: "center",
           }}
         >
+          <label style={{display:'flex',gap:7,alignItems:'center',fontWeight:600}}>Department <select value={miiDept} onChange={e=>setMiiDept(e.target.value)} style={{padding:'7px',border:'1px solid #decbb0',borderRadius:8,background:'white'}}><option value="">All departments</option>{(miiData?.departments??[]).map(d=><option value={d.code} key={d.code}>{d.name}</option>)}</select></label>
           <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer", fontWeight: 600 }}>
             <input
               type="checkbox"
@@ -1722,7 +1678,7 @@ export default function DynamicReportPage() {
             With Sale Cost
           </label>
           <span style={{ color: "#907860", fontSize: 11 }}>
-            (Show cost price and cost of sales)
+            (Show cost of sales)
           </span>
         </div>}
         <div id="report-zoom-area" style={{ flex: 1 }}>
@@ -1736,7 +1692,7 @@ export default function DynamicReportPage() {
             config.render === "mii-date" ? (
               <MenuItemIssueByDateReport report={filteredMII} />
             ) : (
-              <MenuItemIssueReport report={filteredMII} withCost={miiCost} />
+              <MenuItemIssueReport report={filteredMII} withCost={miiCost} days={rangeDays} />
             )
           ) : null}
         </div>
@@ -2138,242 +2094,17 @@ export default function DynamicReportPage() {
     );
   }
 
-  // ── Performance Report (Single Business Date + Main Location Tabs + Compare) ──
+  // One saved snapshot for one permitted location and selected business date.
   if (config.render === "performance-report") {
-    const perfData = objectData
-      ? (objectData as unknown as PerformanceReportData)
-      : null;
-    const filteredPerf = perfData
-      ? filterPerformanceReport(perfData, search)
-      : null;
-    const hasPerfData =
-      !loading &&
-      !error &&
-      Boolean(
-        filteredPerf &&
-          ((filteredPerf.sections ?? []).some((s) => (s.rows?.length ?? 0) > 0) ||
-            (filteredPerf.locationReports ?? []).some((lr) =>
-              (lr.sections ?? []).some((s) => (s.rows?.length ?? 0) > 0)
-            ))
-      );
-    const chartsPerf =
-      hasPerfData && filteredPerf
-        ? buildReportCharts(reportId, filteredPerf)
-        : [];
-    const pdfDocPerf = hasPerfData && filteredPerf ? (
-      <PerformancePdfDocument data={filteredPerf} />
-    ) : undefined;
-
-    const mainTabs =
-      perfLocs.length > 0 ? perfLocs : (perfData?.mainLocations ?? []);
-    const parsedLocs = loc
-      ? loc
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
-    const activeLocCodes =
-      parsedLocs.length > 0
-        ? parsedLocs
-        : mainTabs.length > 0
-          ? [mainTabs[0].code]
-          : [];
-
-    const onSelectLocationTab = (code: string) => {
-      if (!perfCompare) {
-        // Single-select mode: switches directly to the clicked main location
-        setLoc(code);
-        return;
-      }
-      // Compare mode: toggle multiple main locations (keep at least 1 selected)
-      const exists = activeLocCodes.includes(code);
-      if (exists) {
-        if (activeLocCodes.length <= 1) return;
-        const next = activeLocCodes.filter((c) => c !== code);
-        setLoc(next.join(","));
-      } else {
-        const nextSet = new Set([...activeLocCodes, code]);
-        const ordered = mainTabs
-          .map((t) => t.code)
-          .filter((c) => nextSet.has(c));
-        setLoc((ordered.length > 0 ? ordered : [...nextSet]).join(","));
-      }
-    };
-
-    const onToggleCompare = () => {
-      if (perfCompare) {
-        setPerfCompare(false);
-        if (activeLocCodes.length > 1) {
-          setLoc(activeLocCodes[0]);
-        }
-      } else {
-        setPerfCompare(true);
-      }
-    };
-
-    return (
-      <>
-        <ReportToolbar
-          title={config.title}
-          subtitle={config.subtitle}
-          from={startDate}
-          to={startDate}
-          onRangeChange={(f) => {
-            setStartDate(f);
-            setEndDate(f);
-          }}
-          singleDate
-          singleDateLabel="Business Date"
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search section, description, amount..."
-          pdfDocument={pdfDocPerf}
-          pdfFileName={`performance-report-${startDate}.pdf`}
-          chartSupported={chartsPerf.length > 0}
-          chartMode={chartMode}
-          onChartToggle={() => setChartMode((c) => !c)}
-        />
-
-        {/* Main Locations Tabs (Tbl_LocationMaster.SubLoc = false ONLY) + Compare Button */}
-        {mainTabs.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 12,
-              padding: "12px 24px 0",
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                flexWrap: "wrap",
-              }}
-            >
-              {mainTabs.map((t) => {
-                const isActive = activeLocCodes.includes(t.code);
-                return (
-                  <button
-                    key={t.code}
-                    type="button"
-                    onClick={() => onSelectLocationTab(t.code)}
-                    style={{
-                      height: 36,
-                      padding: "0 15px",
-                      borderRadius: 9,
-                      border: isActive
-                        ? "1px solid #45301D"
-                        : "1px solid #DECBB0",
-                      background: isActive
-                        ? "linear-gradient(135deg,#45301D 0%,#684830 100%)"
-                        : "#FFFFFF",
-                      color: isActive ? "#FFFFFF" : "#684830",
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      fontFamily: "Inter, sans-serif",
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      boxShadow: isActive
-                        ? "0 2px 8px rgba(69,48,29,0.20)"
-                        : "none",
-                      transition: "all 0.14s ease",
-                    }}
-                  >
-                    {perfCompare && (
-                      <span
-                        style={{
-                          width: 15,
-                          height: 15,
-                          borderRadius: 4,
-                          border: isActive
-                            ? "1.5px solid #F2CB95"
-                            : "1.5px solid currentColor",
-                          background: isActive ? "#F2CB95" : "transparent",
-                          color: "#2C1E12",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 10,
-                          fontWeight: 900,
-                          lineHeight: 1,
-                        }}
-                      >
-                        {isActive ? "✓" : ""}
-                      </span>
-                    )}
-                    <span>{t.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              {perfCompare && (
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    color: "#6B543E",
-                  }}
-                >
-                  Select locations to compare:
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={onToggleCompare}
-                style={{
-                  height: 36,
-                  padding: "0 15px",
-                  borderRadius: 9,
-                  border: perfCompare
-                    ? "1.5px solid #45301D"
-                    : "1.5px solid #684830",
-                  background: perfCompare ? "#684830" : "#FCF7F3",
-                  color: perfCompare ? "#FFFFFF" : "#45301D",
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  fontFamily: "Inter, sans-serif",
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                }}
-              >
-                {perfCompare
-                  ? `✓ Comparing (${activeLocCodes.length})`
-                  : "⇄ Compare"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div id="report-zoom-area" style={{ flex: 1 }}>
-          {loading ? (
-            <LoadingBlock />
-          ) : error ? (
-            <ErrorBlock message={error} />
-          ) : chartMode && hasPerfData && chartsPerf.length > 0 ? (
-            <ReportChartsView charts={chartsPerf} title={config.title} />
-          ) : filteredPerf ? (
-            <PerformanceReport report={filteredPerf} />
-          ) : null}
-        </div>
-      </>
-    );
+    const perfData=objectData ? objectData as unknown as PerformanceReportData : null;
+    const filtered=perfData ? filterPerformanceReport(perfData,search) : null;
+    const pdf=!loading&&!error&&filtered?.rows.length ? <PerformancePdfDocument data={filtered}/> : undefined;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={startDate}
+      onRangeChange={f=>{setStartDate(f);setEndDate(f)}} singleDate singleDateLabel="Business Date"
+      search={search} onSearchChange={setSearch} searchPlaceholder="Search saved rows..."
+      pdfDocument={pdf} pdfFileName={`performance-report-${startDate}.pdf`}/>
+      {perfData && <div style={{display:'flex',gap:8,flexWrap:'wrap',padding:'12px 24px 0'}}>{perfData.locations.map(location=><button key={location.code} type="button" onClick={()=>setLoc(location.code)} style={{padding:'9px 14px',borderRadius:8,border:'1px solid #decbb0',cursor:'pointer',background:perfData.location===location.code?'#684830':'white',color:perfData.location===location.code?'white':'#45301d'}}>{location.name}</button>)}</div>}
+      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<p style={{padding:30,textAlign:'center'}}>No matching rows for this search.</p>:filtered?<PerformanceReport report={filtered}/>:null}</div></>;
   }
 
   // ── Generic reports (Transaction Summary etc.) ──

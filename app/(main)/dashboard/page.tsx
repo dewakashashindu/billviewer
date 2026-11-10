@@ -1,4 +1,6 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
 
 import { useEffect, useId, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
@@ -649,7 +651,7 @@ function mergeSnapshots(
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useFeedbackState<string | null>(null,'error');
   const [locations, setLocations] = useState<PerfLocationOption[]>([]);
   const [snapshots, setSnapshots] = useState<PerfDaySnapshot[]>([]);
   const [selectedLoc, setSelectedLoc] = useState<string>("");
@@ -1191,7 +1193,7 @@ export default function DashboardPage() {
             marginBottom: 18,
           }}
         >
-          {error}
+          {displayMessage(error)}
         </div>
       )}
 

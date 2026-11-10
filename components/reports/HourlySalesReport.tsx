@@ -73,7 +73,7 @@ export default function HourlySalesReport({ report }: { report: HourlySalesData 
       <p style={{ padding: 30, textAlign: "center", color: "#6B543E", fontFamily: "Inter, sans-serif", fontSize: 13 }}>
         {report.slotsDefined
           ? "No sales found in the defined time slots for this range."
-          : "No time slots defined (Tbl_TimeRange empty) and no default slot data for this range."}
+          : "No time slots are available for this range."}
       </p>
     );
   return (

@@ -2,6 +2,7 @@ import {
   getTransactionSummaryAction,
   getSalesSummaryAction,
   getSalesDetailsAction,
+  getComplimentaryCostAction,
   getCategorySummaryAction,
   getCategoryDetailAction,
   getPaymentSummaryAction,
@@ -51,12 +52,14 @@ export interface ReportConfig {
   render?:
     | "sales-summary"
     | "sales-details"
+    | "complimentary-cost"
     | "category-summary"
     | "category-detail"
     | "payment-summary"
     | "payment-grid"
     | "transaction-summary"
     | "steward-wise"
+    | "table-steward"
     | "tax-vat"
     | "void-report"
     | "pax-count"
@@ -96,7 +99,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "transaction-summary": {
     id: "transaction-summary",
     title: "Transaction Summary By Date",
-    subtitle: "Daily transaction performance (POS Vw_DailyPerformance)",
+    subtitle: "Daily transaction performance",
     render: "transaction-summary",
     fetchAction: getTransactionSummaryAction,
     columns: [],
@@ -240,9 +243,9 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   // 6.1 — Table Management - Steward Wise
   "steward-wise": {
     id: "steward-wise",
-    title: "Steward Wise",
-    subtitle: "Steward-wise daily collections (grouped by steward & location)",
-    render: "steward-wise",
+    title: "Steward Wise Table Management",
+    subtitle: "Dining table transactions by location and steward",
+    render: "table-steward",
     fetchAction: getStewardWiseAction,
     columns: [],
   },
@@ -259,7 +262,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "tax-vat": {
     id: "tax-vat",
     title: "Taxes And VAT Report",
-    subtitle: "Bill-wise VAT / TDL / packing breakdown (POS 8.2)",
+    subtitle: "Bill-wise tax and charges with daily and location totals (POS 8.2)",
     render: "tax-vat",
     fetchAction: getTaxVatAction,
     columns: [],
@@ -268,9 +271,9 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "complimentary-cost": {
     id: "complimentary-cost",
     title: "Complimentary Cost Report",
-    subtitle: "CM bill item details (grouped by location & bill)",
-    render: "sales-details",
-    fetchAction: getSalesDetailsAction,
+    subtitle: "Complimentary item costs by location, date and bill",
+    render: "complimentary-cost",
+    fetchAction: getComplimentaryCostAction,
     lockBillType: "CM",
     columns: [],
   },
@@ -320,7 +323,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
     columns: [],
   },
   "payment-daily-modes": {
-    id: "payment-daily-modes", title: "Sales By Pay Types", subtitle: "Daily payment mode collections (POS Sp_SalesPayment)",
+    id: "payment-daily-modes", title: "Sales By Pay Types", subtitle: "Daily payment mode collections",
     render: "payment-daily", fetchAction: getPaymentDailyModesAction, columns: [],
   },
   // 3.1 — Cashier Collection - Cashier Wise Sales
@@ -462,7 +465,7 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
   "performance-report": {
     id: "performance-report",
     title: "Performance Report",
-    subtitle: "Complete POS operational performance summary (Business Date & Main Locations)",
+    subtitle: "Saved performance values for the selected date and location",
     render: "performance-report",
     fetchAction: getPerformanceReportAction,
     columns: [],

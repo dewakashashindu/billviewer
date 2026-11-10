@@ -1,4 +1,6 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
 
 // ============================================================
 // LOCATION: app/login/forgot/ForgotForm.tsx
@@ -43,7 +45,7 @@ export default function ForgotForm() {
   const [confirm, setConfirm] = useState("");
   const [smsSent, setSmsSent] = useState(false);
   const [maskedPhone, setMaskedPhone] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useFeedbackState<string | null>(null,'error');
   const [busy, setBusy] = useState(false);
 
   const card: React.CSSProperties = {
@@ -100,7 +102,7 @@ export default function ForgotForm() {
         marginBottom: 15,
       }}
     >
-      {err}
+      {displayMessage(err)}
     </div>
   );
 

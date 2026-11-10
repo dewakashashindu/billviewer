@@ -1,4 +1,6 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
 import {PermissionGate} from "@/components/WebPermissions";
 
 // ============================================================
@@ -474,7 +476,7 @@ export default function TableQrPage() {
   const [tables, setTables] = useState<TableRowData[]>([]);
   const [source, setSource] = useState<"database" | "mock" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useFeedbackState<string | null>(null,'error');
 
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -717,7 +719,7 @@ export default function TableQrPage() {
     setCustomTables((prev) => [...prev, entry]);
     setSelected((prev) => new Set(prev).add(keyOf(entry)));
     setMsg(
-      `"${name}" added and selected. If this table is not in the POS (Tbl_Tables) its QR will be marked “Not in POS” and orders from it will fail.`
+      `"${name}" added and selected. If this table is not available in the POS, its QR will be marked “Not in POS” and orders from it will not be accepted.`
     );
     setCustomName("");
   }
@@ -939,7 +941,7 @@ export default function TableQrPage() {
             {source === "mock" && (
               <span style={{ color: BROWN, fontWeight: 700 }}>
                 {" "}
-                (Mock data — database not configured)
+                (Sample data — service unavailable)
               </span>
             )}
           </p>
@@ -967,7 +969,7 @@ export default function TableQrPage() {
             fontSize: 13,
           }}
         >
-          {error} — you can still build cards from the Custom Name field below.
+          {displayMessage(error)} — you can still build cards from the Custom Name field below.
         </div>
       )}
 
@@ -1124,7 +1126,7 @@ export default function TableQrPage() {
                     <span style={{ flex: 1 }} />
                     {source === "database" && !t.takeaway && tableExists[keyOf(t)] === false && (
                       <span
-                        title="This table number is not in the POS (Tbl_Tables, Enable=1). Orders from its QR will fail with 'Table not found'."
+                        title="This table is not available in the POS. Orders from its QR cannot be accepted."
                         style={{
                           fontSize: 9.5,
                           fontWeight: 800,

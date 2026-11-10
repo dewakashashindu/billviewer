@@ -53,6 +53,16 @@ const fmtOptional = (n: number | null | undefined) => n == null ? "—" : fmtAmt
 const fmtAmt = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// The spending source is the same bill-level value used in the existing report.
+const avgSales = (spending: number, pax: number) => pax > 0 ? fmtAmt(spending / pax) : "—";
+function byDate(bills: PaxBillRow[]) {
+  const groups = new Map<string, PaxBillRow[]>();
+  for (const b of bills) { const rows=groups.get(b.date) ?? []; rows.push(b); groups.set(b.date, rows); }
+  return Array.from(groups, ([date, rows]) => ({date, rows, pax: rows.reduce((n,b)=>n+b.totalPax,0), spending: rows.reduce((n,b)=>n+b.totalSpending,0)}))
+    .sort((a,b)=>a.date.split('/').reverse().join('-').localeCompare(b.date.split('/').reverse().join('-')));
+}
+const dateSpending = (l: PaxLocation, date: string) => l.bills.filter(b=>b.date===date).reduce((n,b)=>n+b.totalSpending,0);
+
 // -- analytics rows --
 export function paxToRows(d: PaxData): Array<{ date?: string; billNo?: string; desc: string; value: number; loc?: string }> {
   const out: Array<{ date?: string; billNo?: string; desc: string; value: number; loc?: string }> = [];
@@ -64,20 +74,23 @@ export function paxToRows(d: PaxData): Array<{ date?: string; billNo?: string; d
 
 // -- search filter --
 export function filterPax(d: PaxData, q0: string): PaxData {
-  const q = q0.trim().toLowerCase();
-  if (!q) return d;
-  const locationGroups = (d.locationGroups ?? [])
-    .map((l) => ({
-      ...l,
-      summary: (l.summary ?? []).filter((r) =>
-        `${r.date} ${l.locCode} ${l.locName}`.toLowerCase().includes(q)
-      ),
-      bills: (l.bills ?? []).filter((r) =>
-        `${r.billNo} ${r.date} ${l.locCode} ${l.locName}`.toLowerCase().includes(q)
-      ),
-    }))
-    .filter((l) => l.summary.length > 0 || l.bills.length > 0);
-  return { ...d, locationGroups };
+  const q=q0.trim().toLowerCase(); if(!q)return d;
+  const locationGroups=d.locationGroups.map(l=>{
+    const locationMatch=`${l.locCode} ${l.locName}`.toLowerCase().includes(q);
+    const bills=l.bills.filter(b=>locationMatch || `${b.billNo} ${b.date}`.toLowerCase().includes(q));
+    const dates=new Set(bills.map(b=>b.date));
+    const summary=l.summary.filter(r=>locationMatch || dates.has(r.date) || r.date.toLowerCase().includes(q));
+    // When searching by bill, retain the corresponding complete date so summary and detail agree.
+    const selectedDates=new Set(summary.map(r=>r.date));
+    const allBills=l.bills.filter(b=>selectedDates.has(b.date));
+    const totalPax=summary.reduce((n,r)=>n+r.totalPax,0), totalBills=summary.reduce((n,r)=>n+r.totalBills,0);
+    const totalSpending=allBills.reduce((n,b)=>n+b.totalSpending,0);
+    const optional=(key:'localPax'|'foreignPax')=>summary.some(r=>r[key]==null)?null:summary.reduce((n,r)=>n+(r[key]??0),0);
+    return {...l,summary,bills:allBills,totals:{localPax:optional('localPax'),foreignPax:optional('foreignPax'),totalPax,totalBills,totalSpending,avgPax:totalBills?totalPax/totalBills:0,avgSpending:totalPax?totalSpending/totalPax:0}};
+  }).filter(l=>l.summary.length>0);
+  const totalPax=locationGroups.reduce((n,l)=>n+l.totals.totalPax,0),totalBills=locationGroups.reduce((n,l)=>n+l.totals.totalBills,0),totalSpending=locationGroups.reduce((n,l)=>n+l.totals.totalSpending,0);
+  const optional=(key:'localPax'|'foreignPax')=>locationGroups.some(l=>l.totals[key]==null)?null:locationGroups.reduce((n,l)=>n+(l.totals[key]??0),0);
+  return {locationGroups,grand:{localPax:optional('localPax'),foreignPax:optional('foreignPax'),totalPax,totalBills,totalSpending,avgPax:totalBills?totalPax/totalBills:0,avgSpending:totalPax?totalSpending/totalPax:0}};
 }
 
 // -- flat rows for PDF --
@@ -192,20 +205,21 @@ export default function PaxCountReport({ report }: { report: PaxData }) {
 
           <SectionTable
             head="Average Numbers Of Pax Per (Summary)"
-            cols={["Date", "Local Pax", "Foreign Pax", "Total Pax", "Total Bills", "Average Pax Per Bill"]}
+            cols={["Date", "Local Pax", "Foreign Pax", "Total Pax", "Total Bills", "Average Pax Per Bill", "Average Sales"]}
             rows={[
-              ...l.summary.map((r) => [r.date, fmtOptional(r.localPax), fmtOptional(r.foreignPax), r.totalPax, r.totalBills, r.avgPax] as Array<string | number>),
-              ["Total", fmtOptional(l.totals.localPax), fmtOptional(l.totals.foreignPax), l.totals.totalPax, l.totals.totalBills, l.totals.avgPax],
+              ...l.summary.map((r) => [r.date, fmtOptional(r.localPax), fmtOptional(r.foreignPax), r.totalPax, r.totalBills, r.avgPax, avgSales(dateSpending(l,r.date),r.totalPax)] as Array<string | number>),
+              ["Total", fmtOptional(l.totals.localPax), fmtOptional(l.totals.foreignPax), l.totals.totalPax, l.totals.totalBills, l.totals.avgPax, avgSales(l.totals.totalSpending,l.totals.totalPax)],
             ]}
           />
-          <SectionTable
-            head="Average Spending On Pax"
-            cols={["Date", "Bill No", "Total Pax", "Total Spending", "Average Spending On Pax"]}
+          <div style={{marginTop:16,fontWeight:800,color:NAVY}}>Average Spending On Pax</div>
+          {byDate(l.bills).map(day=><SectionTable key={day.date} head={day.date}
+            cols={["Bill No", "Total Pax", "Total Spending", "Average Spending On Pax"]}
             rows={[
-              ...l.bills.map((b) => [b.date, b.billNo, b.totalPax, b.totalSpending, b.avgSpending] as Array<string | number>),
-              ["Total", "", l.totals.totalPax, l.totals.totalSpending, l.totals.avgSpending],
-            ]}
-          />
+              ...day.rows.map(b=>[b.billNo,b.totalPax,b.totalSpending,b.totalPax>0?fmtAmt(b.avgSpending):"—"]),
+              ["Date Total",day.pax,day.spending,avgSales(day.spending,day.pax)],
+            ]} />)}
+          <SectionTable head="Location Total" cols={["", "Total Pax", "Total Spending", "Average Spending On Pax"]}
+            rows={[["Total",l.totals.totalPax,l.totals.totalSpending,avgSales(l.totals.totalSpending,l.totals.totalPax)]]} />
         </div>
       ))}
       <div
@@ -308,7 +322,8 @@ export function PaxCountPdfDocument({
               <Text style={[pStyles.th, { width: 60 }, pStyles.right]}>Foreign Pax</Text>
               <Text style={[pStyles.th, { width: 60 }, pStyles.right]}>Total Pax</Text>
               <Text style={[pStyles.th, { width: XW.c }, pStyles.right]}>Total Bills</Text>
-              <Text style={[pStyles.th, { width: XW.d }, pStyles.right]}>Avg Pax Per Bill</Text>
+              <Text style={[pStyles.th, { width: 85 }, pStyles.right]}>Avg Pax Per Bill</Text>
+              <Text style={[pStyles.th, { width: 75 }, pStyles.right]}>Average Sales</Text>
             </View>
             {l.summary.map((r, i) => (
               <View style={pStyles.row} key={i}>
@@ -317,7 +332,8 @@ export function PaxCountPdfDocument({
                 <Text style={[pStyles.td, { width: 60 }, pStyles.right]}>{fmtOptional(r.foreignPax)}</Text>
                 <Text style={[pStyles.td, { width: 60 }, pStyles.right]}>{fmtAmt(r.totalPax)}</Text>
                 <Text style={[pStyles.td, { width: XW.c }, pStyles.right]}>{fmtAmt(r.totalBills)}</Text>
-                <Text style={[pStyles.td, { width: XW.d }, pStyles.right]}>{fmtAmt(r.avgPax)}</Text>
+                <Text style={[pStyles.td, { width: 85 }, pStyles.right]}>{fmtAmt(r.avgPax)}</Text>
+                <Text style={[pStyles.td, { width: 75 }, pStyles.right]}>{avgSales(dateSpending(l,r.date),r.totalPax)}</Text>
               </View>
             ))}
             <View style={pStyles.totalRow}>
@@ -326,32 +342,18 @@ export function PaxCountPdfDocument({
               <Text style={[pStyles.td, { width: 60 }, pStyles.right, pStyles.bold]}>{fmtOptional(l.totals.foreignPax)}</Text>
               <Text style={[pStyles.td, { width: 60 }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalPax)}</Text>
               <Text style={[pStyles.td, { width: XW.c }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalBills)}</Text>
-              <Text style={[pStyles.td, { width: XW.d }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.avgPax)}</Text>
+              <Text style={[pStyles.td, { width: 85 }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.avgPax)}</Text>
+              <Text style={[pStyles.td, { width: 75 }, pStyles.right, pStyles.bold]}>{avgSales(l.totals.totalSpending,l.totals.totalPax)}</Text>
             </View>
 
             <Text style={pStyles.section}>Average Spending On Pax</Text>
-            <View style={pStyles.row}>
-              <Text style={[pStyles.th, { width: XW.a }]}>Date</Text>
-              <Text style={[pStyles.th, { width: XW.b }]}>BillNo</Text>
-              <Text style={[pStyles.th, { width: XW.c }, pStyles.right]}>Total Pax</Text>
-              <Text style={[pStyles.th, { width: XW.d }, pStyles.right]}>Total Spending</Text>
-              <Text style={[pStyles.th, { width: XW.e }, pStyles.right]}>Avg Spending</Text>
-            </View>
-            {l.bills.map((b, i) => (
-              <View style={pStyles.row} key={i}>
-                <Text style={[pStyles.td, { width: XW.a }]}>{b.date}</Text>
-                <Text style={[pStyles.td, { width: XW.b }]}>{b.billNo}</Text>
-                <Text style={[pStyles.td, { width: XW.c }, pStyles.right]}>{fmtAmt(b.totalPax)}</Text>
-                <Text style={[pStyles.td, { width: XW.d }, pStyles.right]}>{fmtAmt(b.totalSpending)}</Text>
-                <Text style={[pStyles.td, { width: XW.e }, pStyles.right]}>{fmtAmt(b.avgSpending)}</Text>
-              </View>
-            ))}
-            <View style={pStyles.totalRow}>
-              <Text style={[pStyles.td, { width: XW.a + XW.b }, pStyles.bold]}>Total</Text>
-              <Text style={[pStyles.td, { width: XW.c }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalPax)}</Text>
-              <Text style={[pStyles.td, { width: XW.d }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.totalSpending)}</Text>
-              <Text style={[pStyles.td, { width: XW.e }, pStyles.right, pStyles.bold]}>{fmtAmt(l.totals.avgSpending)}</Text>
-            </View>
+            {byDate(l.bills).map(day=><View key={day.date}>
+              <Text style={pStyles.section}>{day.date}</Text>
+              <View style={pStyles.row}>{["Bill No","Total Pax","Total Spending","Average Spending On Pax"].map((h,i)=><Text key={h} style={[pStyles.th,{width:[180,80,120,150][i]}, ...(i?[pStyles.right]:[])]}>{h}</Text>)}</View>
+              {day.rows.map((b,i)=><View style={pStyles.row} key={i}><Text style={[pStyles.td,{width:180}]}>{b.billNo}</Text><Text style={[pStyles.td,{width:80},pStyles.right]}>{fmtAmt(b.totalPax)}</Text><Text style={[pStyles.td,{width:120},pStyles.right]}>{fmtAmt(b.totalSpending)}</Text><Text style={[pStyles.td,{width:150},pStyles.right]}>{avgSales(b.totalSpending,b.totalPax)}</Text></View>)}
+              <View style={pStyles.totalRow}><Text style={[pStyles.td,{width:180},pStyles.bold]}>Date Total</Text><Text style={[pStyles.td,{width:80},pStyles.right,pStyles.bold]}>{fmtAmt(day.pax)}</Text><Text style={[pStyles.td,{width:120},pStyles.right,pStyles.bold]}>{fmtAmt(day.spending)}</Text><Text style={[pStyles.td,{width:150},pStyles.right,pStyles.bold]}>{avgSales(day.spending,day.pax)}</Text></View>
+            </View>)}
+            <View style={pStyles.totalRow}><Text style={[pStyles.td,{width:180},pStyles.bold]}>Location Total</Text><Text style={[pStyles.td,{width:80},pStyles.right,pStyles.bold]}>{fmtAmt(l.totals.totalPax)}</Text><Text style={[pStyles.td,{width:120},pStyles.right,pStyles.bold]}>{fmtAmt(l.totals.totalSpending)}</Text><Text style={[pStyles.td,{width:150},pStyles.right,pStyles.bold]}>{avgSales(l.totals.totalSpending,l.totals.totalPax)}</Text></View>
           </View>
         ))}
         <View style={pStyles.grandRow}>

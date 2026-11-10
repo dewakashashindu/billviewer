@@ -1,4 +1,6 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
 
 // ============================================================
 // LOCATION: components/dashboard/DashboardOpsSection.tsx  (ALUTH FILE)
@@ -153,7 +155,7 @@ export default function DashboardOpsSection({
   const [fetched, setFetched] = useState<DashboardOpsData | null>(null);
   const [demo, setDemo] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useFeedbackState<string | null>(null,'error');
   const [runId, setRunId] = useState(1);
   const paneRef = useRef<HTMLDivElement | null>(null);
   const locationInitialized = useRef(false);
@@ -283,14 +285,14 @@ export default function DashboardOpsSection({
               marginBottom: 11,
             }}
           >
-            <b>Demo data</b> — the database is not connected yet, so sample numbers are shown.
+            <b>Demo data</b> — sample numbers are shown while the service is unavailable.
           </div>
         )}
 
         {busy ? (
           <LoadingBlock text="Loading live operations…" />
         ) : error ? (
-          <EmptyBlock text={error} />
+          <EmptyBlock text={displayMessage(error)} />
         ) : !data ? (
           <EmptyBlock />
         ) : (

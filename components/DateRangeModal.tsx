@@ -1,4 +1,6 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
 
 // ============================================================
 // Date range popup — report ekak click kalama wadinna one modal eka
@@ -42,14 +44,14 @@ export default function DateRangeModal({
   const now = new Date();
   const [from, setFrom] = useState(iso(new Date(now.getFullYear(), 0, 1)));
   const [to, setTo] = useState(iso(now));
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useFeedbackState<string | null>(null,'error');
   const [loc, setLoc] = useState(""); // "" = All Locations
   const [extraSel, setExtraSel] = useState<{ param: string; value: string }>({
     param: "",
     value: "",
   });
   const [paymentModes, setPaymentModes] = useState<{ value: string; label: string }[]>([]);
-  const [paymentModesError, setPaymentModesError] = useState("");
+  const [paymentModesError, setPaymentModesError] = useFeedbackState<string>("",'error');
   const extra =
     filter && extraSel.param === filter.param
       ? extraSel.value
@@ -395,7 +397,7 @@ export default function DateRangeModal({
                     </option>
                   ))}
                 </select>
-                {filter.param === "pm" && paymentModesError && <p role="alert" style={{ color: "#b91c1c", fontSize: 12 }}>{paymentModesError}</p>}
+                {filter.param === "pm" && paymentModesError && <p role="alert" style={{ color: "#b91c1c", fontSize: 12 }}>{displayMessage(paymentModesError)}</p>}
               </div>
             )}
 
@@ -509,7 +511,7 @@ export default function DateRangeModal({
                   fontWeight: 500,
                 }}
               >
-                {err}
+                {displayMessage(err)}
               </p>
             )}
 

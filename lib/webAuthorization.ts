@@ -25,7 +25,6 @@ export async function loadWebAuthorization(session:SessionUser){
     pool.request().query('SELECT RTRIM(LocCode) AS code,RTRIM(MainLoc) AS parent,SubLoc,Enable FROM dbo.Tbl_LocationMaster')
   ]);
   if(users.recordset.length!==1 || !users.recordset[0].enabled)throw new AccessDeniedError();
-  const home=clean(users.recordset[0].homeLocation);
   const permissions=new Set<string>(),locations=new Set<string>(),seen=new Set<string>();
   let legacyReports:string|null=null;
   let hasIndividualReports=false;
@@ -51,11 +50,12 @@ export async function loadWebAuthorization(session:SessionUser){
     }
   }
   const defaults=assigned.recordset.filter(r=>r.IsDefault);
-  if(defaults.length!==1 || clean(defaults[0].code).toUpperCase()!==home.toUpperCase())throw new AccessDeniedError();
-  const mainLocations=new Set<string>();
-  for(const row of assigned.recordset){const id=clean(row.code);const match=master.recordset.filter(m=>clean(m.code).toUpperCase()===id.toUpperCase());if(!id||match.length!==1||!match[0].Enable||match[0].SubLoc)throw new AccessDeniedError();mainLocations.add(clean(match[0].code));locations.add(clean(match[0].code));}
+  if(defaults.length!==1)throw new AccessDeniedError();
+  const defaultCode=clean(defaults[0].code);
+  const mainLocations=new Set<string>(), seenLocations=new Set<string>();
+  for(const row of assigned.recordset){const id=clean(row.code);const match=master.recordset.filter(m=>clean(m.code).toUpperCase()===id.toUpperCase());if(!id||seenLocations.has(id.toUpperCase())||match.length!==1||!match[0].Enable||match[0].SubLoc)throw new AccessDeniedError();seenLocations.add(id.toUpperCase());mainLocations.add(clean(match[0].code));locations.add(clean(match[0].code));}
   for(const row of master.recordset){if(row.Enable&&row.SubLoc&&[...mainLocations].some(m=>m.toUpperCase()===clean(row.parent).toUpperCase()))locations.add(clean(row.code));}
-  return {permissions,locations,mainLocations,defaultLocation:home};
+  return {permissions,locations,mainLocations,defaultLocation:[...mainLocations].find(code=>code.toUpperCase()===defaultCode.toUpperCase())!};
 }
 export async function requireWebPermission(session:SessionUser,key:string){
   if(!WEB_ACCESS_KEYS.has(key))throw new AccessDeniedError();

@@ -1,4 +1,5 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
 
 // ============================================================
 // LOCATION: components/ReportToolbar.tsx
@@ -175,7 +176,7 @@ export default function ReportToolbar({
   const pdfDocument = reportPermissions.includes(`report-${params?.reportId}:PRINT`) ? suppliedPdfDocument : undefined;
   const [zoom, setZoom] = useState(100);
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const [shareMsg, setShareMsg] = useFeedbackState<string | null>(null,'status');
   const [pdfPrep, setPdfPrep] = useState<{
     status: "idle" | "building" | "ready" | "error";
     blob: Blob | null;

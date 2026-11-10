@@ -1,4 +1,5 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -852,7 +853,7 @@ function BillContent() {
   const searchParams = useSearchParams();
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useFeedbackState<string | null>(null,'error');
   const [showPromo, setShowPromo] = useState(false);
 
   useEffect(() => {

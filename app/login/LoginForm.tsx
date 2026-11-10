@@ -1,4 +1,6 @@
 "use client";
+import {useFeedbackState} from "@/components/FeedbackPopup";
+import {displayMessage} from "@/lib/displayMessage";
 
 // ============================================================
 // LOCATION: app/login/LoginForm.tsx
@@ -47,7 +49,7 @@ export default function LoginForm() {
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useFeedbackState<string | null>(null,'error');
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -221,7 +223,7 @@ export default function LoginForm() {
               marginBottom: 15,
             }}
           >
-            {err}
+            {displayMessage(err)}
           </div>
         )}
 
