@@ -1,7 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import sql from 'mssql';
 import {getPool,isDbConfigured} from '@/lib/db';
-import {verifySessionValue,hashPassword,isAdminSession,SESSION_COOKIE} from '@/lib/auth';
+import {verifySessionValue,hashPassword,SESSION_COOKIE} from '@/lib/auth';
 import {requireWebPermission} from '@/lib/webAuthorization';
 
 const clean=(v:unknown)=>typeof v==='string'?v.trim():'';
@@ -9,9 +9,6 @@ async function authorize(req:NextRequest,action:'VIEW'|'SAVE'){
   const token=req.cookies.get(SESSION_COOKIE)?.value, session=token?verifySessionValue(token):null;
   if(!session)return {error:NextResponse.json({error:'Not logged in.'},{status:401})};
   if(!isDbConfigured())return {error:NextResponse.json({error:'Database is not configured.'},{status:503})};
-  let groupId=session.groupId??'';
-  if(!groupId){const r=await(await getPool()).request().input('uid',sql.Char(10),String(session.userId)).query("SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId,''))) AS GroupId FROM dbo.Tbl_UserDetails WHERE LTRIM(RTRIM(UserId))=@uid");groupId=r.recordset[0]?.GroupId??'';}
-  if(!isAdminSession({...session,groupId}))return {error:NextResponse.json({error:'Admin access required.'},{status:403})};
   try{await requireWebPermission(session,`users:${action}`);}catch{return {error:NextResponse.json({error:'Permission denied.'},{status:403})};}
   return {session};
 }
@@ -36,7 +33,7 @@ function imageOf(raw:unknown):Buffer|undefined{if(raw===undefined||raw===null||r
 async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|undefined;try{
   const auth=await authorize(req,'SAVE');if(auth.error)return auth.error;const b=await req.json();
   const loc=clean(b.locCode),id=clean(b.userId),group=clean(b.groupId),name=clean(b.userName),login=clean(b.loginNameWeb),password=typeof b.password==='string'?b.password:'';
-  if(!loc||loc.length>10||!id||id.length>10||!group||group.length>10||!name||name.length>200||login.length>50||password.length>256||(password&&password.length<4)||(password&&!login))return NextResponse.json({error:'Enter a valid location, user ID, group and user name; web passwords require a username and at least 4 characters.'},{status:400});
+  if(!loc||loc.length>10||!id||id.length>10||!group||group.length>10||!name||name.length>200||login.length>50||password.length>256||(password&&password.length<8)||(password&&!login))return NextResponse.json({error:'Enter a valid location, user ID, group and user name; web passwords require a username and at least 8 characters.'},{status:400});
   const work=b.workingLocations, defaultLocation=clean(b.defaultLocation);
   if(!Array.isArray(work)||work.length<1||work.length>200||work.some((v:unknown)=>typeof v!=='string'||!clean(v)||clean(v).length>10)||new Set(work.map((v:string)=>clean(v).toUpperCase())).size!==work.length||!defaultLocation||!work.some((v:string)=>clean(v).toUpperCase()===defaultLocation.toUpperCase()))return NextResponse.json({error:'Select working locations and exactly one default from the selected locations.'},{status:400});
   const fields:[string,number][]=[['nic',20],['remarks',250],['add1',200],['add2',200],['add3',200],['add4',200],['contact',100],['email',100]];for(const [key,max] of fields)if(clean(b[key]).length>max)return NextResponse.json({error:`${key} is too long.`},{status:400});

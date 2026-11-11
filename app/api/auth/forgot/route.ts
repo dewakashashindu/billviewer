@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
     }
 
     const code = generateOtp();
+    const otpToken = createOtpToken(`${String(user.LoginName).toLowerCase()}|${String(user.LocCode).toLowerCase()}|${String(user.UserId).toLowerCase()}`, code);
     const sent = await sendSms(
       String(user.ContNo),
       `Mila Mirissa password reset code: ${code} (valid 10 minutes)`
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
     }
 
     const out = uniformResponse();
-    out.cookies.set(OTP_COOKIE, createOtpToken(`${String(user.LoginName).toLowerCase()}|${String(user.LocCode).toLowerCase()}|${String(user.UserId).toLowerCase()}`, code), {
+    out.cookies.set(OTP_COOKIE, otpToken, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

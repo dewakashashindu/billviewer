@@ -18,14 +18,16 @@ export const UNAUTHORIZED_ERROR = "UNAUTHORIZED";
 const SESSION_DAYS = 7;
 const OTP_MINUTES = 10;
 
-/** Session cookie signing secret. */
-const SESSION_SECRET = () =>
-  process.env.SESSION_SECRET ||
-  process.env.ENCRYPTION_KEY ||
-  "MySecretKey12345";
-
-/** Password-reset OTP signing secret (own var, same fallback chain). */
-const OTP_SECRET = () => process.env.OTP_SECRET || SESSION_SECRET();
+/** Dedicated signing keys, generated as 32 random bytes encoded in hex. */
+function signingSecret(name: "SESSION_SECRET" | "OTP_SECRET"): string {
+  const value = process.env[name] ?? "";
+  if (!/^[0-9a-f]{64}$/i.test(value)) {
+    throw new Error(`${name} must be configured as 32 random bytes in hexadecimal.`);
+  }
+  return value;
+}
+const SESSION_SECRET = () => signingSecret("SESSION_SECRET");
+const OTP_SECRET = () => signingSecret("OTP_SECRET");
 
 const b64url = (buf: Buffer | string) =>
   Buffer.from(buf).toString("base64url");

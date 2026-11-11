@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
+import { SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 
 // The table identifier is selected only from this server-side allowlist.
 const tables = ["[dbo].[Tbl_Maincategory]", "[dbo].[Tbl_Subcategory1]", "[dbo].[Tbl_Subcategory2]", "[dbo].[Tbl_Subcategory3]", "[dbo].[Tbl_Subcategory4]", "[dbo].[Tbl_Subcategory5]"] as const;
@@ -12,12 +12,6 @@ async function authorize(req: NextRequest) {
   const session = token ? verifySessionValue(token) : null;
   if (!session) return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   if (!isDbConfigured()) return NextResponse.json({ error: "Database is not configured. Set the DB_* environment variables." }, { status: 503 });
-  let groupId = session.groupId ?? "";
-  if (!groupId) {
-    const result = await (await getPool()).request().input("uid", sql.Char(10), String(session.userId)).query("SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId, ''))) AS GroupId FROM Tbl_UserDetails WHERE LTRIM(RTRIM(UserId)) = LTRIM(RTRIM(@uid))");
-    groupId = result.recordset[0]?.GroupId ?? "";
-  }
-  if (!isAdminSession({ ...session, groupId })) return NextResponse.json({ error: "Admin access required." }, { status: 403 });
   try { await requireWebPermission(session, `categories:${req.method==='GET'?'VIEW':req.method==='DELETE'?'DELETE':'SAVE'}`); } catch { return NextResponse.json({error:'Permission denied.'},{status:403}); }
   return null;
 }

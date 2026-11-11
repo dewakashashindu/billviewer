@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
+import { SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 
 const definitions = {
   master: { table: "[dbo].[Tbl_Unit]", code: "[UnitID]", name: "[UnitDes]", enabled: "[Enable]" },
@@ -13,12 +13,6 @@ async function authorize(req: NextRequest) {
   const session = token ? verifySessionValue(token) : null;
   if (!session) return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   if (!isDbConfigured()) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
-  let groupId = session.groupId ?? "";
-  if (!groupId) {
-    const r = await (await getPool()).request().input("uid", sql.Char(10), String(session.userId)).query("SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId,''))) AS GroupId FROM Tbl_UserDetails WHERE LTRIM(RTRIM(UserId)) = LTRIM(RTRIM(@uid))");
-    groupId = r.recordset[0]?.GroupId ?? "";
-  }
-  if (!isAdminSession({...session,groupId})) return NextResponse.json({error:'Admin access required.'},{status:403});
   try { await requireWebPermission(session, `units:${req.method==='GET'?'VIEW':req.method==='DELETE'?'DELETE':'SAVE'}`); } catch { return NextResponse.json({error:'Permission denied.'},{status:403}); }
   return null;
 }

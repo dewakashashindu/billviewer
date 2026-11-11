@@ -415,10 +415,10 @@ export default function ForgotForm() {
             />
             <button
               type="submit"
-              disabled={busy || password.length < 6 || !confirm}
+              disabled={busy || password.length < 8 || !confirm}
               style={{
                 ...btn,
-                opacity: busy || password.length < 6 || !confirm ? 0.6 : 1,
+                opacity: busy || password.length < 8 || !confirm ? 0.6 : 1,
               }}
             >
               {busy ? "Updating..." : "Update Password"}

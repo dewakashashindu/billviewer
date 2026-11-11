@@ -38,6 +38,14 @@ function IChart() {
     </svg>
   );
 }
+function IBillingControl() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 3h14v18l-3-2-4 2-4-2-3 2V3z" />
+      <path d="M8 8h8M8 12h8M8 16h4" />
+    </svg>
+  );
+}
 function IQr() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -301,14 +309,13 @@ const NAV: NavItem[] = [
   {
     key: "billing-control",
     label: "Billing Control",
-    icon: <IChart />,
+    icon: <IBillingControl />,
     children: [{ key: "billing-actions", label: "Billing Control", children: [{ key: "void-approval", label: "Void Approval", path: "/billing-control/void-approval" }] }],
   },
   {
     key: "inventory",
     label: "Inventory",
     icon: <IInventory />,
-    adminOnly: true,
     children: [
       {
         key: "inventory-reference",
@@ -343,7 +350,6 @@ const NAV: NavItem[] = [
     key: "administration",
     label: "Administration",
     icon: <IUserPlus />,
-    adminOnly: true,
     children: [{
       key: "administration-user-creation",
       label: "User Creation",
@@ -357,7 +363,6 @@ const NAV: NavItem[] = [
     key: "system-settings",
     label: "System Settings",
     icon: <IUserPlus />,
-    adminOnly: true,
     children: [{ key: "system-user-settings", label: "User Settings", children: [
       { key: "settings-access-profiles", label: "Access Profile Creation", path: "/settings/access-profiles" },
       { key: "settings-assign-profiles", label: "Assign Profiles", path: "/settings/assign-profiles" },
@@ -784,7 +789,7 @@ export default function AppShell({
     '/inventory/locations':'locations:VIEW','/inventory/categories':'categories:VIEW','/inventory/items':'items:VIEW','/inventory/units':'units:VIEW','/inventory/suppliers':'suppliers:VIEW',
     '/inventory/po':'po:VIEW','/inventory/grn':'grn:VIEW','/inventory/srn':'srn:VIEW','/inventory/damage':'damage:VIEW','/inventory/transfer-requisition':'trq:VIEW','/inventory/transfer-note':'tn:VIEW','/inventory/transfer-return':'tr:VIEW','/inventory/issue-requisition':'irq:VIEW','/inventory/issue-note':'inn:VIEW','/inventory/stock-reconciliation':'recon:VIEW',
     '/billing-control/void-approval':'void-approval:VIEW','/settings/user-groups':'groups:VIEW','/user-creation':'users:VIEW','/settings/access-profiles':'profiles:VIEW','/settings/assign-profiles':'assign:VIEW','/table-qr':'tableqr:VIEW'};
-  const visibleNav = NAV.filter(item => (item.key !== 'dashboard' || canViewDashboard) && (!item.adminOnly || Boolean(userInfo?.isAdmin)) && (!item.path || !pathPermissions[item.path] || webPermissions.includes(pathPermissions[item.path])))
+  const visibleNav = NAV.filter(item => (item.key !== 'dashboard' || canViewDashboard) && (!item.path || !pathPermissions[item.path] || webPermissions.includes(pathPermissions[item.path])))
     .map(item=>!item.children?item:{...item,children:item.children.map(cat=>({...cat,children:cat.children.filter(leaf=>leaf.reportId?reportPermissions.includes(`report-${leaf.reportId}:VIEW`):leaf.path&&pathPermissions[leaf.path]?webPermissions.includes(pathPermissions[leaf.path]):true)})).filter(cat=>cat.children.length>0)})
     .filter(item=>!item.children || item.children.length>0);
 
