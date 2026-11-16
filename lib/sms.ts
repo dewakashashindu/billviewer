@@ -75,7 +75,7 @@ export async function sendTextLkSMS(
     if (!res.ok) {
       // gateway reject — exact reason eka log ekata (token eka log wenne naha)
       console.error(
-        `[SMS] Gateway ${res.status} ${res.statusText} → to=${recipient} body=${body.slice(0, 300)}`
+        `[SMS] Gateway returned HTTP ${res.status}`
       );
       return false;
     }
@@ -91,7 +91,7 @@ export async function sendTextLkSMS(
         String(j.status) !== "201"
       ) {
         console.error(
-          `[SMS] Gateway error → to=${recipient} body=${body.slice(0, 300)}`
+          "[SMS] Gateway returned an error response"
         );
         return false;
       }
@@ -99,7 +99,7 @@ export async function sendTextLkSMS(
       /* JSON nemei — ok status eka witharai */
     }
 
-    console.log(`[SMS] Sent → to=${recipient}`);
+    console.log("[SMS] Sent successfully");
     return true;
   } catch (e) {
     console.error("[SMS] Send failed:", e);

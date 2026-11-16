@@ -6,7 +6,7 @@ import {AccessDeniedError,requireWebPermission} from '@/lib/webAuthorization';
 import {nextStockSerial} from '@/lib/stockPosting';
 export const runtime='nodejs';
 const clean=(x:unknown)=>typeof x==='string'?x.trim():'';
-async function auth(req:NextRequest,action:string){const token=req.cookies.get(SESSION_COOKIE)?.value,session=token?verifySessionValue(token):null;if(!session)throw Error('LOGIN');const access=await requireWebPermission(session,`po:${action}`);return {session,access}}
+async function auth(req:NextRequest,action:string){const token=req.cookies.get(SESSION_COOKIE)?.value,session=token?await verifySessionValue(token):null;if(!session)throw Error('LOGIN');const access=await requireWebPermission(session,`po:${action}`);return {session,access}}
 function locationAllowed(access:{locations:Set<string>},loc:string){if(!loc||loc.length>10||![...access.locations].some(x=>clean(x).toUpperCase()===loc.toUpperCase()))throw new AccessDeniedError()}
 const messages:Record<string,string>={LOGIN:'Please log in.',INVALID:'Invalid order, location or items.',LOCKED:'Order is missing, duplicated, confirmed, or has received quantities.',COUNTER:'PO numbering is missing or invalid for this location.',SERIAL:'Location serial counter is missing, duplicated or invalid.',MASTER:'Location, supplier, item or unit is missing, disabled, duplicated, or the item does not belong to the selected location.',DUPLICATE:'Order number already exists.'};
 function fail(e:unknown){console.error('PO error:',e);const m=(e as Error).message;return NextResponse.json({error:e instanceof AccessDeniedError?'Access denied.':messages[m]||'PO operation failed. Check database schema and server logs.'},{status:m==='LOGIN'?401:e instanceof AccessDeniedError?403:messages[m]?409:500})}

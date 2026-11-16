@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     const phone = normalisePhone(String(body.phone ?? ""));
     const name = String(body.name ?? "").trim().slice(0, 200);
-    const locCode = String(body.locCode ?? "").trim().slice(0, 10) || defaultLocCode();
+    const requestedLoc = String(body.locCode ?? "").trim();
     const tableNo = String(body.tableNo ?? "").trim();
     const token = String(body.t ?? "").trim();
 
@@ -67,16 +67,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /* a table QR link always carries a token — verify it when present */
-    if (tableNo && token) {
-      const access = checkTableAccess(tableNo, token);
-      if (!access.ok) {
-        return NextResponse.json(
-          { ok: false, error: access.error },
-          { status: access.status }
-        );
-      }
-    }
+    const access = checkTableAccess(tableNo, token, requestedLoc);
+    if (!access.ok) return NextResponse.json({ok:false,error:access.error},{status:access.status});
+    const locCode = access.location;
 
     /* write endpoint → tighter than the read-only lookup (40/min) */
     const limit = rateLimit(`customer-register:${clientIp(request.headers)}`, 12, 60_000);
@@ -89,6 +82,10 @@ export async function POST(request: NextRequest) {
 
     /* dev / no DB — nothing to create */
     if (!isDbConfigured()) {
+      if (process.env.NODE_ENV === "production") {
+        console.error("Customer service unavailable: database not configured");
+        return NextResponse.json({ ok: false, error: "Service temporarily unavailable." }, { status: 503 });
+      }
       return NextResponse.json({
         ok: true,
         data: { cusCode: "", cusName: name, created: false, source: "mock" },

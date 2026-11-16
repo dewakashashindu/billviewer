@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     /* 1) table token ------------------------------------------------ */
-    const access = checkTableAccess(tableNo, token);
+    const access = checkTableAccess(tableNo, token, String(body.locCode ?? ""));
     if (!access.ok) {
       return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
     }
@@ -84,10 +84,8 @@ export async function POST(request: NextRequest) {
     /* 3) place the order --------------------------------------------- */
     const result = await confirmOrder({
       tableNo,
-      tableGroup: body.tableGroup ? String(body.tableGroup) : undefined,
-      locCode: body.locCode
-        ? String(body.locCode)
-        : defaultLocCode(), // customer serial falls back to the default location
+      tableGroup: access.group || undefined,
+      locCode: access.location,
       existingInvoiceNo: body.existingInvoiceNo ? String(body.existingInvoiceNo) : undefined,
       existingTakeawayNo: body.existingTakeawayNo ? String(body.existingTakeawayNo) : undefined,
       items: Array.isArray(body.items) ? body.items : [],

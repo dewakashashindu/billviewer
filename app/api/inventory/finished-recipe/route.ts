@@ -7,7 +7,7 @@ export const runtime='nodejs';
 const clean=(v:unknown)=>typeof v==='string'?v.trim():'';
 export async function GET(req:NextRequest){
  try {
-  const token=req.cookies.get(SESSION_COOKIE)?.value, user=token?verifySessionValue(token):null;
+  const token=req.cookies.get(SESSION_COOKIE)?.value, user=token?await verifySessionValue(token):null;
   if(!user)return NextResponse.json({error:'Please log in.'},{status:401});
   const access=await requireWebPermission(user,'items:VIEW');
   const item=clean(req.nextUrl.searchParams.get('item'));

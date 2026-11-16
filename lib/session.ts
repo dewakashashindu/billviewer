@@ -9,5 +9,5 @@ import { verifySessionValue, SESSION_COOKIE, SessionUser } from "./auth";
 export async function getSessionFromRequest(): Promise<SessionUser | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
-  return token ? verifySessionValue(token) : null;
+  return token ? await verifySessionValue(token) : null;
 }

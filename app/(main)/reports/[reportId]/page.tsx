@@ -17,7 +17,7 @@ import { ComplimentaryCostReport, ComplimentaryCostPdf, filterComplimentaryCost,
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { UNAUTHORIZED_ERROR } from "@/lib/auth";
+const UNAUTHORIZED_ERROR = "UNAUTHORIZED";
 import { REPORTS_CONFIG } from "@/config/reports.config";
 import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ReportToolbar from "@/components/ReportToolbar";

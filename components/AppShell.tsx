@@ -562,11 +562,12 @@ function UserBar({
   async function logout() {
     if (typeof window !== "undefined" && window.__inventoryCanLeave && !(await window.__inventoryCanLeave("Leave without saving?"))) return;
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Logout failed");
+      router.replace("/login");
     } catch {
-      /* ignore */
+      window.dispatchEvent(new CustomEvent("app-feedback-popup", { detail: { kind: "error", message: "Unable to sign out. Please check your connection and try again." } }));
     }
-    router.replace("/login");
   }
 
   return (
@@ -764,9 +765,13 @@ export default function AppShell({
       if (loggingOut) return;
       loggingOut = true;
       try {
-        await fetch("/api/auth/logout", { method: "POST" });
-      } finally {
+        const response = await fetch("/api/auth/logout", { method: "POST" });
+        if (!response.ok) throw new Error("Logout failed");
         router.replace("/login");
+      } catch {
+        loggingOut = false;
+        lastActivity = Date.now();
+        window.dispatchEvent(new CustomEvent("app-feedback-popup", { detail: { kind: "error", message: "Automatic sign out failed. Please sign out manually or try again." } }));
       }
     };
 

@@ -781,14 +781,20 @@ export default function TableQrPage() {
         alert("Allow pop-ups for this site to print the card.");
         return;
       }
-      win.document.write(`<!doctype html><html><head><title>QR ${t.tableNo}</title>
-        <style>
-          @page { size: ${widthIn}in ${heightIn}in; margin: 0; }
-          html, body { margin: 0; padding: 0; background: #fff; }
-          img { width: ${widthIn}in; height: ${heightIn}in; display: block; }
-        </style></head>
-        <body><img src="${dataUrl}" alt="" onload="window.focus();window.print();"></body></html>`);
-      win.document.close();
+      // Use DOM text/property APIs: table numbers can come from the database and
+      // must never be interpreted as HTML in the print window.
+      const doc = win.document;
+      doc.title = `QR ${t.tableNo}`;
+      const style = doc.createElement("style");
+      style.textContent = `@page { size: ${widthIn}in ${heightIn}in; margin: 0; }
+        html, body { margin: 0; padding: 0; background: #fff; }
+        img { width: ${widthIn}in; height: ${heightIn}in; display: block; }`;
+      doc.head.appendChild(style);
+      const image = doc.createElement("img");
+      image.alt = "";
+      image.onload = () => { win.focus(); win.print(); };
+      image.src = dataUrl;
+      doc.body.appendChild(image);
     } catch {
       alert("Print failed. Please try again.");
     } finally {

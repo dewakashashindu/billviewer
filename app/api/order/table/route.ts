@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const access = checkTableAccess(tableNo, token);
+    const access = checkTableAccess(tableNo, token, params.get("loc") ?? "");
     if (!access.ok) {
       return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
     }

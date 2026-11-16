@@ -15,7 +15,7 @@ export const SESSION_COOKIE = "mcf_session";
 export const OTP_COOKIE = "mcf_otp";
 
 export const UNAUTHORIZED_ERROR = "UNAUTHORIZED";
-const SESSION_DAYS = 7;
+const SESSION_SECONDS = 24 * 60 * 60;
 const OTP_MINUTES = 10;
 
 /** Dedicated signing keys, generated as 32 random bytes encoded in hex. */
@@ -64,6 +64,7 @@ export interface SessionUser {
   loginName: string;
   userName: string;
   groupId?: string;
+  sessionId: string;
   exp: number; // epoch seconds
 }
 
@@ -89,13 +90,13 @@ export function isAdminSession(
 export function createSessionValue(u: Omit<SessionUser, "exp">): string {
   const payload: SessionUser = {
     ...u,
-    exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 24 * 3600,
+    exp: Math.floor(Date.now() / 1000) + SESSION_SECONDS,
   };
   const body = b64url(JSON.stringify(payload));
   return `${body}.${hmac(body, SESSION_SECRET())}`;
 }
 
-export function verifySessionValue(value: string): SessionUser | null {
+export function verifySignedSessionValue(value: string): SessionUser | null {
   const [body, sig] = String(value || "").split(".");
   if (!body || !sig) return null;
   const expected = hmac(body, SESSION_SECRET());
@@ -108,12 +109,20 @@ export function verifySessionValue(value: string): SessionUser | null {
     const payload = JSON.parse(
       Buffer.from(body, "base64url").toString("utf8")
     ) as SessionUser;
-    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000))
+    if (!payload.userId || typeof payload.userId !== "string" || payload.userId.length > 10 || typeof payload.sessionId !== "string" || !/^[0-9a-f]{64}$/.test(payload.sessionId) || !Number.isSafeInteger(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000))
       return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+/** Verify both the signed cookie and its live, enabled database session. */
+export async function verifySessionValue(value: string): Promise<SessionUser | null> {
+  const user = verifySignedSessionValue(value);
+  if (!user) return null;
+  const { checkWebSession } = await import("./webSession");
+  return await checkWebSession(user) ? user : null;
 }
 
 // ── OTP token (stateless — cookie eke HMAC witharai) ──

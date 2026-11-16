@@ -9,7 +9,7 @@ import { verifySessionValue, isAdminSession, SESSION_COOKIE } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const user = token ? verifySessionValue(token) : null;
+  const user = token ? await verifySessionValue(token) : null;
   if (!user) {
     return NextResponse.json({ success: false }, { status: 401 });
   }

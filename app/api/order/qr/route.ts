@@ -14,14 +14,17 @@ import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import { requireSession, UnauthorizedError } from "@/lib/actionAuth";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { encryptTableId, encryptTakeawayId, TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
+import { TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
+import { signTableToken } from "@/lib/orderToken";
 import { QR_MENU_BASE_URL } from "@/config/qr.config";
+import { AccessDeniedError, requireWebPermission, requireWebLocation } from "@/lib/webAuthorization";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireSession();
+    const session = await requireSession();
+    const access = await requireWebPermission(session, "tableqr:PRINT");
 
     const body = await request.json().catch(() => null);
     if (!body || !Array.isArray(body.tables)) {
@@ -32,6 +35,16 @@ export async function POST(request: NextRequest) {
     }
 
     const defaultLocCode = String(body.locCode ?? "").trim();
+    for (const table of body.tables) {
+      if (!table || typeof table !== "object") {
+        return NextResponse.json({ok:false,error:"Invalid table."},{status:400});
+      }
+      const location = String(table.locCode ?? defaultLocCode).trim();
+      if (!location || location.length > 10) {
+        return NextResponse.json({ok:false,error:"Select a valid location."},{status:400});
+      }
+      requireWebLocation(access, location);
+    }
 
     const urls: {
       tableNo: string;
@@ -57,14 +70,8 @@ export async function POST(request: NextRequest) {
           const tableGroup = takeaway ? "" : String(t.tableGroup ?? "").trim();
           const locCode = String(t.locCode ?? defaultLocCode).trim();
 
-          const id = takeaway
-            ? encryptTakeawayId(locCode)
-            : encryptTableId(tableNo, tableGroup, locCode);
-          const fallbackParams = new URLSearchParams({ table: tableNo });
-          if (locCode) fallbackParams.set("loc", locCode);
-          const url = id
-            ? `${QR_MENU_BASE_URL}?id=${encodeURIComponent(id)}`
-            : `${QR_MENU_BASE_URL}?${fallbackParams.toString()}`;
+          const id = signTableToken(tableNo, locCode, tableGroup);
+          const url = `${QR_MENU_BASE_URL}?id=${encodeURIComponent(id)}`;
 
           return { tableNo, tableGroup, locCode, id, url, takeaway };
         }
@@ -106,6 +113,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof AccessDeniedError) {
+      return NextResponse.json({ ok: false, error: "Access denied" }, { status: 403 });
+    }
     if (error instanceof UnauthorizedError) {
       return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
     }

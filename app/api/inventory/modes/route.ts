@@ -10,7 +10,7 @@ const config = {
 } as const;
 type Kind = keyof typeof config;
 async function authorize(req: NextRequest) {
-  const token = req.cookies.get(SESSION_COOKIE)?.value; const session = token ? verifySessionValue(token) : null;
+  const token = req.cookies.get(SESSION_COOKIE)?.value; const session = token ? await verifySessionValue(token) : null;
   if (!session) return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   if (!isDbConfigured()) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
   let groupId = session.groupId ?? "";

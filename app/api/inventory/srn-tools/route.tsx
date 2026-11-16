@@ -6,7 +6,7 @@ import { getPool, isDbConfigured } from "@/lib/db";
 import { SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
 import {AccessDeniedError,requireWebPermission} from "@/lib/webAuthorization";
 export const runtime="nodejs";
-async function authorize(req:NextRequest,action:string,loc:string){const token=req.cookies.get(SESSION_COOKIE)?.value;const session=token?verifySessionValue(token):null;if(!session)throw Error('LOGIN');const access=await requireWebPermission(session,`srn:${action}`);if(loc&&![...access.locations].some(x=>x.trim().toUpperCase()===loc.toUpperCase()))throw new AccessDeniedError();return access}
+async function authorize(req:NextRequest,action:string,loc:string){const token=req.cookies.get(SESSION_COOKIE)?.value;const session=token?await verifySessionValue(token):null;if(!session)throw Error('LOGIN');const access=await requireWebPermission(session,`srn:${action}`);if(loc&&![...access.locations].some(x=>x.trim().toUpperCase()===loc.toUpperCase()))throw new AccessDeniedError();return access}
 
 const clean=(x:unknown)=>typeof x==="string"?x.trim():"";
 function failed(e:unknown){if(e instanceof AccessDeniedError)return NextResponse.json({error:"Access denied."},{status:403});if((e as Error).message==="LOGIN")return NextResponse.json({error:"Please log in."},{status:401});console.error("SRN tools error:",e);return NextResponse.json({error:"Unable to complete request. Check database connection, permissions and schema."},{status:500})}

@@ -8,7 +8,7 @@ const textColumns=['LocCode','TableNo','StewId','ItemCode','ItemDes','KOTBOT','O
 const numColumns=['SerialNo','RefNo','Qty','SalesPrice','PrintedQty','ItmCost','TRACENO','BIRTHNO'] as const;
 const asText=(s:unknown)=>typeof s==='string'?s.trim():'';
 async function authorize(req:NextRequest,action:'VIEW'|'APPROVE'){
- const token=req.cookies.get(SESSION_COOKIE)?.value,session=token?verifySessionValue(token):null;if(!session)return null;
+ const token=req.cookies.get(SESSION_COOKIE)?.value,session=token?await verifySessionValue(token):null;if(!session)return null;
  const access=await requireWebPermission(session,'void-approval:VIEW');
  if(action==='APPROVE'&&!access.permissions.has('void-approval:APPROVE'))throw new AccessDeniedError();
  return access;

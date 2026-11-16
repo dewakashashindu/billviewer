@@ -6,7 +6,7 @@ import {requireWebPermission} from '@/lib/webAuthorization';
 
 const clean=(v:unknown)=>typeof v==='string'?v.trim():'';
 async function authorize(req:NextRequest,action:'VIEW'|'SAVE'){
-  const token=req.cookies.get(SESSION_COOKIE)?.value, session=token?verifySessionValue(token):null;
+  const token=req.cookies.get(SESSION_COOKIE)?.value, session=token?await verifySessionValue(token):null;
   if(!session)return {error:NextResponse.json({error:'Not logged in.'},{status:401})};
   if(!isDbConfigured())return {error:NextResponse.json({error:'Database is not configured.'},{status:503})};
   try{await requireWebPermission(session,`users:${action}`);}catch{return {error:NextResponse.json({error:'Permission denied.'},{status:403})};}
@@ -53,6 +53,7 @@ async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|und
   if(password)r.input('pw',sql.VarChar(255),hashPassword(password));if(picture)r.input('picture',sql.VarBinary(sql.MAX),picture);
   if(creating){await r.query(`INSERT INTO dbo.Tbl_UserDetails (LOCCODE,UserId,NIC,LogName,PSW,GroupId,UserName,Rmks,Add1,Add2,Add3,Add4,ContNo,Email,DOB,DOJ,DOL,CreateUser,Picture,Enable,ByPassGroupTable,Password,LoginName,Uploaded,PasswordWeb,LoginNameWeb) VALUES (@loc,@id,@nic,' ',' ',@group,@name,@remarks,@add1,@add2,@add3,@add4,@contact,@email,@dob,@doj,@dol,@creator,${picture?'@picture':'NULL'},@enable,0,' ',' ',0,${password?'@pw':"' '"},@login)`);}
   else {await r.query(`UPDATE dbo.Tbl_UserDetails SET NIC=@nic,GroupId=@group,UserName=@name,Rmks=@remarks,Add1=@add1,Add2=@add2,Add3=@add3,Add4=@add4,ContNo=@contact,Email=@email,DOB=@dob,DOJ=@doj,DOL=@dol,Enable=@enable,LoginNameWeb=@login ${password?',PasswordWeb=@pw':''} ${picture?',Picture=@picture':''} WHERE LTRIM(RTRIM(LOCCODE))=@loc AND LTRIM(RTRIM(UserId))=@id`);}
+  if (!creating && (password || !b.enabled)) await new sql.Request(tx).input('id',sql.Char(10),id).query('DELETE FROM dbo.Tbl_WebSession WHERE UserID=@id');
   // Serialize the complete replacement; clearing before inserting prevents a second
   // default even with the supplied multi-row trigger. Rollback restores old grants.
   await new sql.Request(tx).input('id',sql.Char(10),id).query('SELECT LocationID FROM dbo.Tbl_UserLocationAccess WITH (UPDLOCK,HOLDLOCK) WHERE UserID=@id');

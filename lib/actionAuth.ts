@@ -35,7 +35,7 @@ export class UnauthorizedError extends Error {
 export async function requireSession(): Promise<SessionUser> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
-  const session = token ? verifySessionValue(token) : null;
+  const session = token ? await verifySessionValue(token) : null;
   if (!session) throw new UnauthorizedError();
   return session;
 }

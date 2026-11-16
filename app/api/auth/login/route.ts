@@ -9,21 +9,16 @@ import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import {
   verifyPassword,
-  createSessionValue,
   isAdminSession,
   SESSION_COOKIE,
 } from "@/lib/auth";
-import {
-  rateLimit,
-  tooMany,
-  registerHit,
-  resetKey,
-  clientIp,
-} from "@/lib/rateLimit";
+import {clientIp} from "@/lib/rateLimit";
+import {issueWebSession} from "@/lib/webSession";
+import {authLimit} from "@/lib/sqlAuthSecurity";
 
 /** Per-IP: how many login POSTs in the window (any outcome). */
 const IP_LIMIT = 30;
-/** Per-account: how many FAILED logins before a temporary lock. */
+/** Per-account attempts, including successful attempts, in the window. */
 const FAIL_LIMIT = 5;
 /** Both windows — 15 minutes. */
 const WINDOW_MS = 15 * 60_000;
@@ -35,37 +30,14 @@ export async function POST(req: NextRequest) {
   const loginName = String(body?.loginName ?? body?.username ?? "").trim();
   const password = String(body?.password ?? "");
 
-  const ip = clientIp(req.headers);
-  const ipLimit = rateLimit(`login-ip:${ip}`, IP_LIMIT, WINDOW_MS);
-  if (!ipLimit.allowed) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Too many sign-in attempts. Please try again later.",
-      },
-      { status: 429, headers: { "Retry-After": String(ipLimit.retryAfterSeconds) } }
-    );
-  }
-
-  const failKey = `login-fail:${ip}:${loginName.toLowerCase()}`;
-  const locked = tooMany(failKey, FAIL_LIMIT, WINDOW_MS);
-  if (!locked.allowed) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Too many failed sign-in attempts. Please try again later.",
-      },
-      { status: 429, headers: { "Retry-After": String(locked.retryAfterSeconds) } }
-    );
-  }
-
-  /** Count this as a failed attempt (used by every 401 path). */
-  const fail = () => {
-    registerHit(failKey, WINDOW_MS);
-    return NextResponse.json(INVALID, { status: 401 });
-  };
-
   try {
+    const ip = clientIp(req.headers);
+    const ipLimit = await authLimit(`login-ip:${ip}`, IP_LIMIT, WINDOW_MS / 1000);
+    const accountLimit = loginName && loginName.length <= 50
+      ? await authLimit(`login-account:${loginName.toLowerCase()}`, FAIL_LIMIT, WINDOW_MS / 1000)
+      : {allowed:true,retryAfterSeconds:0};
+    const blocked = !ipLimit.allowed ? ipLimit : !accountLimit.allowed ? accountLimit : null;
+    if (blocked) return NextResponse.json({success:false,error:"Too many sign-in attempts. Please try again later."},{status:429,headers:{"Retry-After":String(blocked.retryAfterSeconds)}});
     if (!loginName || loginName.length > 50 || !password || password.length > 256) {
       return NextResponse.json(
         { success: false, error: "Username and password are required" },
@@ -97,11 +69,9 @@ export async function POST(req: NextRequest) {
     `);
 
     const user = res.recordset[0];
-    if (res.recordset.length !== 1 || !user || !user.Enable) return fail();
-    if (!verifyPassword(password, String(user.Password ?? ""))) return fail();
+    if (res.recordset.length !== 1 || !user || !user.Enable) return NextResponse.json(INVALID, { status: 401 });
+    if (!verifyPassword(password, String(user.Password ?? ""))) return NextResponse.json(INVALID, { status: 401 });
 
-    /* Success — clear the failure counter for this account. */
-    resetKey(failKey);
 
     const sessionPayload = {
       userId: String(user.UserId),
@@ -110,7 +80,7 @@ export async function POST(req: NextRequest) {
       groupId: String(user.GroupId ?? ""),
     };
 
-    const token = createSessionValue(sessionPayload);
+    const token = await issueWebSession(sessionPayload, String(user.Password ?? ""));
 
     const out = NextResponse.json({
       success: true,
@@ -127,7 +97,7 @@ export async function POST(req: NextRequest) {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 7 * 24 * 3600,
+      maxAge: 24 * 3600,
     });
     return out;
   } catch (e) {

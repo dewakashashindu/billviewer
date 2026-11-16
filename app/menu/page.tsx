@@ -10,8 +10,8 @@
 import type { Metadata } from "next";
 import MenuClient from "@/components/menu/MenuClient";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { decryptTableLink, TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
-import { signTableToken } from "@/lib/orderToken";
+import { TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
+import { readTableToken } from "@/lib/orderToken";
 import "./menu.css";
 
 export const metadata: Metadata = {
@@ -81,26 +81,20 @@ export default async function MenuPage({
   let isTakeaway = false;
 
   const id = (params.id ?? "").trim();
-  if (id) {
-    const decrypted = decryptTableLink(id);
-    if (decrypted) {
-      table = decrypted.tableNo;
-      token = signTableToken(decrypted.tableNo);
-      legacyGroup = decrypted.tableGroup;
-      locCode = decrypted.locCode;
-      isTakeaway = decrypted.kind === "takeaway";
-    } else {
-      invalidLink = true;
-    }
-  } else {
-    table = (params.table ?? "").trim();
-    token = (params.t ?? "").trim();
-    locCode = (params.loc ?? "").trim();
+  const rawToken = id || (params.t ?? "").trim();
+  const verified = rawToken ? readTableToken(rawToken) : null;
+  if (verified) {
+    table = verified.table;
+    token = rawToken;
+    legacyGroup = verified.group;
+    locCode = verified.location;
     isTakeaway = table.toUpperCase() === TAKEAWAY_TABLE_NO;
+  } else {
+    invalidLink = true;
   }
 
   const tableGroup =
-    (params.group ?? "").trim() || legacyGroup || (isTakeaway ? "Takeaway" : "");
+    legacyGroup || (isTakeaway ? "Takeaway" : "");
   const locationName = locCode ? await resolveLocationName(locCode) : "";
 
   return (

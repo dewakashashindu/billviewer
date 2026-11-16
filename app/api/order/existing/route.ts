@@ -26,12 +26,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const access = checkTableAccess(tableNo, token);
+    const access = checkTableAccess(tableNo, token, locCode);
     if (!access.ok) {
       return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
     }
 
-    const bill = await getExistingBill(tableNo, locCode);
+    const bill = await getExistingBill(tableNo, access.location);
     return NextResponse.json({ ok: true, data: bill });
   } catch (error) {
     console.error("Order existing route error:", error);

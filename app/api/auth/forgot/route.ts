@@ -9,7 +9,8 @@ import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { createOtpToken, generateOtp, OTP_COOKIE } from "@/lib/auth";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
-import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { clientIp } from "@/lib/rateLimit";
+import {authLimit,createResetToken} from "@/lib/sqlAuthSecurity";
 
 const HOUR_MS = 60 * 60_000;
 const IP_LIMIT = 12; // per IP, per hour
@@ -25,9 +26,10 @@ const uniformResponse = () =>
   });
 
 export async function POST(req: NextRequest) {
+  try {
   const ip = clientIp(req.headers);
 
-  const ipLimit = rateLimit(`forgot-ip:${ip}`, IP_LIMIT, HOUR_MS);
+  const ipLimit = await authLimit(`forgot-ip:${ip}`, IP_LIMIT, HOUR_MS / 1000);
   if (!ipLimit.allowed) {
     return NextResponse.json(
       {
@@ -47,10 +49,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const userLimit = rateLimit(
+  const userLimit = await authLimit(
     `forgot-user:${loginName.toLowerCase()}`,
     USER_LIMIT,
-    HOUR_MS
+    HOUR_MS / 1000
   );
   if (!userLimit.allowed) {
     return NextResponse.json(
@@ -62,7 +64,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  try {
     if (!isDbConfigured()) {
       console.warn("Forgot password: DB_* env vars missing — nothing to look up");
       return uniformResponse();
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
 
     const code = generateOtp();
     const otpToken = createOtpToken(`${String(user.LoginName).toLowerCase()}|${String(user.LocCode).toLowerCase()}|${String(user.UserId).toLowerCase()}`, code);
+    await createResetToken(otpToken, String(user.UserId));
     const sent = await sendSms(
       String(user.ContNo),
       `Mila Mirissa password reset code: ${code} (valid 10 minutes)`

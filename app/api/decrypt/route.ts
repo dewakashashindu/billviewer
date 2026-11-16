@@ -147,25 +147,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * OPTIONS - CORS support
- * Same-origin only (the admin panel calls this from the same
- * site). A wildcard origin would let any website read bills.
- */
-export async function OPTIONS(request: NextRequest) {
-  const origin = request.headers.get('origin') ?? '';
-  const host = request.headers.get('host') ?? '';
-  const sameOrigin = origin === '' || origin.includes(host);
-  return NextResponse.json(
-    {},
-    {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': sameOrigin ? origin || 'null' : 'null',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Vary': 'Origin',
-      },
-    }
-  );
+/** Same-origin endpoint: cross-origin preflight is not supported. */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: { 'Allow': 'GET, OPTIONS', 'Vary': 'Origin' },
+  });
 }

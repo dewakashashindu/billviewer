@@ -22,6 +22,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, isDbConfigured } from "@/lib/db";
+import { checkTableAccess } from "@/lib/orderToken";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { findCustomerByPhone, normalisePhone } from "@/lib/customerService";
 
@@ -29,6 +30,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
+    const access=checkTableAccess(request.headers.get("x-table-number") ?? "",request.headers.get("x-table-token") ?? "",request.headers.get("x-table-location") ?? "");
+    if(!access.ok) return NextResponse.json({ok:false,error:access.error},{status:access.status,headers:{"Cache-Control":"no-store"}});
     const raw = (request.nextUrl.searchParams.get("phone") ?? "").trim();
     const digits = raw.replace(/[^0-9]/g, "");
 
@@ -49,6 +52,10 @@ export async function GET(request: NextRequest) {
 
     /* Dev / no DB — no customer master to search. */
     if (!isDbConfigured()) {
+      if (process.env.NODE_ENV === "production") {
+        console.error("Customer service unavailable: database not configured");
+        return NextResponse.json({ ok: false, error: "Service temporarily unavailable." }, { status: 503 });
+      }
       return NextResponse.json({ ok: true, data: { found: false, source: "mock" } });
     }
 

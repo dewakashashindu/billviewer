@@ -86,6 +86,10 @@ export async function GET(request: NextRequest) {
       );
     }
   } else {
+    if (process.env.NODE_ENV === "production") {
+      console.error("Bill service unavailable: database not configured");
+      return NextResponse.json({ success: false, error: "Service temporarily unavailable." }, { status: 503 });
+    }
     // Dev fallback — DB env vars not set, serve mock data so the
     // app stays usable locally. Set DB_* vars in .env.local for real data.
     console.warn(

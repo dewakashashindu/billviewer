@@ -94,7 +94,7 @@ export default function GuestForm({
     setLookup("checking");
     try {
       const res = await fetch(`/api/customer/lookup?phone=${encodeURIComponent(d)}`, {
-        cache: "no-store",
+        cache: "no-store", headers: {"x-table-number":table,"x-table-location":locCode,"x-table-token":token},
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
@@ -112,7 +112,7 @@ export default function GuestForm({
     } catch {
       setLookup("error");
     }
-  }, []);
+  }, [table, locCode, token]);
 
   useEffect(() => {
     if (lookupTimer.current) window.clearTimeout(lookupTimer.current);

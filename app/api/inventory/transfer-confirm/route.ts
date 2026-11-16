@@ -25,7 +25,7 @@ function params(tx:sql.Transaction,from:string,to:string,id:string){return new s
 export async function POST(req:NextRequest){
  let tx:sql.Transaction|undefined;
  try{
-  const token=req.cookies.get(SESSION_COOKIE)?.value,user=token?verifySessionValue(token):null;
+  const token=req.cookies.get(SESSION_COOKIE)?.value,user=token?await verifySessionValue(token):null;
   if(!user)return NextResponse.json({error:'Please log in.'},{status:401});
   const body=await req.json(),kind=clean(body.kind) as Kind,from=clean(body.from),to=clean(body.to),id=clean(body.id);
   if(!Object.hasOwn(docs,kind)||!from||from.length>10||!to||to.length>10||!id||id.length>(kind==='tn'?15:10)||from.toUpperCase()===to.toUpperCase())throw Error('INVALID');

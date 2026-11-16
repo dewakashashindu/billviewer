@@ -3,7 +3,6 @@
 // POST { loginName, code, password } → OTP verify → Password column hash update
 // ============================================================
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import {
@@ -12,15 +11,13 @@ import {
   OTP_COOKIE,
   SESSION_COOKIE,
 } from "@/lib/auth";
-import { tooMany, registerHit, resetKey, clientIp } from "@/lib/rateLimit";
+import { clientIp } from "@/lib/rateLimit";
+import {authLimit,resetTokenHash} from "@/lib/sqlAuthSecurity";
 
 /** Same lifetime as the OTP cookie — 10 minutes. */
 const WINDOW_MS = 10 * 60_000;
 /** How many wrong codes one source may try per OTP. */
 const GUESS_LIMIT = 5;
-
-const tokenFingerprint = (token: string) =>
-  crypto.createHash("sha256").update(token).digest("hex").slice(0, 32);
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -49,34 +46,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ip = clientIp(req.headers);
-  const guessKey = `otp-guess:${ip}:${loginName.toLowerCase()}`;
-  const usedKey = `otp-used:${tokenFingerprint(otpToken)}`;
-
-  if (!tooMany(usedKey, 1, WINDOW_MS).allowed) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "This verification code has already been used. Please request a new one.",
-      },
-      { status: 401 }
-    );
-  }
-
-  const guesses = tooMany(guessKey, GUESS_LIMIT, WINDOW_MS);
-  if (!guesses.allowed) {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Too many incorrect codes. Please request a new verification code.",
-      },
-      { status: 429, headers: { "Retry-After": String(guesses.retryAfterSeconds) } }
-    );
-  }
-
   let tx: sql.Transaction | undefined;
   try {
+    const ip = clientIp(req.headers);
+    const tokenLimit = await authLimit(`otp-token:${resetTokenHash(otpToken)}`, GUESS_LIMIT, WINDOW_MS / 1000);
+    const accountLimit = await authLimit(`otp-account:${loginName.toLowerCase()}`, GUESS_LIMIT, WINDOW_MS / 1000);
+    const ipLimit = await authLimit(`otp-ip:${ip}`, 30, WINDOW_MS / 1000);
+    const blocked = [tokenLimit, accountLimit, ipLimit].find(x=>!x.allowed);
+    if (blocked) return NextResponse.json({success:false,error:"Too many attempts. Please try again later."},{status:429,headers:{"Retry-After":String(blocked.retryAfterSeconds)}});
     if (!isDbConfigured()) return NextResponse.json({ success:false,error:"Database not configured" }, {status:503});
     tx = new sql.Transaction(await getPool());
     await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
@@ -90,16 +67,17 @@ export async function POST(req: NextRequest) {
     const user=users.recordset[0];
     const identity=user?`${String(user.LoginName).toLowerCase()}|${String(user.LocCode).toLowerCase()}|${String(user.UserId).toLowerCase()}`:'';
     if(users.recordset.length!==1 || !user?.Enable || !verifyOtpToken(otpToken,identity,code)){
-      await tx.rollback(); tx=undefined;registerHit(guessKey,WINDOW_MS);
+      await tx.rollback(); tx=undefined;
       return NextResponse.json({success:false,error:"Invalid or expired verification code"},{status:401});
     }
-    resetKey(guessKey);
-    registerHit(usedKey,WINDOW_MS);
+    const consumed=await new sql.Request(tx).input("hash",sql.Char(64),resetTokenHash(otpToken)).input("user",sql.Char(10),user.UserId).query(`UPDATE dbo.Tbl_WebResetToken SET Used=1 WHERE TokenHash=@hash AND UserID=@user AND Used=0 AND ExpireAt>GETUTCDATE()`);
+    if(consumed.rowsAffected[0]!==1){await tx.rollback();tx=undefined;return NextResponse.json({success:false,error:"Invalid or expired verification code"},{status:401})}
     const result=await new sql.Request(tx).input("loc",sql.Char(10),user.LocCode).input("id",sql.Char(10),user.UserId).input("loginName",sql.VarChar(50),user.LoginName).input("psw",sql.VarChar(255),hashPassword(password)).query(`
       UPDATE dbo.Tbl_UserDetails SET PasswordWeb=@psw
       WHERE LOCCODE=@loc AND UserId=@id AND LTRIM(RTRIM(LoginNameWeb))=@loginName AND Enable=1
     `);
     if(result.rowsAffected[0]!==1){await tx.rollback();tx=undefined;return NextResponse.json({success:false,error:"Reset failed. Please try again."},{status:409})}
+    await new sql.Request(tx).input("id",sql.Char(10),user.UserId).query("DELETE FROM dbo.Tbl_WebSession WHERE UserID=@id");
     await tx.commit();tx=undefined;
 
     const out = NextResponse.json({ success: true });

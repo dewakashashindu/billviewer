@@ -7,7 +7,7 @@ import {nextStockSerial,writeStockMovement} from '@/lib/stockPosting';
 export const runtime='nodejs';
 const clean=(x:unknown)=>typeof x==='string'?x.trim():'';
 export async function POST(req:NextRequest){let tx:sql.Transaction|undefined;try{
- const token=req.cookies.get(SESSION_COOKIE)?.value,user=token?verifySessionValue(token):null;if(!user)return NextResponse.json({error:'Not logged in.'},{status:401});
+ const token=req.cookies.get(SESSION_COOKIE)?.value,user=token?await verifySessionValue(token):null;if(!user)return NextResponse.json({error:'Not logged in.'},{status:401});
  const access=await requireWebPermission(user,'damage:CONFIRM'),body=await req.json(),loc=clean(body.location),id=clean(body.id);
  if(!loc||loc.length>10||!id||id.length>10)return NextResponse.json({error:'Invalid location or document number.'},{status:400});
  if(![...access.locations].some(x=>clean(x).toUpperCase()===loc.toUpperCase()))throw new AccessDeniedError();

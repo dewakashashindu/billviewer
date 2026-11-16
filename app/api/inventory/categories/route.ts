@@ -9,7 +9,7 @@ const tables = ["[dbo].[Tbl_Maincategory]", "[dbo].[Tbl_Subcategory1]", "[dbo].[
 
 async function authorize(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const session = token ? verifySessionValue(token) : null;
+  const session = token ? await verifySessionValue(token) : null;
   if (!session) return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   if (!isDbConfigured()) return NextResponse.json({ error: "Database is not configured. Set the DB_* environment variables." }, { status: 503 });
   try { await requireWebPermission(session, `categories:${req.method==='GET'?'VIEW':req.method==='DELETE'?'DELETE':'SAVE'}`); } catch { return NextResponse.json({error:'Permission denied.'},{status:403}); }

@@ -344,7 +344,11 @@ export default function DashboardOpsSection({
               />
             </div>
 
-            <div style={gridStyle}>
+            <div className="da-ops-responsive-grid" style={gridStyle}>
+              <style>{`@media (max-width: 680px) {
+                .da-ops-responsive-grid { grid-template-columns: minmax(0, 1fr) !important; }
+                .da-ops-responsive-grid > .da-anim { grid-column: auto !important; }
+              }`}</style>
               <ChartCard
                 title="Sales & Revenue Flow"
                 sub="Hourly revenue and cumulative revenue · bill counts shown as bars"

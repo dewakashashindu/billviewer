@@ -3,7 +3,7 @@ import sql from 'mssql';
 import {getPool,isDbConfigured} from '@/lib/db';
 import {SESSION_COOKIE,verifySessionValue} from '@/lib/auth';
 import {requireWebPermission} from '@/lib/webAuthorization';
-async function auth(req:NextRequest,key:string){const t=req.cookies.get(SESSION_COOKIE)?.value,s=t?verifySessionValue(t):null;if(!s)return NextResponse.json({error:'Not logged in.'},{status:401});if(!isDbConfigured())return NextResponse.json({error:'Database is not configured.'},{status:503});try{await requireWebPermission(s,key);return null}catch(e){console.error('User group authorization failed:',e);return NextResponse.json({error:'Permission denied or authorization unavailable.'},{status:403})}}
+async function auth(req:NextRequest,key:string){const t=req.cookies.get(SESSION_COOKIE)?.value,s=t?await verifySessionValue(t):null;if(!s)return NextResponse.json({error:'Not logged in.'},{status:401});if(!isDbConfigured())return NextResponse.json({error:'Database is not configured.'},{status:503});try{await requireWebPermission(s,key);return null}catch(e){console.error('User group authorization failed:',e);return NextResponse.json({error:'Permission denied or authorization unavailable.'},{status:403})}}
 const clean=(v:unknown)=>typeof v==='string'?v.trim():'';
 const hidden=()=>clean(process.env.SUPER_ADMIN_GROUP_ID)||'GRP0000000';
 const protectedId=(id:string)=>[hidden().toUpperCase(),'ADMIN','ADMINISTRATOR'].includes(id.toUpperCase());
