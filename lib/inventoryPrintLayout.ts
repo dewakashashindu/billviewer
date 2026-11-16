@@ -1,6 +1,6 @@
 export type PrintCopy='standard'|'supplier';
 export type PrintLine={item:string;name?:string;unit:string;unitName?:string;qty:number;cost:number;value:number;free?:number;sysQty?:number};
-export type PrintDoc={title:string;id:string;date:string;status:string;location:string;locationName?:string;destination?:string;supplier?:string;supplierName?:string;invoice?:string;due?:string;delivery?:string;remarks?:string;total:number;discount?:number;adjustment?:number;type?:string;lines:PrintLine[]};
+export type PrintDoc={profile?:{address:string[];tel:string};title:string;id:string;date:string;status:string;location:string;locationName?:string;destination?:string;supplier?:string;supplierName?:string;invoice?:string;due?:string;delivery?:string;remarks?:string;total:number;discount?:number;adjustment?:number;type?:string;lines:PrintLine[]};
 export type PrintColumn={label:string;width:number;align:'left'|'right';value:(line:PrintLine)=>string};
 export const money=(n:number|undefined)=>Number(n||0).toFixed(2);
 export function columns(d:PrintDoc,copy:PrintCopy):PrintColumn[]{const standard=copy==='standard',extra=d.type==='grn'||d.type==='recon';return [
