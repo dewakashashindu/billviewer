@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
-import { isAdminSession, SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
+import { SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
+import { requireWebPermission, AccessDeniedError } from "@/lib/webAuthorization";
 
 const config = {
   order: { table: "[dbo].[Tbl_OrderModes]", key: "ModeID", strings: ["ModeID", "ModeDes", "ID"], bits: ["Enable"], chars: [] },
@@ -13,9 +14,13 @@ async function authorize(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value; const session = token ? await verifySessionValue(token) : null;
   if (!session) return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   if (!isDbConfigured()) return NextResponse.json({ error: "Database is not configured." }, { status: 503 });
-  let groupId = session.groupId ?? "";
-  if (!groupId) { const r = await (await getPool()).request().input("uid", sql.Char(10), String(session.userId)).query("SELECT TOP 1 LTRIM(RTRIM(ISNULL(GroupId,''))) AS GroupId FROM Tbl_UserDetails WHERE LTRIM(RTRIM(UserId))=LTRIM(RTRIM(@uid))"); groupId = r.recordset[0]?.GroupId ?? ""; }
-  return isAdminSession({ ...session, groupId }) ? null : NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  const action = req.method === "GET" ? "VIEW" : req.method === "DELETE" ? "DELETE" : "SAVE";
+  try { await requireWebPermission(session, `modes:${action}`); }
+  catch (error) {
+    if (!(error instanceof AccessDeniedError)) console.error("Modes authorization unavailable:", error);
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+  return null;
 }
 function type(req: NextRequest): Kind | null { const t = req.nextUrl.searchParams.get("type"); return t === "order" || t === "payment" || t === "group" ? t : null; }
 async function setup(req: NextRequest) { const error = await authorize(req); if (error) return { error, kind: null }; const kind = type(req); return kind ? { error: null, kind } : { error: NextResponse.json({ error: "Invalid mode type." }, { status: 400 }), kind: null }; }

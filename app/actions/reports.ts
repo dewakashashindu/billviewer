@@ -39,6 +39,12 @@ export interface ReportFilter {
   cashier?: string;
 }
 
+// Keep schema diagnostics on the server, not in client-visible action results.
+function reportSourceError(detail: string): string {
+  console.error('Report data source unavailable:', detail);
+  return 'Unable to load report data. Please contact your administrator.';
+}
+
 // Bind escaped XML as one parameter; nodes() supports older SQL Server versions.
 async function scopedReportFilters(filters: ReportFilter, allowedReports: readonly string[]): Promise<ReportFilter> {
   const access=await loadWebAuthorization(await requireSession());
@@ -163,7 +169,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['transaction-summary']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
@@ -180,7 +186,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     if (cols.size === 0) {
       return {
         success: false,
-        error: `View 'dbo.${DAILY_VIEW}' / 'dbo.${SUMMARY_VIEW}' not found in database`,
+        error: reportSourceError(`View 'dbo.${DAILY_VIEW}' / 'dbo.${SUMMARY_VIEW}' not found in database`),
       };
     }
 
@@ -190,7 +196,7 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     if (!loc || !date) {
       return {
         success: false,
-        error: `Unable to map transaction view columns — missing: ${!loc ? "loc (LocCode) " : ""}${!date ? "date (Txndate)" : ""}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map transaction view columns — missing: ${!loc ? "loc (LocCode) " : ""}${!date ? "date (Txndate)" : ""}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const billsC = pickCol(cols, ["Bills", "BillCount", "NoBills", "NOBills"]);
@@ -334,7 +340,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
     if (!isDbConfigured()) {
       return {
         success: false,
-        error: "Database not configured (DB_* env vars missing)",
+        error: reportSourceError("Database not configured (DB_* env vars missing)"),
       };
     }
 
@@ -351,7 +357,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
     if (cols.size === 0) {
       return {
         success: false,
-        error: `View 'dbo.${SUMMARY_VIEW}' not found in database`,
+        error: reportSourceError(`View 'dbo.${SUMMARY_VIEW}' not found in database`),
       };
     }
 
@@ -502,7 +508,7 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
 export async function getComplimentaryCostAction(filters: ReportFilter) {
   try {
     filters=await scopedReportFilters(filters,['complimentary-cost']);
-    if(!isDbConfigured()) return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if(!isDbConfigured()) return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const pool=await getPool(); const req=pool.request();
     req.input('startDate',sql.Date,filters.startDate); req.input('endDate',sql.Date,filters.endDate);
     req.input('outletId',sql.NVarChar(sql.MAX),String(filters.outletId));
@@ -540,12 +546,12 @@ export async function getComplimentaryCostAction(filters: ReportFilter) {
 // ============================================================
 export async function getSalesDetailsAction(filters: ReportFilter) {
   try {
-    filters = await scopedReportFilters(filters, ['sales-details', 'sales-details-bill-type', 'sales-details-order-mode', 'complimentary-cost']);
+    filters = await scopedReportFilters(filters, ['sales-details', 'sales-details-bill-type', 'sales-details-order-mode']);
 
     if (!isDbConfigured()) {
       return {
         success: false,
-        error: "Database not configured (DB_* env vars missing)",
+        error: reportSourceError("Database not configured (DB_* env vars missing)"),
       };
     }
 
@@ -779,7 +785,7 @@ export async function getLocationsAction() {
     if (!isDbConfigured()) {
       return {
         success: false,
-        error: "Database not configured (DB_* env vars missing)",
+        error: reportSourceError("Database not configured (DB_* env vars missing)"),
       };
     }
     const pool = await getPool();
@@ -1023,19 +1029,19 @@ export async function getCategorySummaryAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['sales-category-summary']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const cols = await viewColumns(pool);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${CATEGORY_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${CATEGORY_VIEW}' not found in database`) };
     }
     const res = resolveCatCols(cols);
     if ("missing" in res) {
       return {
         success: false,
-        error: `Unable to map category view columns — missing: ${res.missing.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map category view columns — missing: ${res.missing.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const c = res.c;
@@ -1076,19 +1082,19 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['sales-category-detail']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const cols = await viewColumns(pool);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${CATEGORY_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${CATEGORY_VIEW}' not found in database`) };
     }
     const res = resolveCatCols(cols);
     if ("missing" in res) {
       return {
         success: false,
-        error: `Unable to map category view columns — missing: ${res.missing.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map category view columns — missing: ${res.missing.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const c = res.c;
@@ -1175,7 +1181,7 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
 export async function getReportPaymentModesAction() {
   try {
     await requireSession();
-    if (!isDbConfigured()) return { success: false, error: "Database not configured (DB_* env vars missing)" };
+    if (!isDbConfigured()) return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     const pool = await getPool();
     const result = await pool.request().query(`SELECT LTRIM(RTRIM(PayCode)) AS value, LTRIM(RTRIM(PayDes)) AS label FROM dbo.Tbl_PaymentModes ORDER BY PayCode`);
     return { success: true, data: (result.recordset as { value: string; label: string }[]).filter(row => row.value).map(row => ({ value: row.value, label: row.label || row.value })) };
@@ -1196,13 +1202,13 @@ export async function getPaymentSummaryAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['payment-summary', 'payment-summary-wise']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId, payMode } = filters;
     const pool = await getPool();
     const cols = await viewColumnsGeneric(pool, PAY_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${PAY_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${PAY_VIEW}' not found in database`) };
     }
 
     const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
@@ -1220,16 +1226,16 @@ export async function getPaymentSummaryAction(filters: ReportFilter) {
     if (req.length > 0) {
       return {
         success: false,
-        error: `Unable to map payment view columns — missing: ${req.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map payment view columns — missing: ${req.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const payCode = pickCol(cols, ["PayCode", "PayModeCode", "ModeID", "PaymentCode"]);
-    if (payMode && !payCode) return { success: false, error: "Payment view has no payment code column; cannot filter by pay mode." };
+    if (payMode && !payCode) return { success: false, error: reportSourceError("Payment view has no payment code column; cannot filter by pay mode.") };
     const remarks = pickCol(cols, ["Rmks", "Remarks", "Remark"]);
     const casher = pickCol(cols, ["UserName", "CasherName", "Casher", "CasherID"]);
     const donot = pickCol(cols, ["DoNotShowInSales"]);
-    if (filters.reportId !== "payment-summary-wise" && !donot) return {success:false,error:"Payment view missing DoNotShowInSales."};
+    if (filters.reportId !== "payment-summary-wise" && !donot) return {success:false,error:reportSourceError("Payment view missing DoNotShowInSales.")};
 
     const r = pool.request();
     r.input("startDate", sql.Date, startDate);
@@ -1326,7 +1332,7 @@ export async function getBillPayModeGridAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['payment-bill-paymode-grid']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
@@ -1354,7 +1360,7 @@ export async function getBillPayModeGridAction(filters: ReportFilter) {
     if (!view) {
       return {
         success: false,
-        error: `Unable to map payment view columns for '${GRID_VIEW}' / '${PAY_VIEW}'. ${mapErr}`,
+        error: reportSourceError(`Unable to map payment view columns for '${GRID_VIEW}' / '${PAY_VIEW}'. ${mapErr}`),
       };
     }
 
@@ -1373,13 +1379,13 @@ export async function getBillPayModeGridAction(filters: ReportFilter) {
     if (req.length > 0) {
       return {
         success: false,
-        error: `Unable to map payment view columns — missing: ${req.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map payment view columns — missing: ${req.join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const payCode = pickCol(cols, ["PayCode", "PayModeCode", "ModeID", "PaymentCode"]);
     const donot = pickCol(cols, ["DoNotShowInSales"]);
-    if (!donot) return {success:false,error:"Grid view missing DoNotShowInSales."};
+    if (!donot) return {success:false,error:reportSourceError("Grid view missing DoNotShowInSales.")};
 
     const r = pool.request();
     r.input("startDate", sql.Date, startDate);
@@ -1487,7 +1493,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
   const pool = await getPool();
   const cols = await viewColumnsGeneric(pool, SUMMARY_VIEW);
   if (cols.size === 0) {
-    return { success: false, error: `View 'dbo.${SUMMARY_VIEW}' not found in database` };
+    return { success: false, error: reportSourceError(`View 'dbo.${SUMMARY_VIEW}' not found in database`) };
   }
   const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
@@ -1496,7 +1502,7 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
   if (!loc || !date || !stewId) {
     return {
       success: false,
-      error: `Unable to map steward view columns — missing: ${[!loc ? "loc (LocCode)" : "", !date ? "date (TenDate/Txndate)" : "", !stewId ? "steward (StewID)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+      error: reportSourceError(`Unable to map steward view columns — missing: ${[!loc ? "loc (LocCode)" : "", !date ? "date (TenDate/Txndate)" : "", !stewId ? "steward (StewID)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
     };
   }
   const stewName = pickCol(cols, ["StewardName", "Steward", "StewName"]);
@@ -1603,12 +1609,12 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
 export async function getStewardWiseAction(filters: ReportFilter) {
   try {
     filters=await scopedReportFilters(filters,['steward-wise']);
-    if(!isDbConfigured())return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if(!isDbConfigured())return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const pool=await getPool();
     const cols=await viewColumnsGeneric(pool,'VW_SalesSummery');
     const required=['LocCode','Txndate','StewID','OrderMode','TableNo','NetTotal','NOPax'];
     const missing=required.filter(c=>!pickCol(cols,[c]));
-    if(missing.length)return {success:false,error:`VW_SalesSummery missing required columns: ${missing.join(', ')}`};
+    if(missing.length)return {success:false,error:reportSourceError(`VW_SalesSummery missing required columns: ${missing.join(', ')}`)};
     const locName=pickCol(cols,['LocDes','LocName','LocationName']);
     const stewardName=pickCol(cols,['StewardName','Steward','StewName']);
     const req=pool.request();req.input('startDate',sql.Date,filters.startDate);req.input('endDate',sql.Date,filters.endDate);
@@ -1637,7 +1643,7 @@ export async function getStewardWiseAction(filters: ReportFilter) {
 export async function getServiceChargeAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['service-charge']);
-    if (!isDbConfigured()) return {success:false, error:"Database not configured (DB_* env vars missing)"};
+    if (!isDbConfigured()) return {success:false, error:reportSourceError("Database not configured (DB_* env vars missing)")};
     const pool = await getPool();
     const request = pool.request().input("startDate", sql.Date, filters.startDate).input("endDate", sql.Date, filters.endDate);
     if (filters.outletId) request.input("outletId", sql.NVarChar(sql.MAX), String(filters.outletId));
@@ -1679,7 +1685,7 @@ export async function getServiceChargeAction(filters: ReportFilter) {
 export async function getTaxVatAction(filters: ReportFilter) {
   try {
     filters=await scopedReportFilters(filters,['tax-vat']);
-    if(!isDbConfigured())return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if(!isDbConfigured())return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const pool=await getPool();const req=pool.request();
     req.input('startDate',sql.Date,filters.startDate);req.input('endDate',sql.Date,filters.endDate);
     req.input('outletId',sql.NVarChar(sql.MAX),String(filters.outletId));
@@ -1708,7 +1714,7 @@ export async function getTaxVatAction(filters: ReportFilter) {
 export async function getVoidReportAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['void-report']);
-    if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
+    if (!isDbConfigured()) return {success:false,error:reportSourceError("Database not configured (DB_* env vars missing)")};
     const pool=await getPool();
     const req=pool.request().input("startDate",sql.Date,filters.startDate).input("endDate",sql.Date,filters.endDate);
     if(filters.outletId) req.input("loc",sql.NVarChar(sql.MAX),String(filters.outletId));
@@ -1741,14 +1747,14 @@ export async function getPaxCountAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['pax-count']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const PAX_VIEW = process.env.PAX_COUNT_VIEW || "Vw_PaxCount";
     const cols = await viewColumnsGeneric(pool, PAX_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${PAX_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${PAX_VIEW}' not found in database`) };
     }
     const loc = pickCol(cols, ["LOCCODE", "LocCode", "Loc", "Location", "Outlet"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
@@ -1758,7 +1764,7 @@ export async function getPaxCountAction(filters: ReportFilter) {
     if (!loc || !date || !pax || !spending) {
       return {
         success: false,
-        error: `Unable to map pax view columns — missing: ${[!loc ? "loc (LOCCODE)" : "", !date ? "date (TXNDATE)" : "", !pax ? "pax (TotalPax)" : "", !spending ? "spending (TotalSpending)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map pax view columns — missing: ${[!loc ? "loc (LOCCODE)" : "", !date ? "date (TXNDATE)" : "", !pax ? "pax (TotalPax)" : "", !spending ? "spending (TotalSpending)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const localPax = pickCol(cols, ["LocalPax"]);
@@ -1864,14 +1870,14 @@ export async function getOpenTablesAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['open-tables']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { outletId } = filters;
     const pool = await getPool();
     const OPEN_VIEW = process.env.OPEN_TABLES_VIEW || "Vw_HoldUps";
     const cols = await viewColumnsGeneric(pool, OPEN_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${OPEN_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${OPEN_VIEW}' not found in database`) };
     }
     const code = pickCol(cols, ["TransCode", "TableCode", "TabCode", "Section", "TableNo"]);
     const desc = pickCol(cols, ["ItemDes", "MenuItmDes", "TransDescription", "Description", "ItemName"]);
@@ -1882,7 +1888,7 @@ export async function getOpenTablesAction(filters: ReportFilter) {
     if (!code || !desc || (!value && (!qty || !price))) {
       return {
         success: false,
-        error: `Unable to map open tables view columns — missing: ${[!code ? "table (TransCode)" : "", !desc ? "desc (TransDescription)" : "", !value && (!qty || !price) ? "value (ItemPrice or Qty and SalesPrice)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map open tables view columns — missing: ${[!code ? "table (TransCode)" : "", !desc ? "desc (TransDescription)" : "", !value && (!qty || !price) ? "value (ItemPrice or Qty and SalesPrice)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const mode = pickCol(cols, ["OrderMode", "Mode"]);
@@ -1891,7 +1897,7 @@ export async function getOpenTablesAction(filters: ReportFilter) {
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "Loc"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
 
-    if (outletId && !loc) return {success: false, error: "Open tables view has no location column; cannot apply location filter."};
+    if (outletId && !loc) return {success: false, error: reportSourceError("Open tables view has no location column; cannot apply location filter.")};
     const r = pool.request();
     if (outletId && loc) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     const result = await r.query(`
@@ -1949,14 +1955,14 @@ export async function getSlipTraceAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['slip-trace']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const TRACE_VIEW = process.env.SLIP_TRACE_VIEW || "Vw_SlipPrintDetails";
     const cols = await viewColumnsGeneric(pool, TRACE_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${TRACE_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${TRACE_VIEW}' not found in database`) };
     }
     const loc = pickCol(cols, ["locCode", "LOCCODE", "LocCode", "Loc"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
@@ -1964,7 +1970,7 @@ export async function getSlipTraceAction(filters: ReportFilter) {
     if (!loc || !bill) {
       return {
         success: false,
-        error: `Unable to map trace view columns — missing: ${[!loc ? "loc (locCode)" : "", !bill ? "bill (BillNo)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map trace view columns — missing: ${[!loc ? "loc (locCode)" : "", !bill ? "bill (BillNo)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const date = pickCol(cols, ["Txndate", "TXNDATE", "TrnDate"]);
@@ -2054,14 +2060,14 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['credit-summary']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { outletId } = filters;
     const pool = await getPool();
     const CRED_VIEW = process.env.CREDIT_SUMMARY_VIEW || "Vw_CreditCustomer";
     const cols = await viewColumnsGeneric(pool, CRED_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${CRED_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${CRED_VIEW}' not found in database`) };
     }
     const code = pickCol(cols, ["CusCode", "CustCode", "Custcode", "CUSTCODE", "CustCI", "Code"]);
     const name = pickCol(cols, ["CusName", "CustName", "CustNameDTI", "Name"]);
@@ -2069,15 +2075,15 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
     if (!code || !name || !total) {
       return {
         success: false,
-        error: `Unable to map credit summary view columns — missing: ${[!code ? "cust code (CustCode)" : "", !name ? "name (CustName)" : "", !total ? "used credit (UsedCredit)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map credit summary view columns — missing: ${[!code ? "cust code (CustCode)" : "", !name ? "name (CustName)" : "", !total ? "used credit (UsedCredit)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const period = null;
     const isCredit = pickCol(cols, ["creditcustomer", "CreditCustomer"]);
-    if (!isCredit) return {success:false, error:"CreditCustomer column missing from credit view."};
+    if (!isCredit) return {success:false, error:reportSourceError("CreditCustomer column missing from credit view.")};
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
-    if (outletId && !loc) return {success:false,error:"Credit view has no location column; cannot filter by location."};
+    if (outletId && !loc) return {success:false,error:reportSourceError("Credit view has no location column; cannot filter by location.")};
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
 
     const r = pool.request();
@@ -2136,13 +2142,13 @@ export async function getCreditSummaryAction(filters: ReportFilter) {
 async function runCreditHistory(viewName: string, filters: ReportFilter) {
   await requireSession();
   if (!isDbConfigured()) {
-    return { success: false, error: "Database not configured (DB_* env vars missing)" };
+    return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
   }
   const { startDate, endDate, outletId } = filters;
   const pool = await getPool();
   const cols = await viewColumnsGeneric(pool, viewName);
   if (cols.size === 0) {
-    return { success: false, error: `View 'dbo.${viewName}' not found in database` };
+    return { success: false, error: reportSourceError(`View 'dbo.${viewName}' not found in database`) };
   }
   const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode", "Loc"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
@@ -2151,7 +2157,7 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
   if (!code || !amt) {
     return {
       success: false,
-      error: `Unable to map ${viewName} columns — missing: ${[!code ? "cust code (CustCode)" : "", !amt ? "amount (TranAmt)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+      error: reportSourceError(`Unable to map ${viewName} columns — missing: ${[!code ? "cust code (CustCode)" : "", !amt ? "amount (TranAmt)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
     };
   }
   const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
@@ -2226,7 +2232,7 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
 export async function getCreditHistoryAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['credit-history']);
-    if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
+    if (!isDbConfigured()) return {success:false,error:reportSourceError("Database not configured (DB_* env vars missing)")};
     const pool = await getPool();
     const view = process.env.CREDIT_HISTORY_VIEW || "Vw_CreditHistory";
     const req = pool.request().input("from",sql.Date,filters.startDate).input("to",sql.Date,filters.endDate);
@@ -2248,7 +2254,7 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['credit-pay-history']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
@@ -2264,7 +2270,7 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
       if (c.size > 0) { view = v; cols = c; break; }
     }
     if (!view) {
-      return { success: false, error: "View 'dbo.Vw_creditPaymentHistory' not found in database" };
+      return { success: false, error: reportSourceError("View 'dbo.Vw_creditPaymentHistory' not found in database") };
     }
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
@@ -2283,7 +2289,7 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
     if (!cus || !bill || !paidAmt) {
       return {
         success: false,
-        error: `Unable to map ${view} — missing: ${[!cus ? "customer (CusID)" : "", !bill ? "bill (BillNo)" : "", !paidAmt ? "amount (PaidAmt)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map ${view} — missing: ${[!cus ? "customer (CusID)" : "", !bill ? "bill (BillNo)" : "", !paidAmt ? "amount (PaidAmt)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     let customers: Array<{ id: string; des: string }> = [];
@@ -2438,7 +2444,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['hourly-sales']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
@@ -2504,7 +2510,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
     if (!usedView) {
       const cols = await viewColumnsGeneric(pool, SUMMARY_VIEW);
       if (cols.size === 0) {
-        return { success: false, error: `Views 'dbo.${HOURLY_VIEW}' and 'dbo.${SUMMARY_VIEW}' not found in database` };
+        return { success: false, error: reportSourceError(`Views 'dbo.${HOURLY_VIEW}' and 'dbo.${SUMMARY_VIEW}' not found in database`) };
       }
       const date = pickCol(cols, ["Txndate", "TrnDate", "SalesDate"]);
       const time = pickCol(cols, ["TxnTime", "TrnTime"]);
@@ -2512,7 +2518,7 @@ export async function getHourlySalesAction(filters: ReportFilter) {
       if (!date || !time || !val) {
         return {
           success: false,
-          error: `Unable to build hourly sales — summary view missing: ${[!date ? "date (Txndate)" : "", !time ? "time (TxnTime)" : "", !val ? "value (NetTotal)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`,
+          error: reportSourceError(`Unable to build hourly sales — summary view missing: ${[!date ? "date (Txndate)" : "", !time ? "time (TxnTime)" : "", !val ? "value (NetTotal)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`),
         };
       }
       const pf = buildPosFilters({ cols, alias: "v." });
@@ -2576,12 +2582,12 @@ export async function getHourlySalesAction(filters: ReportFilter) {
 export async function getBillTypePaymentAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['payment-billtype']);
-    if (!isDbConfigured()) return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if (!isDbConfigured()) return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const pool = await getPool();
     const cols = await viewColumnsGeneric(pool, 'Vw_Sales_PaymentCategories');
     const required=['LocCode','Txndate','ActAmt','Cash','Creditcard','Credit','Voucher'];
     const mapped=required.map(n=>pickCol(cols,[n]));
-    if(mapped.some(c=>!c)) return {success:false,error:`Vw_Sales_PaymentCategories is missing required columns: ${required.filter((_,i)=>!mapped[i]).join(', ')}`};
+    if(mapped.some(c=>!c)) return {success:false,error:reportSourceError(`Vw_Sales_PaymentCategories is missing required columns: ${required.filter((_,i)=>!mapped[i]).join(', ')}`)};
     const [loc,date,amt,cash,card,credit,voucher] = mapped as string[];
     const req=pool.request().input('startDate',sql.Date,filters.startDate).input('endDate',sql.Date,filters.endDate);
     if(filters.outletId) req.input('outletId',sql.NVarChar(sql.MAX),String(filters.outletId));
@@ -2604,10 +2610,10 @@ export async function getBillTypePaymentAction(filters: ReportFilter) {
 export async function getPaymentDailyModesAction(filters: ReportFilter) {
   try {
     filters=await scopedReportFilters(filters,['payment-daily-modes']);
-    if(!isDbConfigured()) return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if(!isDbConfigured()) return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const pool=await getPool();const cols=await viewColumnsGeneric(pool,PAY_VIEW);
     const required=['LocCode','LocDes','TxnDate','PayCode','PayDes','ActAmt','BillType','DoNotShowInSales'];const m=required.map(n=>pickCol(cols,[n]));
-    if(m.some(x=>!x))return {success:false,error:`Payment view missing: ${required.filter((_,i)=>!m[i]).join(', ')}`};
+    if(m.some(x=>!x))return {success:false,error:reportSourceError(`Payment view missing: ${required.filter((_,i)=>!m[i]).join(', ')}`)};
     const [loc,des,date,code,pay,amount,bt,hidden]=m as string[];
     const req=pool.request().input('startDate',sql.Date,filters.startDate).input('endDate',sql.Date,filters.endDate);
     if(filters.outletId)req.input('outletId',sql.NVarChar(sql.MAX),String(filters.outletId));
@@ -2636,13 +2642,13 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['cashier-collection']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const cols = await viewColumnsGeneric(pool, SUMMARY_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${SUMMARY_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${SUMMARY_VIEW}' not found in database`) };
     }
     const cash = pickCol(cols, ["CashierID", "CasherID", "CASHIER", "Cashier"]);
     const bill = pickCol(cols, ["BillNo", "BillNO"]);
@@ -2651,7 +2657,7 @@ export async function getCashierCollectionAction(filters: ReportFilter) {
     if (!cash || !bill || !val || !date) {
       return {
         success: false,
-        error: `Unable to build cashier collection — missing: ${[!cash ? "cashier (CashierID)" : "", !bill ? "bill (BillNo)" : "", !val ? "value (NetTotal)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to build cashier collection — missing: ${[!cash ? "cashier (CashierID)" : "", !bill ? "bill (BillNo)" : "", !val ? "value (NetTotal)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const time = pickCol(cols, ["TxnTime", "TrnTime"]);
@@ -2731,13 +2737,13 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['cashier-payment-breakdown']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const cols = await viewColumnsGeneric(pool, PAY_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${PAY_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${PAY_VIEW}' not found in database`) };
     }
     const cash = pickCol(cols, ["CashierID", "CasherID", "CASHIER", "Cashier", "UserName"]);
     const mode = pickCol(cols, ["PayDes", "PaymentDes", "PaymentDescription", "PayMode", "PaymentMode", "PayModeDes", "Mode"]);
@@ -2746,7 +2752,7 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
     if (!cash || !mode || !amt || !date) {
       return {
         success: false,
-        error: `Unable to build payment break down — missing: ${[!cash ? "cashier (CashierID)" : "", !mode ? "mode (PayDes/PayMode)" : "", !amt ? "amount (Amount)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to build payment break down — missing: ${[!cash ? "cashier (CashierID)" : "", !mode ? "mode (PayDes/PayMode)" : "", !amt ? "amount (Amount)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const time = pickCol(cols, ["TxnTime", "TrnTime", "PayTime"]);
@@ -2824,7 +2830,7 @@ function dmyOf(iso: string): string {
 export async function getMenuIssueAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['menu-item-issue', 'menu-item-issue-date']);
-    if (!isDbConfigured()) return { success: false, error: "Database not configured (DB_* env vars missing)" };
+    if (!isDbConfigured()) return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     const byDate = filters.reportId === "menu-item-issue-date";
     const pool = await getPool();
     let departments: {code:string;name:string}[] = [];
@@ -2892,7 +2898,7 @@ export async function getItemMovementAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['item-movement']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const mode: "fast" | "slow" | "non" =
@@ -2905,7 +2911,7 @@ export async function getItemMovementAction(filters: ReportFilter) {
       const IMV_VIEW = process.env.ITEM_MOVEMENT_VIEW || "Vw_SalesDetail";
       const cols = await viewColumnsGeneric(pool, IMV_VIEW);
       if (cols.size === 0) {
-        return { success: false, error: `View 'dbo.${IMV_VIEW}' not found in database` };
+        return { success: false, error: reportSourceError(`View 'dbo.${IMV_VIEW}' not found in database`) };
       }
       const item = pickCol(cols, ["SubItmID", "SubItmId", "ItemCode", "ItmCode"]);
       const qty = pickCol(cols, ["Qty", "Quantity"]);
@@ -2914,7 +2920,7 @@ export async function getItemMovementAction(filters: ReportFilter) {
       if (!item || !qty || !date) {
         return {
           success: false,
-          error: `Unable to map item movement view — missing: ${[!item ? "item (SubItmID)" : "", !qty ? "qty (Qty)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`,
+          error: reportSourceError(`Unable to map item movement view — missing: ${[!item ? "item (SubItmID)" : "", !qty ? "qty (Qty)" : "", !date ? "date (Txndate)" : ""].filter(Boolean).join(", ")}. Actual columns: ${Array.from(cols).join(", ")}`),
         };
       }
       const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
@@ -3013,14 +3019,14 @@ export async function getCashInOutAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['cash-inout']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
     const CIO_VIEW = process.env.CASH_INOUT_VIEW || "VW_CASHINOUTREPORT";
     const cols = await viewColumnsGeneric(pool, CIO_VIEW);
     if (cols.size === 0) {
-      return { success: false, error: `View 'dbo.${CIO_VIEW}' not found in database` };
+      return { success: false, error: reportSourceError(`View 'dbo.${CIO_VIEW}' not found in database`) };
     }
     const date = pickCol(cols, ["TxnDate", "TrnDate", "Txndate"]);
     const payin = pickCol(cols, ["PayIN", "PayIn", "InAmt", "CashIn"]);
@@ -3028,7 +3034,7 @@ export async function getCashInOutAction(filters: ReportFilter) {
     if (!date || (!payin && !payout)) {
       return {
         success: false,
-        error: `Unable to map cash in/out view — missing: ${[!date ? "date (TxnDate)" : "", !payin && !payout ? "amounts (PayIN/PayOut)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map cash in/out view — missing: ${[!date ? "date (TxnDate)" : "", !payin && !payout ? "amounts (PayIN/PayOut)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
@@ -3137,11 +3143,11 @@ export async function getCashInOutAction(filters: ReportFilter) {
 export async function getKotBotAction(filters: ReportFilter) {
   try {
     filters=await scopedReportFilters(filters,['kot-bot']);
-    if(!isDbConfigured())return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if(!isDbConfigured())return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const pool=await getPool();const view=process.env.KOTBOT_VIEW || 'Vw_ItemSalesDetails';const cols=await viewColumnsGeneric(pool,view);
     const required=['OrderNo','OrderMode','Type','TableNo','Steward','UserName','KBDate','ItemCode','ItmQty','ItmRmks','BirthNo','Invoiceno','MenuItmDes','TxnDate','locCode'];
     const found=required.map(n=>pickCol(cols,[n]));
-    if(found.some(x=>!x))return {success:false,error:`KOT/BOT view missing columns: ${required.filter((_,i)=>!found[i]).join(', ')}`};
+    if(found.some(x=>!x))return {success:false,error:reportSourceError(`KOT/BOT view missing columns: ${required.filter((_,i)=>!found[i]).join(', ')}`)};
     const [ord,mode,type,table,stew,user,kb,item,qty,remarks,birth,invoice,desc,date,loc]=found as string[];
     const types:Record<string,{code:string|null;label:string}>={all:{code:null,label:'All'},kitchen:{code:'K',label:'Kitchen'},bar:{code:'B',label:'Bar'},other:{code:'O',label:'Other'},bay1:{code:'B1',label:'Bay 1'},bay2:{code:'B2',label:'Bay 2'},bay3:{code:'B3',label:'Bay 3'},bay4:{code:'B4',label:'Bay 4'},bay5:{code:'B5',label:'Bay 5'},bay6:{code:'B6',label:'Bay 6'},head:{code:'HP',label:'Heap'}};
     const trc=types[filters.trcType || 'all'];if(!trc)throw new Error('Invalid tracing type');
@@ -3177,7 +3183,7 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['credit-account-detail']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
@@ -3193,7 +3199,7 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
       if (c.size > 0) { view = v; cols = c; break; }
     }
     if (!view) {
-      return { success: false, error: "View 'dbo.Vw_Credit_SettelementHistory_Details' not found in database" };
+      return { success: false, error: reportSourceError("View 'dbo.Vw_Credit_SettelementHistory_Details' not found in database") };
     }
     const loc = pickCol(cols, ["LocCode", "LOCCODE", "locCode"]);
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
@@ -3209,7 +3215,7 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
     if (!cus || !bill) {
       return {
         success: false,
-        error: `Unable to map ${view} — missing: ${[!cus ? "customer (CusID)" : "", !bill ? "bill (BillNo)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`,
+        error: reportSourceError(`Unable to map ${view} — missing: ${[!cus ? "customer (CusID)" : "", !bill ? "bill (BillNo)" : ""].filter(Boolean).join(", ")}. Actual view columns: ${Array.from(cols).join(", ")}`),
       };
     }
     let customers: Array<{ id: string; des: string }> = [];
@@ -3284,7 +3290,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['cashier-breakdown-grid']);
     if (!isDbConfigured()) {
-      return { success: false, error: "Database not configured (DB_* env vars missing)" };
+      return { success: false, error: reportSourceError("Database not configured (DB_* env vars missing)") };
     }
     const { startDate, endDate, outletId } = filters;
     const pool = await getPool();
@@ -3309,7 +3315,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
       if (!mapErr) mapErr = `View 'dbo.${cand}' actual columns: ${Array.from(c).join(", ")}`;
     }
     if (!view) {
-      return { success: false, error: `Unable to map cashier grid view (Vw_SalesPayModes/Vw_PayModes). ${mapErr}` };
+      return { success: false, error: reportSourceError(`Unable to map cashier grid view (Vw_SalesPayModes/Vw_PayModes). ${mapErr}`) };
     }
     const loc = pickCol(cols, ["LocCode", "Loc", "Location", "Outlet"]) as string;
     const date = pickCol(cols, ["Txndate", "TrnDate", "SalesDate", "BillDate"]) as string;
@@ -3425,7 +3431,7 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
 export async function getPerformanceReportAction(filters: ReportFilter) {
   try {
     const access=await requireWebPermission(await requireSession(),'report-performance-report:VIEW');
-    if(!isDbConfigured()) return {success:false,error:'Database not configured (DB_* env vars missing)'};
+    if(!isDbConfigured()) return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const date=String(filters.startDate ?? '').trim();
     const parsed=new Date(`${date}T00:00:00Z`);
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(parsed.getTime())||parsed.toISOString().slice(0,10)!==date) return {success:false,error:'Select a valid business date.'};
@@ -3460,7 +3466,7 @@ export async function getInvoiceTraceAction(invoice: string, location: string) {
   try {
     const access=await requireWebPermission(await requireSession(), "report-invoice-trace:VIEW");
     requireWebLocation({locations:access.mainLocations},location);
-    if (!isDbConfigured()) return {success:false,error:"Database not configured (DB_* env vars missing)"};
+    if (!isDbConfigured()) return {success:false,error:reportSourceError("Database not configured (DB_* env vars missing)")};
     const bill=String(invoice ?? "").trim(), loc=String(location ?? "").trim();
     if (!bill || bill.length > 100 || !loc || loc.length > 20) return {success:false,error:"Select a location and enter a valid invoice number."};
     const pool=await getPool();
