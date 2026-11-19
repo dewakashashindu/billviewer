@@ -1,5 +1,6 @@
 "use client";
 import {useFeedbackState} from "@/components/FeedbackPopup";
+import {shareReportPdf} from "@/lib/reportPdfShare";
 
 // ============================================================
 // LOCATION: components/ReportToolbar.tsx
@@ -280,134 +281,34 @@ export default function ReportToolbar({
     setTimeout(() => URL.revokeObjectURL(objUrl), 60_000);
   }
 
-  function canNativeSharePdf(file: File): boolean {
-    try {
-      const nav =
-        typeof navigator !== "undefined" ? (navigator as any) : null;
-      if (!nav || typeof nav.share !== "function") return false;
-      if (typeof nav.canShare === "function") {
-        return Boolean(nav.canShare({ files: [file] }));
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   function shareTo(target: "native" | "whatsapp" | "email" | "save") {
     setShareMsg(null);
     const { blob, file, status } = pdfPrep;
     if (status !== "ready" || !blob || !file) {
-      setShareMsg(
-        status === "building"
-          ? "Please wait a moment — generating PDF..."
-          : "Unable to build PDF for this report"
-      );
+      setShareMsg(status === "building" ? "Please wait a moment — generating PDF..." : "Unable to build PDF for this report");
       return;
     }
-
-    const reportLabel = `${title} (${from} to ${to})`;
-    const nav = typeof navigator !== "undefined" ? (navigator as any) : null;
-    const isMobile =
-      typeof navigator !== "undefined" &&
-      /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
-
-    if (target === "native") {
-      if (canNativeSharePdf(file)) {
-        nav
-          .share({ files: [file], title: reportLabel })
-          .then(() => setShareOpen(false))
-          .catch((err: any) => {
-            if (err?.name === "AbortError") return;
-            downloadPdfBlob(blob, file.name);
-            setShareMsg(`PDF downloaded (${file.name}) — ready to send`);
-          });
-        return;
-      }
-      downloadPdfBlob(blob, file.name);
-      openPdfInTab(blob);
-      setShareMsg(`PDF ready (${file.name}) — downloaded & opened`);
-      return;
-    }
-
-    if (target === "whatsapp") {
-      // On mobile / OSes that support Web Share API with files, invoke native
-      // share sheet synchronously so WhatsApp receives the actual .pdf file!
-      if (canNativeSharePdf(file) && isMobile) {
-        nav
-          .share({ files: [file], title: reportLabel })
-          .then(() => setShareOpen(false))
-          .catch((err: any) => {
-            if (err?.name === "AbortError") return;
-            downloadPdfBlob(blob, file.name);
-            setShareMsg(`PDF saved (${file.name}) — attach in WhatsApp`);
-          });
-        return;
-      }
-      if (canNativeSharePdf(file)) {
-        // Desktop browser with OS file-share support (e.g. Windows Share / macOS Safari)
-        nav
-          .share({ files: [file], title: reportLabel })
-          .then(() => setShareOpen(false))
-          .catch((err: any) => {
-            if (err?.name === "AbortError") return;
-            downloadPdfBlob(blob, file.name);
-            window.open(
-              `https://wa.me/?text=${encodeURIComponent(`*${title}* (${from} to ${to})\nPDF Report: ${file.name}`)}`,
-              "_blank",
-              "noopener,noreferrer"
-            );
-            setShareMsg(`PDF saved (${file.name}) — attach it in WhatsApp`);
-          });
-        return;
-      }
-      // Desktop fallback where browser disables navigator.share (e.g. LAN HTTP):
-      // synchronously open WhatsApp AND save the PDF file ready to drag/attach.
-      window.open(
-        `https://wa.me/?text=${encodeURIComponent(`*${title}* (${from} to ${to})\nPDF Report: ${file.name}`)}`,
-        "_blank",
-        "noopener,noreferrer"
-      );
-      downloadPdfBlob(blob, file.name);
-      setShareMsg(`PDF saved (${file.name}) — attach/drop into WhatsApp`);
-      return;
-    }
-
-    if (target === "email") {
-      if (canNativeSharePdf(file) && isMobile) {
-        nav
-          .share({
-            files: [file],
-            title: reportLabel,
-            text: `Please find attached the PDF report: ${file.name}`,
-          })
-          .then(() => setShareOpen(false))
-          .catch((err: any) => {
-            if (err?.name === "AbortError") return;
-            downloadPdfBlob(blob, file.name);
-          });
-        return;
-      }
-      // Download PDF first, then launch mail client after 450ms so Chrome
-      // does not cancel the pending blob download when handling mailto:
-      downloadPdfBlob(blob, file.name);
-      const subject = encodeURIComponent(`${title} (${from} to ${to})`);
-      const body = encodeURIComponent(
-        `Please find attached the PDF report: ${file.name}\n\nReport: ${title}\nPeriod: ${from} to ${to}`
-      );
-      setTimeout(() => {
-        window.location.href = `mailto:?subject=${subject}&body=${body}`;
-      }, 450);
-      setShareMsg(`PDF downloaded (${file.name}) — attach to email`);
-      return;
-    }
-
     if (target === "save") {
       downloadPdfBlob(blob, file.name);
       openPdfInTab(blob);
       setShareMsg(`PDF downloaded & opened (${file.name})`);
       return;
     }
+    shareReportPdf({
+      file, title: `${title} (${from} to ${to})`, target,
+      navigator: typeof navigator === 'undefined' ? null : navigator,
+      download: () => downloadPdfBlob(blob, file.name),
+      openTarget: (destination) => {
+        if (destination === 'whatsapp') {
+          window.open('https://wa.me/', '_blank', 'noopener,noreferrer');
+        } else {
+          const subject = encodeURIComponent(`${title} (${from} to ${to})`);
+          window.location.href = `mailto:?subject=${subject}`;
+        }
+      },
+      message: setShareMsg,
+      done: () => setShareOpen(false),
+    });
   }
 
   const shareItems: {
@@ -426,14 +327,14 @@ export default function ReportToolbar({
     },
     {
       key: "whatsapp",
-      label: "Share PDF via WhatsApp",
+      label: "Share PDF via WhatsApp (or attach after download)",
       icon: <IconChat size={14} />,
       iconBg: "#e8f9ef",
       iconColor: "#16a34a",
     },
     {
       key: "email",
-      label: "Share PDF via Email",
+      label: "Share PDF via Email (or attach after download)",
       icon: <IconMail size={14} />,
       iconBg: "#F0E8D8",
       iconColor: "#684830",

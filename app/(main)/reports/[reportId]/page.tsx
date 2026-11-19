@@ -23,6 +23,7 @@ import DynamicReportTable from "@/components/reports/DynamicReportTable";
 import ReportToolbar from "@/components/ReportToolbar";
 import ReportChartsView from "@/components/reports/ReportChartsView";
 import { buildReportCharts } from "@/components/reports/reportCharts";
+import { complimentaryCharts, taxPosCharts, voidPosCharts, invoiceCharts, paymentTotalsCharts, performanceCharts, creditHistoryPosCharts, serviceChargeCharts, tableStewardCharts } from "@/components/reports/specialReportCharts";
 import ReportPdfDocument from "@/components/reports/ReportPdfDocument";
 import SalesSummaryReport, {
   filterSalesSummary,
@@ -694,7 +695,7 @@ export default function DynamicReportPage() {
     const data=objectData ? filterComplimentaryCost(objectData as unknown as ComplimentaryCostData,search) : null;
     const hasData=!!data?.locations.length;
     const pdf=hasData&&data?<ComplimentaryCostPdf title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} printDate={printDate} printTime={printTime} data={data}/>:undefined;
-    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search location, date, bill or item..." pdfDocument={pdf} pdfFileName={`complimentary-cost-${startDate}_to_${endDate}.pdf`} chartSupported={false} chartMode={false} onChartToggle={()=>{}} />{filterBarNode}<div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:data?<ComplimentaryCostReport data={data}/>:null}</div></>;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search location, date, bill or item..." pdfDocument={pdf} pdfFileName={`complimentary-cost-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)} />{filterBarNode}<div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:data?(chartMode?<ReportChartsView charts={complimentaryCharts(data)} title={config.title}/>:<ComplimentaryCostReport data={data}/>):null}</div></>;
   }
 
   if (config.render === "sales-details") {
@@ -1079,10 +1080,10 @@ export default function DynamicReportPage() {
     const options = new Map<string, string>();
     for (const r of report?.rows ?? []) { const k = `s:${r.stewardId}`; if (!options.has(k) || (!options.get(k)?.includes(" — ") && r.stewardName)) options.set(k, stewardLabel(r)); }
     const pdf = rows.length ? <ServiceChargePdf rows={rows} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} /> : undefined;
-    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search bill, steward, location, date..." pdfDocument={pdf} pdfFileName={`service-charge-${startDate}_to_${endDate}.pdf`} />
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search bill, steward, location, date..." pdfDocument={pdf} pdfFileName={`service-charge-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)} />
       {filterBarNode}
       <div style={{padding:"10px 24px",color:"#684830",fontSize:12}}><label>Steward: <select aria-label="Steward" value={stewardSelection} onChange={e=>setStewardSelection(e.target.value)} style={{marginLeft:8,padding:"7px 10px",border:"1px solid #decbb0",borderRadius:8,background:"white",color:"#45301d"}}><option value="all">All Stewards</option>{stewardSelection !== "all" && !options.has(stewardSelection) && <option value={stewardSelection}>Selected steward (no records)</option>}{Array.from(options).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
-      <div id="report-zoom-area" style={{flex:1}}>{loading ? <LoadingBlock/> : error ? <ErrorBlock message={error}/> : <ServiceChargeReport rows={rows}/>}</div>
+      <div id="report-zoom-area" style={{flex:1}}>{loading ? <LoadingBlock/> : error ? <ErrorBlock message={error}/> : chartMode ? <ReportChartsView charts={serviceChargeCharts(rows)} title={config.title}/> : <ServiceChargeReport rows={rows}/>}</div>
     </>;
   }
 
@@ -1093,7 +1094,7 @@ export default function DynamicReportPage() {
     const filtered=report?filterTableSteward(report,stewardSelection,search):null;
     const hasData=!!filtered?.locations.length;
     const pdf=hasData&&filtered?<TableStewardPdf data={filtered} title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} printDate={printDate} printTime={printTime}/>:undefined;
-    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search steward, location, date or table..." pdfDocument={pdf} pdfFileName={`steward-table-${startDate}_to_${endDate}.pdf`} chartSupported={false} chartMode={false} onChartToggle={()=>{}}/>{filterBarNode}<div style={{padding:'10px 24px',color:'#684830',fontSize:12}}><label>Steward: <select aria-label="Steward" value={stewardSelection} onChange={e=>setStewardSelection(e.target.value)} style={{marginLeft:8,padding:'7px 10px',border:'1px solid #decbb0',borderRadius:8,background:'white'}}><option value="all">All Stewards</option>{stewardSelection!=='all'&&!options.has(stewardSelection)&&<option value={stewardSelection}>Selected steward (no records)</option>}{Array.from(options,([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div><div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered?<TableStewardReport data={filtered}/>:null}</div></>;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search steward, location, date or table..." pdfDocument={pdf} pdfFileName={`steward-table-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)}/>{filterBarNode}<div style={{padding:'10px 24px',color:'#684830',fontSize:12}}><label>Steward: <select aria-label="Steward" value={stewardSelection} onChange={e=>setStewardSelection(e.target.value)} style={{marginLeft:8,padding:'7px 10px',border:'1px solid #decbb0',borderRadius:8,background:'white'}}><option value="all">All Stewards</option>{stewardSelection!=='all'&&!options.has(stewardSelection)&&<option value={stewardSelection}>Selected steward (no records)</option>}{Array.from(options,([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div><div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered?(chartMode?<ReportChartsView charts={tableStewardCharts(filtered)} title={config.title}/>:<TableStewardReport data={filtered}/>):null}</div></>;
   }
 
   if (config.render === "steward-wise") {
@@ -1162,7 +1163,7 @@ export default function DynamicReportPage() {
     const data=objectData as TaxPosData | null;
     const rows=data?filterTaxPos(data.rows,search):[];
     const pdf=rows.length?<TaxPosPdf rows={rows} title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} printDate={printDate} printTime={printTime}/>:undefined;
-    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search location, date, bill or mode..." pdfDocument={pdf} pdfFileName={`tax-vat-${startDate}_to_${endDate}.pdf`} chartSupported={false} chartMode={false} onChartToggle={()=>{}}/>{filterBarNode}<div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:data?<TaxPosReport rows={rows}/>:null}</div></>;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search location, date, bill or mode..." pdfDocument={pdf} pdfFileName={`tax-vat-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)}/>{filterBarNode}<div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:data?(chartMode?<ReportChartsView charts={taxPosCharts(rows)} title={config.title}/>:<TaxPosReport rows={rows}/>):null}</div></>;
   }
 
   // 10 Void Summary and Detail — Vw_VoidBeforeSettlement.
@@ -1170,10 +1171,10 @@ export default function DynamicReportPage() {
     const report = objectData as VoidPosData | null;
     const rows = report ? filterVoidPos(report, search) : [];
     const pdf = rows.length ? <VoidPosPdf rows={rows} detail={voidDetail} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} /> : undefined;
-    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search item, table, cashier..." pdfDocument={pdf} pdfFileName={`void-${startDate}_to_${endDate}.pdf`} />
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search item, table, cashier..." pdfDocument={pdf} pdfFileName={`void-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)} />
       {filterBarNode}
       <div style={{padding:"10px 24px",fontSize:12,color:"#684830",display:"flex",gap:16}}><span>Report type:</span><label><input type="radio" checked={!voidDetail} onChange={()=>setVoidDetail(false)}/> Summary</label><label><input type="radio" checked={voidDetail} onChange={()=>setVoidDetail(true)}/> Details</label></div>
-      <div id="report-zoom-area" style={{flex:1}}>{loading ? <LoadingBlock/> : error ? <ErrorBlock message={error}/> : <VoidPosReport rows={rows} detail={voidDetail}/>}</div>
+      <div id="report-zoom-area" style={{flex:1}}>{loading ? <LoadingBlock/> : error ? <ErrorBlock message={error}/>  : chartMode ? <ReportChartsView charts={voidPosCharts(rows)} title={config.title}/> : <VoidPosReport rows={rows} detail={voidDetail}/>}</div>
     </>;
   }
 
@@ -1710,7 +1711,7 @@ export default function DynamicReportPage() {
     const daily=config.render === "payment-daily" && objectData ? filterDaily(objectData as unknown as DailyData,search) : undefined;
     const data=types || daily; const hasData=!loading && !error && !!data?.locationGroups.length;
     const pdf=hasData ? <PaymentTotalsPdf title={config.title} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} types={types} daily={daily}/> : undefined;
-    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search payment, date, location..." pdfDocument={pdf} pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`}/>{filterBarNode}<div id="report-zoom-area">{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:types?<PaymentTypes data={types}/>:daily?<DailyPayments data={daily}/>:null}</div></>;
+    return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search payment, date, location..." pdfDocument={pdf} pdfFileName={`${config.id}-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)}/>{filterBarNode}<div id="report-zoom-area">{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:chartMode&&(types||daily)?<ReportChartsView charts={paymentTotalsCharts(types,daily)} title={config.title}/>:types?<PaymentTypes data={types}/>:daily?<DailyPayments data={daily}/>:null}</div></>;
   }
 
   if (config.render === "billtype") {
@@ -1901,10 +1902,10 @@ export default function DynamicReportPage() {
     const options = new Map<string,string>();
     for (const r of report?.rows ?? []) { const key=`c:${r.cus}`; if (!options.has(key)) options.set(key,r.cus ? `${r.cus} — ${r.cusName || r.cus}` : "Unassigned customer"); }
     const pdf = rows.length ? <CreditHistoryPosPdf rows={rows} from={fmtDMonY(startDate)} to={fmtDMonY(endDate)} /> : undefined;
-    return <><ReportToolbar title={config.title} subtitle="Customer credit transactions (POS 21.2)" from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search customer or bill..." pdfDocument={pdf} pdfFileName={`credit-history-${startDate}_to_${endDate}.pdf`} />
+    return <><ReportToolbar title={config.title} subtitle="Customer credit transactions (POS 21.2)" from={startDate} to={endDate} onRangeChange={rangeChange} search={search} onSearchChange={setSearch} searchPlaceholder="Search customer or bill..." pdfDocument={pdf} pdfFileName={`credit-history-${startDate}_to_${endDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)} />
       {filterBarNode}
       <div style={{padding:"10px 24px",color:"#684830",fontSize:12}}><label>Customer: <select aria-label="Customer" value={creditCustomerSelection} onChange={e=>setCreditCustomerSelection(e.target.value)} style={{marginLeft:8,padding:"7px 10px",border:"1px solid #decbb0",borderRadius:8,background:"white"}}><option value="all">All Customers</option>{creditCustomerSelection!=="all"&&!options.has(creditCustomerSelection)&&<option value={creditCustomerSelection}>Selected customer (no records)</option>}{Array.from(options).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>
-      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:<CreditHistoryPos rows={rows}/>}</div>
+      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:chartMode?<ReportChartsView charts={creditHistoryPosCharts(rows)} title={config.title}/>:<CreditHistoryPos rows={rows}/>}</div>
     </>;
   }
 
@@ -2034,10 +2035,10 @@ export default function DynamicReportPage() {
       finally { if (seq === invoiceRequest.current) setInvoiceBusy(false); }
     };
     const pdf = invoiceData?.rows.length ? <InvoiceTracePdf data={invoiceData} /> : undefined;
-    return <><ReportToolbar title={config.title} subtitle="Find an invoice by location and exact invoice number" from={startDate} to={endDate} onRangeChange={rangeChange} hideDates searchable={false} search="" onSearchChange={()=>{}} pdfDocument={pdf} pdfFileName="invoice-trace.pdf" />
+    return <><ReportToolbar title={config.title} subtitle="Find an invoice by location and exact invoice number" from={startDate} to={endDate} onRangeChange={rangeChange} hideDates searchable={false} search="" onSearchChange={()=>{}} pdfDocument={pdf} pdfFileName="invoice-trace.pdf" chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)} />
       {filterBarNode}
       <form onSubmit={e=>{e.preventDefault(); void run();}} style={{padding:"14px 24px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",color:"#684830",fontSize:12}}><label htmlFor="invoice-number">Invoice Number:</label><input id="invoice-number" value={invoiceNo} maxLength={100} onChange={e=>{invoiceRequest.current++; setInvoiceBusy(false); setInvoiceData(null); setInvoiceError(""); setInvoiceNo(e.target.value);}} style={{height:36,padding:"0 10px",border:"1px solid #decbb0",borderRadius:8}}/><button type="submit" disabled={invoiceBusy} style={{height:36,padding:"0 16px",background:"#684830",color:"white",border:0,borderRadius:8,cursor:"pointer"}}>Trace Invoice</button><span>Select a location above.</span></form>
-      <div id="report-zoom-area" style={{flex:1}}>{invoiceBusy ? <LoadingBlock/> : invoiceError ? <ErrorBlock message={invoiceError}/> : invoiceData ? invoiceData.rows.length ? <InvoiceTraceReport data={invoiceData}/> : <ReportEmptyState hint="Check the invoice number and location.">No records found for this invoice and location.</ReportEmptyState> : <p style={{padding:30,textAlign:"center"}}>Select a location and enter an invoice number.</p>}</div>
+      <div id="report-zoom-area" style={{flex:1}}>{invoiceBusy ? <LoadingBlock/> : invoiceError ? <ErrorBlock message={invoiceError}/> : invoiceData ? invoiceData.rows.length ? (chartMode?<ReportChartsView charts={invoiceCharts(invoiceData)} title={config.title}/>:<InvoiceTraceReport data={invoiceData}/>) : <ReportEmptyState hint="Check the invoice number and location.">No records found for this invoice and location.</ReportEmptyState> : <p style={{padding:30,textAlign:"center"}}>Select a location and enter an invoice number.</p>}</div>
     </>;
   }
 
@@ -2106,9 +2107,9 @@ export default function DynamicReportPage() {
     return <><ReportToolbar title={config.title} subtitle={config.subtitle} from={startDate} to={startDate}
       onRangeChange={f=>{setStartDate(f);setEndDate(f)}} singleDate singleDateLabel="Business Date"
       search={search} onSearchChange={setSearch} searchPlaceholder="Search saved rows..."
-      pdfDocument={pdf} pdfFileName={`performance-report-${startDate}.pdf`}/>
+      pdfDocument={pdf} pdfFileName={`performance-report-${startDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)}/>
       {perfData && <div style={{display:'flex',gap:8,flexWrap:'wrap',padding:'12px 24px 0'}}>{perfData.locations.map(location=><button key={location.code} type="button" onClick={()=>setLoc(location.code)} style={{padding:'9px 14px',borderRadius:8,border:'1px solid #decbb0',cursor:'pointer',background:perfData.location===location.code?'#684830':'white',color:perfData.location===location.code?'white':'#45301d'}}>{location.name}</button>)}</div>}
-      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<ReportEmptyState>No matching rows for this search.</ReportEmptyState>:filtered?<PerformanceReport report={filtered}/>:null}</div></>;
+      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<ReportEmptyState>No matching rows for this search.</ReportEmptyState>:filtered?(chartMode?<ReportChartsView charts={performanceCharts(perfData!,search)} title={config.title}/>:<PerformanceReport report={filtered}/>):null}</div></>;
   }
 
   // ── Generic reports (Transaction Summary etc.) ──

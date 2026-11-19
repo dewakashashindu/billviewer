@@ -5,6 +5,7 @@
 // each report gets charts that match ITS columns — plus a
 // location-wise breakdown whenever locations exist.
 // ============================================================
+import {moreReportCharts} from "./reportMoreCharts";
 import type { SalesSummaryData } from "./SalesSummaryReport";
 import type { SalesDetailsData } from "./SalesDetailsReport";
 import type { CatSummaryData, CatDetailData } from "./CategoryReports";
@@ -35,7 +36,7 @@ export interface ChartPoint {
 export interface ChartModel {
   id: string;
   title: string;
-  kind: "bars" | "pie" | "hbars";
+  kind: "bars" | "pie" | "hbars" | "line";
   series: string[];
   points: ChartPoint[];
   unit: "currency" | "number";
@@ -73,7 +74,7 @@ const bars = (
   series: string[],
   points: ChartPoint[],
   unit: ChartModel["unit"]
-): ChartModel | null => (points.length > 0 ? { id, title, kind: "bars", series, points, unit } : null);
+): ChartModel | null => (points.length > 0 ? { id, title, kind: /daily|per day|by hour/i.test(title) && series.length === 1 ? "line" : "bars", series, points, unit } : null);
 const pie = (
   id: string,
   title: string,
@@ -107,7 +108,6 @@ const locHbars = (
 // ── 7.1 Transaction Summary ──
 function txnCharts(d: TxnSummaryData): ChartModel[] {
   const paxM: Agg = new Map();
-  const spendM: Agg = new Map();
   const deptM: Agg = new Map();
   const locs: Array<{ name: string; value: number }> = [];
   for (const loc of d.locationGroups ?? []) {
@@ -116,30 +116,14 @@ function txnCharts(d: TxnSummaryData): ChartModel[] {
       bump(paxM, r.txnDate, 0, r.localPax, 3);
       bump(paxM, r.txnDate, 1, r.foreignPax, 3);
       bump(paxM, r.txnDate, 2, r.totalPax, 3);
-      const a = spendM.get(r.txnDate) ?? [0, 0, 0];
-      a[0] += r.spendingPerBill * r.bills; // volume
-      a[1] += r.bills;
-      a[2] += r.totalPax;
-      spendM.set(r.txnDate, a);
       bump(deptM, r.txnDate, 0, r.foodSales, 4);
       bump(deptM, r.txnDate, 1, r.beverageSales, 4);
       bump(deptM, r.txnDate, 2, r.sugarSales, 4);
       bump(deptM, r.txnDate, 3, r.otherSales, 4);
     }
   }
-  const spendPts: ChartPoint[] = Array.from(spendM.entries())
-    .map(([label, a]) => ({
-      label,
-      values: [
-        a[1] > 0 ? r2(a[0] / a[1]) : 0,
-        a[2] > 0 ? r2(a[0] / a[2]) : 0,
-        a[1] > 0 ? r2(a[2] / a[1]) : 0,
-      ],
-    }))
-    .sort(byDateAsc);
   return [
     ...only(bars("txn-pax", "Pax Per Day — Local / Foreign / Total", ["Local Pax", "Foreign Pax", "Total Pax"], toPoints(paxM), "number")),
-    ...only(bars("txn-spend", "Per-Day Spending / Bill · Spending / Pax · Avg Pax / Bill", ["Spending / Bill", "Spending / Pax", "Avg Pax / Bill"], spendPts, "number")),
     ...only(bars("txn-dept", "Department Sales Per Day", ["Food", "Beverage", "Sugar", "Other"], toPoints(deptM), "currency")),
     ...only(locHbars("txn-loc", "Location-wise Sales Volume", locs, "currency")),
   ];
@@ -166,6 +150,7 @@ function summaryCharts(d: SalesSummaryData): ChartModel[] {
   return [
     ...only(bars("sum-day", "Daily Collection", ["Net Total"], toPoints(dayM), "currency")),
     ...only(bars("sum-bills", "Bills Per Day", ["Bills"], toPoints(billsM), "number")),
+    ...only(bars("sum-avg", "Average Bill Value by Day", ["Average"], toPoints(dayM).filter(p=>(billsM.get(p.label)?.[0]||0)>0).map(p=>({...p,values:[r2(p.values[0]/billsM.get(p.label)![0])]})), "currency")),
     ...only(pie("sum-mode", "Order Mode Split", toPoints(modeM, false), "currency")),
     ...only(pie("sum-type", "Bill Type Split", toPoints(typeM, false), "currency")),
     ...only(locHbars("sum-loc", "Location-wise Collection", locs, "currency")),
@@ -176,18 +161,26 @@ function summaryCharts(d: SalesSummaryData): ChartModel[] {
 function detailsCharts(d: SalesDetailsData, cm: boolean): ChartModel[] {
   const dayM: Agg = new Map();
   const itemM: Agg = new Map();
+  const qtyM: Agg = new Map(), billsM: Agg = new Map(), modeM: Agg = new Map(), typeM: Agg = new Map();
   const locs: Array<{ name: string; value: number }> = [];
   for (const loc of d.locationGroups ?? []) {
     locs.push({ name: loc.locName || loc.locCode, value: loc.locNetTotal });
     for (const g of loc.dateGroups ?? []) {
       bump(dayM, g.date, 0, g.dayNetTotal, 1);
-      for (const b of g.bills ?? [])
-        for (const it of b.items ?? []) bump(itemM, it.name || "Unknown", 0, it.totItemPrice, 1);
+      bump(billsM,g.date,0,(g.bills??[]).length,1);
+      for (const b of g.bills ?? []) {
+        bump(modeM,b.orderMode||"Other",0,b.totals.netTotal,1); bump(typeM,b.billType||"Other",0,b.totals.netTotal,1);
+        for (const it of b.items ?? []) { bump(itemM, it.name || "Unknown", 0, it.totItemPrice, 1); bump(qtyM,it.name||"Unknown",0,it.qty,1); }
+      }
     }
   }
   return [
     ...only(bars("det-day", cm ? "Daily Complimentary Value" : "Daily Net Total", ["Net Total"], toPoints(dayM), "currency")),
     ...only(hbars("det-items", cm ? "Top Complimentary Items" : "Top 10 Items", toPoints(itemM, false), "currency")),
+    ...only(hbars("det-qty", "Top Items by Quantity", toPoints(qtyM,false), "number")),
+    ...only(bars("det-bills", "Bills per Day", ["Bills"], toPoints(billsM), "number")),
+    ...only(pie("det-mode", "Order Mode Split", toPoints(modeM,false), "currency")),
+    ...only(pie("det-type", "Bill Type Split", toPoints(typeM,false), "currency")),
     ...only(locHbars("det-loc", "Location-wise Net Total", locs, "currency")),
   ];
 }
@@ -223,6 +216,7 @@ function catDetailCharts(d: CatDetailData): ChartModel[] {
   return [
     ...only(bars("catd-day", "Daily Category Sales", ["Total"], toPoints(dayM), "currency")),
     ...only(pie("catd-pie", "Category Share", toPoints(catM, false), "currency")),
+    ...only(hbars("catd-rank", "Top Categories", toPoints(catM, false), "currency")),
     ...only(locHbars("catd-loc", "Location-wise Sales", locs, "currency")),
   ];
 }
@@ -242,6 +236,7 @@ function paymentCharts(d: PaymentSummaryData): ChartModel[] {
   }
   return [
     ...only(pie("pay-pie", "Payment Mode Split", toPoints(modeM, false), "currency")),
+    ...only(hbars("pay-rank", "Payment Mode Ranking", toPoints(modeM, false), "currency")),
     ...only(bars("pay-day", "Daily Collections", ["Total"], toPoints(dayM), "currency")),
     ...only(locHbars("pay-loc", "Location-wise Collections", locs, "currency")),
   ];
@@ -275,7 +270,7 @@ function stewardCharts(d: StewardData, ser: boolean): ChartModel[] {
       for (const r of l.rows ?? []) {
         bump(dayM, r.date, 0, ser ? r.serChg : r.grand, 1);
       }
-      bump(stewM, `${s.stewId} ${s.stewName}`.trim(), 0, ser ? s.stewTotals.serChg : s.stewTotals.grand, 1);
+      bump(stewM, `${s.stewId} ${s.stewName}`.trim(), 0, ser ? l.totals.serChg : l.totals.grand, 1);
     }
   return [
     ...only(hbars("stw-h", ser ? "Steward-wise Service Charge" : "Steward-wise Sales", toPoints(stewM, false), "currency")),
@@ -334,11 +329,11 @@ function paxCharts(d: PaxData): ChartModel[] {
       bump(dayM, s.date, 0, s.totalPax, 2);
       bump(dayM, s.date, 1, s.totalBills, 2);
     }
-    for (const b of l.bills ?? []) bump(spendM, b.date, 0, b.avgSpending, 1);
+    for (const b of l.bills ?? []) { bump(spendM, b.date, 0, b.totalSpending, 2); bump(spendM, b.date, 1, b.totalPax, 2); }
   }
   return [
     ...only(bars("pax-day", "Total Pax vs Bills Per Day", ["Total Pax", "Total Bills"], toPoints(dayM), "number")),
-    ...only(bars("pax-spend", "Average Spending On Pax Per Day", ["Avg Spending"], toPoints(spendM), "currency")),
+    ...only(bars("pax-spend", "Average Spending per Pax Per Day", ["Avg Spending"], toPoints(spendM).filter(p=>p.values[1]>0).map(p=>({...p,values:[r2(p.values[0]/p.values[1])]})), "currency")),
     ...only(locHbars("pax-loc", "Location-wise Pax", locs, "number")),
   ];
 }
@@ -387,6 +382,7 @@ function credSumCharts(d: CreditSummaryData): ChartModel[] {
   }
   return [
     ...only(hbars("cred-top", "Top Credit Customers", toPoints(custM, false), "currency")),
+    ...only(pie("cred-share", "Customer Outstanding Share", toPoints(custM, false), "currency")),
     ...only(locHbars("cred-loc", "Location-wise Outstanding Credit", locs, "currency")),
   ];
 }
@@ -420,7 +416,9 @@ function hourlyCharts(d: HourlySalesData): ChartModel[] {
   }
   return [
     ...only(bars("hr-sales", "Sales Value by Hour", ["Sales"], toPoints(saleM), "currency")),
+    ...only(hbars("hr-peak", "Peak Sales Hours", toPoints(saleM, false), "currency")),
     ...only(bars("hr-bills", "Bills by Hour", ["Bills"], toPoints(billM), "number")),
+    ...only(bars("hr-avg", "Average Bill by Hour", ["Average"], toPoints(saleM).filter(p=>(billM.get(p.label)?.[0]||0)>0).map(p=>({...p,values:[r2(p.values[0]/billM.get(p.label)![0])]})), "currency")),
     ...only(locHbars("hr-loc", "Location-wise Sales", locs, "currency")),
   ];
 }
@@ -435,6 +433,7 @@ function btCharts(d: BillTypeData): ChartModel[] {
   }
   return [
     ...only(pie("bt-pie", "Collections by Bill Type", toPoints(typeM, false), "currency")),
+    ...only(hbars("bt-rank", "Bill Type Ranking", toPoints(typeM, false), "currency")),
     ...only(locHbars("bt-loc", "Location-wise Collections", locs, "currency")),
   ];
 }
@@ -469,6 +468,7 @@ function cbdCharts(d: CbdData): ChartModel[] {
   }
   return [
     ...only(pie("cbd-pie", "Payment Mode Split", toPoints(modeM, false), "currency")),
+    ...only(hbars("cbd-rank", "Payment Mode Ranking", toPoints(modeM, false), "currency")),
     ...only(locHbars("cbd-loc", "Location-wise Payments", locs, "currency")),
   ];
 }
@@ -499,7 +499,7 @@ function miiCharts(d: MiiData): ChartModel[] {
 
 // ── 5.1 Item Movement ──
 function imvCharts(d: ImvData): ChartModel[] {
-  if (d.mode === "non") return [];
+  if (d.mode === "non") return only(hbars("imv-non-loc", "Non-moving Item Count by Location", (d.locationGroups ?? []).map(l=>({label:l.locName || l.locCode, values:[(l.rows ?? []).length]})).sort((a,b)=>b.values[0]-a.values[0]), "number"));
   const itemM: Agg = new Map();
   const locs: Array<{ name: string; value: number }> = [];
   for (const l of d.locationGroups ?? []) {
@@ -629,7 +629,7 @@ function rowsCharts(rows: Array<Record<string, unknown>>): ChartModel[] {
   ];
 }
 
-export function buildReportCharts(reportId: string, data: unknown): ChartModel[] {
+function buildBaseReportCharts(reportId: string, data: unknown): ChartModel[] {
   if (!data) return [];
   if (Array.isArray(data)) return rowsCharts(data);
   if (reportId === "performance-report") return [];
@@ -662,4 +662,8 @@ export function buildReportCharts(reportId: string, data: unknown): ChartModel[]
   if (reportId === "cash-inout") return cioCharts(data as CioData);
   if (reportId === "kot-bot") return kotCharts(data as KotData);
   return [];
+}
+
+export function buildReportCharts(reportId: string, data: unknown): ChartModel[] {
+  return [...buildBaseReportCharts(reportId, data), ...(data && !Array.isArray(data) ? moreReportCharts(reportId, data) : [])];
 }
