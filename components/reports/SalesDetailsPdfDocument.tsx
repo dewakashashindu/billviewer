@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/SalesDetailsPdfDocument.tsx
 // ALUTH FILE — mekamama create karanna
@@ -163,8 +164,8 @@ export default function SalesDetailsPdfDocument({
   const grandTotal = locationGroups.reduce((s, l) => s + l.locNetTotal, 0);
   return (
     <Document title={title} author="Mila Mirissa">
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Print Date   :</Text>
@@ -199,7 +200,7 @@ export default function SalesDetailsPdfDocument({
           <Text>Grand Total</Text>
           <Text>{fmt(grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

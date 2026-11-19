@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/TaxVatPdfDocument.tsx
 // 8.2 PDF — same print structure as the Sales Summary PDF
@@ -76,8 +77,8 @@ export default function TaxVatPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Print Date</Text>
           <Text>: {printDate}</Text>
@@ -166,7 +167,7 @@ export default function TaxVatPdfDocument({
             {fmt(data.grand.vatTdl)}
           </Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

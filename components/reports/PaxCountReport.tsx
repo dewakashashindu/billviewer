@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -296,8 +297,8 @@ export function PaxCountPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={pStyles.infoRow}>
           <Text style={pStyles.infoLabel}>Print Date</Text>
           <Text>: {printDate}</Text>
@@ -359,7 +360,7 @@ export function PaxCountPdfDocument({
           <Text style={[pStyles.bold, { width: XW.d }, pStyles.right]}>{fmtAmt(data.grand.totalSpending)}</Text>
           <Text style={[pStyles.bold, { width: XW.e }, pStyles.right]}>{fmtAmt(data.grand.avgSpending)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

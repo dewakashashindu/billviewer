@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -188,8 +189,8 @@ export function ItemMovementPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <Text style={pStyles.mode}>{MODE_TITLE[data.mode]}</Text>
         <View style={pStyles.infoRow}>
           <Text style={pStyles.infoLabel}>Print Date</Text>
@@ -219,7 +220,7 @@ export function ItemMovementPdfDocument({
             ))}
           </View>
         ))}
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

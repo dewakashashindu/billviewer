@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -254,8 +255,8 @@ export function CashInOutPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         {data.categoryFilter ? <Text style={pStyles.filtered}>[Filtered For : {data.categoryFilter}]</Text> : null}
         <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Date</Text><Text>: {printDate}</Text></View>
         <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Time</Text><Text>: {printTime}</Text></View>
@@ -300,7 +301,7 @@ export function CashInOutPdfDocument({
           <Text style={[pStyles.bold, { width: KW.in }, pStyles.right]}>{fmtAmt(data.grandIn)}</Text>
           <Text style={[pStyles.bold, { width: KW.out }, pStyles.right]}>{fmtAmt(data.grandOut)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -253,8 +254,8 @@ export function TracePdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={pStyles.infoRow}>
           <Text style={pStyles.infoLabel}>Print Date</Text>
           <Text>: {printDate}</Text>
@@ -307,7 +308,7 @@ export function TracePdfDocument({
           <Text style={[pStyles.bold, { width: TW.ref + TW.action + TW.date + TW.qty + TW.price }]}>Grand Total</Text>
           <Text style={[pStyles.bold, { width: TW.amount }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

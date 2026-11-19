@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/PaymentGridPdfDocument.tsx
 // 2.3 PDF - "Bills By Pay Mode Wise" pivot grid (landscape A4):
@@ -78,8 +79,8 @@ export default function BillPayModeGridPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" orientation="landscape" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={styles.infoRow}><Text>Print Date : {printDate}</Text></View>
         <View style={styles.infoRow}><Text>Print Time : {printTime}</Text></View>
         <View style={styles.range}><Text>From : {from}  To : {to}</Text></View>
@@ -121,7 +122,7 @@ export default function BillPayModeGridPdfDocument({
           <Text>Grand Total</Text>
           <Text>{fmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

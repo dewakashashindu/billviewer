@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/PaymentPdfDocument.tsx
 // ✅ 2.1/2.2 PDF — POS print eke wage location → date → bill payments
@@ -73,8 +74,8 @@ export default function PaymentSummaryPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={styles.infoRow}><Text>Print Date : {printDate}</Text></View>
         <View style={styles.infoRow}><Text>Print Time : {printTime}</Text></View>
         <View style={styles.infoRow}><Text>From : {from}  To : {to}</Text></View>
@@ -122,7 +123,7 @@ export default function PaymentSummaryPdfDocument({
           <Text>Grand Total</Text>
           <Text>{fmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

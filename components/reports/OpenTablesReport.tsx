@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -202,8 +203,8 @@ export function OpenTablesPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" orientation="landscape" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={pStyles.infoRow}>
           <Text style={pStyles.infoLabel}>Print Date</Text>
           <Text>: {printDate}</Text>
@@ -248,7 +249,7 @@ export function OpenTablesPdfDocument({
           <Text style={[pStyles.bold, { width: OW.code + OW.desc + OW.qty + OW.price }]}>Grand Total</Text>
           <Text style={[pStyles.bold, { width: OW.value }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

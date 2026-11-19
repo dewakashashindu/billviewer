@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -363,7 +364,7 @@ const pStyles = StyleSheet.create({
 function PdfHead({ title, printDate, printTime, from, to }: { title: string; printDate: string; printTime: string; from: string; to: string }) {
   return (
     <>
-      <Text style={pStyles.title}>{title}</Text>
+      <ReportPdfHeader title={title}/>
       <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Date</Text><Text>: {printDate}</Text></View>
       <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Time</Text><Text>: {printTime}</Text></View>
       <Text style={pStyles.range}>From {from}  To {to}</Text>
@@ -375,7 +376,7 @@ const BW = { type: 160, bills: 90, value: 130 };
 export function BillTypePdfDocument({ title, printDate, printTime, from, to, data }: { title: string; printDate: string; printTime: string; from: string; to: string; data: BillTypeData }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
         <PdfHead title={title} printDate={printDate} printTime={printTime} from={from} to={to} />
         {data.locationGroups.map((l) => (
           <View key={l.locCode}>
@@ -404,7 +405,7 @@ export function BillTypePdfDocument({ title, printDate, printTime, from, to, dat
           <Text style={[pStyles.bold, { width: BW.bills }, pStyles.right]}>{data.grandBills}</Text>
           <Text style={[pStyles.bold, { width: BW.value }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }
@@ -413,7 +414,7 @@ const CW = { bill: 110, value: 120, dt: 160 };
 export function CashierCollectionPdfDocument({ title, printDate, printTime, from, to, data }: { title: string; printDate: string; printTime: string; from: string; to: string; data: CcData }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
         <PdfHead title={title} printDate={printDate} printTime={printTime} from={from} to={to} />
         {data.locationGroups.map((l) => (
           <View key={l.locCode}>
@@ -451,7 +452,7 @@ export function CashierCollectionPdfDocument({ title, printDate, printTime, from
           <Text style={[pStyles.bold, { width: CW.bill + CW.value }]}>Grand Total</Text>
           <Text style={[pStyles.bold, { width: CW.dt }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }
@@ -460,7 +461,7 @@ const DW = { dt: 160, mode: 140, amount: 120 };
 export function CashierBreakdownPdfDocument({ title, printDate, printTime, from, to, data }: { title: string; printDate: string; printTime: string; from: string; to: string; data: CbdData }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
         <PdfHead title={title} printDate={printDate} printTime={printTime} from={from} to={to} />
         {data.locationGroups.map((l) => (
           <View key={l.locCode}>
@@ -500,7 +501,7 @@ export function CashierBreakdownPdfDocument({ title, printDate, printTime, from,
           <Text style={[pStyles.bold, { width: DW.dt + DW.mode }]}>Grand Total</Text>
           <Text style={[pStyles.bold, { width: DW.amount }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

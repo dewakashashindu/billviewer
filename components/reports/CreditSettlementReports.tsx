@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -345,8 +346,8 @@ export function PaymentHistoryPdfDocument({
   const W = { bill: 60, paid: 55, inv: 55, invd: 55, amt: 60, bb: 70, ba: 65, st: 45, sd: 55 };
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         {data.customerFilter ? <Text style={pStyles.filtered}>[Customer : {data.customerFilter}]</Text> : null}
         <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Date</Text><Text>: {printDate}</Text></View>
         <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Time</Text><Text>: {printTime}</Text></View>
@@ -388,7 +389,7 @@ export function PaymentHistoryPdfDocument({
           <Text style={pStyles.bold}>Grand Total</Text>
           <Text style={[pStyles.bold, { marginLeft: 200 }]}>PAID {fmtAmt(data.grandPaid)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }
@@ -402,8 +403,8 @@ export function AccountDetailPdfDocument({
   const W = { bill: 70, type: 45, date: 60, prev: 70, trn: 70, bal: 70 };
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         {data.customerFilter ? <Text style={pStyles.filtered}>[Customer : {data.customerFilter}]</Text> : null}
         <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Date</Text><Text>: {printDate}</Text></View>
         <View style={pStyles.infoRow}><Text style={pStyles.infoLabel}>Print Time</Text><Text>: {printTime}</Text></View>
@@ -435,7 +436,7 @@ export function AccountDetailPdfDocument({
             ))}
           </View>
         ))}
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

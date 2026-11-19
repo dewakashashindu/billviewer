@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/CategoryPdfDocuments.tsx
 // ✅ 1.3.1 / 1.3.2 PDFs — POS print eke wage location-wise:
@@ -92,8 +93,8 @@ export function CategorySummaryPdfDocument({
 }: BaseProps & { data: CatSummaryData }) {
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={styles.infoRow}>
           <Text>Print Date : {printDate}</Text>
         </View>
@@ -134,7 +135,7 @@ export function CategorySummaryPdfDocument({
           <Text>Grand Total</Text>
           <Text>{fmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }
@@ -149,8 +150,8 @@ export function CategoryDetailPdfDocument({
 }: BaseProps & { data: CatDetailData }) {
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={styles.infoRow}>
           <Text>Print Date : {printDate}</Text>
         </View>
@@ -213,7 +214,7 @@ export function CategoryDetailPdfDocument({
           <Text>Grand Total</Text>
           <Text>{fmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

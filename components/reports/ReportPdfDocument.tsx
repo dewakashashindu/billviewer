@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/ReportPdfDocument.tsx
 // FULL REPLACE — generic report PDF (pro look, table-alike):
@@ -83,8 +84,8 @@ export default function ReportPdfDocument({
 
   return (
     <Document title={title} author="Mila Mirissa">
-      <Page size="A4" orientation="landscape" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" orientation="landscape" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         {from && to ? (
           <Text style={styles.range}>
             From {from} To {to}
@@ -154,7 +155,7 @@ export default function ReportPdfDocument({
             </View>
           )}
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

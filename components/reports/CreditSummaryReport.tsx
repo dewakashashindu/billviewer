@@ -1,4 +1,5 @@
 "use client";
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -194,8 +195,8 @@ export function CreditSummaryPdfDocument({
 }) {
   return (
     <Document>
-      <Page size="A4" style={pStyles.page}>
-        <Text style={pStyles.title}>{title}</Text>
+      <Page size="A4" style={[pStyles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
         <View style={pStyles.infoRow}>
           <Text style={pStyles.infoLabel}>Print Date</Text>
           <Text>: {printDate}</Text>
@@ -230,7 +231,7 @@ export function CreditSummaryPdfDocument({
           <Text style={[pStyles.bold, { width: CW.code + CW.name }]}>Grand Total</Text>
           <Text style={[pStyles.bold, { width: CW.total }, pStyles.right]}>{fmtAmt(data.grandTotal)}</Text>
         </View>
-      </Page>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }

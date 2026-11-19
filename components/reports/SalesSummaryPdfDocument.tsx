@@ -1,3 +1,4 @@
+import { ReportPdfHeader, ReportPdfFooter } from './ReportPdfBrand';
 // ============================================================
 // LOCATION: components/reports/SalesSummaryPdfDocument.tsx
 // FULL REPLACE — PDF eka POS report eka wage, ✅ LOCATION-WISE:
@@ -44,174 +45,22 @@ const fmt = (n: number) =>
   });
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontFamily: "Helvetica", fontSize: 9, color: "#45301D" },
-  title: {
-    textAlign: "center",
-    fontSize: 14,
-    fontFamily: "Helvetica-Bold",
-    marginBottom: 10,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginBottom: 2,
-  },
-  infoLabel: { width: 80 },
-  range: {
-    fontFamily: "Helvetica-Bold",
-    fontSize: 10,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  // POS eke "01   MILLA MIRISSA" header eka wage
-  location: {
-    fontFamily: "Helvetica-Bold",
-    fontSize: 11,
-    marginTop: 12,
-    marginBottom: 4,
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: "#45301D",
-  },
-  locationTotal: {
-    fontFamily: "Helvetica-Bold",
-    fontSize: 9,
-    marginBottom: 2,
-  },
-  groupDate: {
-    fontFamily: "Helvetica-Bold",
-    fontSize: 10,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  row: { flexDirection: "row" },
-  th: {
-    backgroundColor: "#E4D6BF",
-    fontFamily: "Helvetica-Bold",
-    padding: 4,
-    fontSize: 8,
-    borderRightWidth: 1,
-    borderRightColor: "#C8B8A8",
-    borderBottomWidth: 1,
-    borderBottomColor: "#907860",
-  },
-  td: { padding: 4, borderRightWidth: 1, borderRightColor: "#E4D6BF" },
-  bold: { fontFamily: "Helvetica-Bold" },
-  right: { textAlign: "right" },
-  totalRow: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: "#45301D",
-    marginTop: 2,
-  },
-  grandRow: {
-    flexDirection: "row",
-    borderTopWidth: 2,
-    borderTopColor: "#45301D",
-    marginTop: 6,
-    paddingTop: 4,
-  },
+ page:{padding:28,paddingBottom:45,fontFamily:'Helvetica',fontSize:8,color:'#30251e'},
+ meta:{flexDirection:'row',justifyContent:'space-between',marginBottom:14},metaLabel:{fontFamily:'Helvetica-Bold',fontSize:7,color:'#806d5e',marginBottom:4},metaValue:{fontFamily:'Helvetica-Bold',fontSize:9},
+ location:{backgroundColor:'#f8f4ef',padding:10,fontFamily:'Helvetica-Bold',fontSize:10,color:'#624631',marginBottom:8,marginTop:6},
+ date:{fontFamily:'Helvetica-Bold',fontSize:9,color:'#624631',marginTop:6,marginBottom:6},
+ row:{flexDirection:'row'},head:{backgroundColor:'#624631',color:'white',fontFamily:'Helvetica-Bold',padding:5,fontSize:7},cell:{padding:5,fontSize:8,borderBottomWidth:.5,borderBottomColor:'#eee5db'},right:{textAlign:'right'},
+ total:{flexDirection:'row',justifyContent:'space-between',backgroundColor:'#f1e7d8',padding:7,marginTop:4,marginBottom:6,fontFamily:'Helvetica-Bold',color:'#624631'},
 });
-
-const W = {
-  billNo: 62,
-  netTotal: 62,
-  steward: 108,
-  billType: 58,
-  orderMode: 62,
-  txnTime: 74,
-  casher: 60,
-};
-
-function LocationBlock({ loc }: { loc: SummaryLocation }) {
-  return (
-    <View>
-      <Text style={styles.location}>
-        {loc.locCode}   {loc.locName}
-      </Text>
-
-      {loc.dateGroups.map((g) => (
-        <View key={g.date}>
-          <Text style={styles.groupDate}>{g.date}</Text>
-
-          {/* Header */}
-          <View style={styles.row}>
-            <Text style={[styles.th, { width: W.billNo }]}>BillNo</Text>
-            <Text style={[styles.th, { width: W.netTotal }]}>NetTotal</Text>
-            <Text style={[styles.th, { width: W.steward }]}>Steward</Text>
-            <Text style={[styles.th, { width: W.billType }]}>BillType</Text>
-            <Text style={[styles.th, { width: W.orderMode }]}>OrderMode</Text>
-            <Text style={[styles.th, { width: W.txnTime }]}>TxnTime</Text>
-            <Text style={[styles.th, { width: W.casher }]}>Casher</Text>
-          </View>
-
-          {/* Bill rows */}
-          {g.rows.map((r, i) => (
-            <View style={styles.row} key={`${r.billNo}-${i}`}>
-              <Text style={[styles.td, { width: W.billNo }]}>{r.billNo}</Text>
-              <Text style={[styles.td, { width: W.netTotal }, styles.right]}>
-                {fmt(r.netTotal)}
-              </Text>
-              <Text style={[styles.td, { width: W.steward }]}>{r.steward}</Text>
-              <Text style={[styles.td, { width: W.billType }]}>{r.billType}</Text>
-              <Text style={[styles.td, { width: W.orderMode }]}>{r.orderMode}</Text>
-              <Text style={[styles.td, { width: W.txnTime }]}>{r.txnTime}</Text>
-              <Text style={[styles.td, { width: W.casher }]}>{r.casher}</Text>
-            </View>
-          ))}
-
-          {/* Daily collection */}
-          <View style={styles.totalRow}>
-            <Text style={[styles.td, { width: W.billNo }]} />
-            <Text
-              style={[
-                styles.td,
-                { width: W.netTotal },
-                styles.right,
-                styles.bold,
-              ]}
-            >
-              {fmt(g.dayTotal)}
-            </Text>
-            <Text
-              style={[
-                styles.td,
-                {
-                  width:
-                    W.steward + W.billType + W.orderMode + W.txnTime + W.casher,
-                },
-                styles.bold,
-              ]}
-            >
-              Daily Collection
-            </Text>
-          </View>
-        </View>
-      ))}
-
-      {/* Location total */}
-      <View style={styles.totalRow}>
-        <Text style={[styles.td, { width: W.billNo }]} />
-        <Text
-          style={[styles.td, { width: W.netTotal }, styles.right, styles.bold]}
-        >
-          {fmt(loc.locTotal)}
-        </Text>
-        <Text
-          style={[
-            styles.td,
-            {
-              width: W.steward + W.billType + W.orderMode + W.txnTime + W.casher,
-            },
-            styles.bold,
-          ]}
-        >
-          Total — {loc.locName}
-        </Text>
-      </View>
-    </View>
-  );
-}
+const W={billNo:65,steward:70,billType:70,orderMode:70,txnTime:75,casher:85,netTotal:104};
+function LocationBlock({loc}:{loc:SummaryLocation}){return <View>
+ <Text style={styles.location}>{loc.locCode}   {loc.locName}</Text>
+ {loc.dateGroups.map(g=><View key={g.date}><Text style={styles.date}>{g.date}</Text>
+ <View style={styles.row} wrap={false}>{([['Bill No',W.billNo],['Steward',W.steward],['Bill Type',W.billType],['Order Mode',W.orderMode],['Txn Time',W.txnTime],['Cashier',W.casher],['Net Total',W.netTotal]] as [string,number][]).map(([label,width])=><Text key={label} style={[styles.head,{width},...(label==='Net Total'?[styles.right]:[])]}>{label}</Text>)}</View>
+ {g.rows.map((r,i)=><View key={`${r.billNo}-${i}`} style={[styles.row,i%2===0?{backgroundColor:'#faf7f3'}:{}]} wrap={false}>{([ [r.billNo,W.billNo],[r.steward,W.steward],[r.billType,W.billType],[r.orderMode,W.orderMode],[r.txnTime,W.txnTime],[r.casher,W.casher],[fmt(r.netTotal),W.netTotal]] as [string,number][]).map(([v,width],j)=><Text key={j} style={[styles.cell,{width},...(j===6?[styles.right]:[])]}>{v}</Text>)}</View>)}
+ <View style={styles.total} wrap={false}><Text>Daily Collection</Text><Text>{fmt(g.dayTotal)}</Text></View></View>)}
+ <View style={styles.total} wrap={false}><Text>Total — {loc.locName}</Text><Text>{fmt(loc.locTotal)}</Text></View>
+ </View>}
 
 export default function SalesSummaryPdfDocument({
   title,
@@ -224,50 +73,21 @@ export default function SalesSummaryPdfDocument({
 }: Props) {
   return (
     <Document title={title} author="Mila Mirissa">
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+      <Page size="A4" style={[styles.page, {paddingBottom: 45}]}>
+        <ReportPdfHeader title={title}/>
 
-        {/* Print info — right aligned like POS report */}
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Print Date   :</Text>
-          <Text>{printDate}</Text>
+        <View style={styles.meta} wrap={false}>
+          <View><Text style={styles.metaLabel}>REPORT PERIOD</Text><Text style={styles.metaValue}>{from}  -  {to}</Text></View>
+          <View><Text style={styles.metaLabel}>PRINTED</Text><Text>{printDate}  |  {printTime}</Text></View>
         </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Print Time   :</Text>
-          <Text>{printTime}</Text>
-        </View>
-
-        <Text style={styles.range}>
-          From {from} To {to}
-        </Text>
 
         {/* Location-wise sections */}
         {locationGroups.map((loc) => (
           <LocationBlock key={loc.locCode} loc={loc} />
         ))}
 
-        {/* Grand total (all locations) */}
-        <View style={styles.grandRow}>
-          <Text style={[styles.td, { width: W.billNo }]} />
-          <Text
-            style={[styles.td, { width: W.netTotal }, styles.right, styles.bold]}
-          >
-            {fmt(grandTotal)}
-          </Text>
-          <Text
-            style={[
-              styles.td,
-              {
-                width:
-                  W.steward + W.billType + W.orderMode + W.txnTime + W.casher,
-              },
-              styles.bold,
-            ]}
-          >
-            Grand Total
-          </Text>
-        </View>
-      </Page>
+        <View style={styles.total} wrap={false}><Text>Grand Total</Text><Text>{fmt(grandTotal)}</Text></View>
+      <ReportPdfFooter/></Page>
     </Document>
   );
 }
