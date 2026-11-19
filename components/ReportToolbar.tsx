@@ -358,6 +358,7 @@ export default function ReportToolbar({
 
   return (
     <div
+      className="report-toolbar"
       style={{
         padding: "14px 22px 12px",
         borderBottom: "1px solid #E4D6BF",
@@ -463,7 +464,7 @@ export default function ReportToolbar({
         }}
       >
         {searchable && (
-          <div style={{ position: "relative", flex: "1 1 210px", maxWidth: 300, minWidth: 180 }}>
+          <div className="report-search" style={{ position: "relative", flex: "1 1 210px", maxWidth: 300, minWidth: 180 }}>
             <span
               style={{
                 position: "absolute",
@@ -480,6 +481,7 @@ export default function ReportToolbar({
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -500,6 +502,7 @@ export default function ReportToolbar({
         {/* Single Business Date OR From / To */}
         {!hideDates && (singleDate ? (
           <div
+            className="report-date-range"
             style={{
               display: "flex",
               alignItems: "center",
@@ -525,6 +528,7 @@ export default function ReportToolbar({
             </span>
             <input
               type="date"
+              aria-label={singleDateLabel}
               value={from}
               onChange={(e) => {
                 setClickedChip(null);
@@ -535,6 +539,7 @@ export default function ReportToolbar({
           </div>
         ) : (
           <div
+            className="report-date-range"
             style={{
               display: "flex",
               alignItems: "center",
@@ -550,6 +555,7 @@ export default function ReportToolbar({
             <IconCalendar size={14} style={{ color: "#6B543E" }} />
             <input
               type="date"
+              aria-label="From date"
               value={from}
               onChange={(e) => { setClickedChip(null); onRangeChange(e.target.value, to); }}
               style={{ ...dateInput, border: "none", padding: 0, width: 118 }}
@@ -557,6 +563,7 @@ export default function ReportToolbar({
             <span style={{ color: "#C8B8A8", fontSize: 11 }}>to</span>
             <input
               type="date"
+              aria-label="To date"
               value={to}
               onChange={(e) => { setClickedChip(null); onRangeChange(from, e.target.value); }}
               style={{ ...dateInput, border: "none", padding: 0, width: 118 }}

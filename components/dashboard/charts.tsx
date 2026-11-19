@@ -1,4 +1,5 @@
 "use client";
+import SkeletonLoader from "@/components/SkeletonLoader";
 
 // ============================================================
 // LOCATION: components/dashboard/charts.tsx   (ALUTH FILE)
@@ -372,13 +373,13 @@ export function SectionShell({
 /* ═══════════════════ grids ═══════════════════ */
 export const gridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
   gap: 12,
 };
 
 export const kpiGridStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
   gap: 9,
   marginBottom: 13,
 };
@@ -999,9 +1000,6 @@ export function EmptyBlock({ text = "No data for the selected range." }: { text?
 }
 
 export function LoadingBlock({ text = "Loading…" }: { text?: string }) {
-  return (
-    <div style={{ padding: "26px 12px", textAlign: "center", fontSize: 11.5, color: DASH.muted }}>
-      {text}
-    </div>
-  );
+  return <SkeletonLoader label={text} rows={3}/>;
 }
+

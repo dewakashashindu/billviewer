@@ -40,6 +40,7 @@ export interface ChartModel {
   series: string[];
   points: ChartPoint[];
   unit: "currency" | "number";
+  truncatedFrom?: number;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -87,7 +88,7 @@ const hbars = (
   points: ChartPoint[],
   unit: ChartModel["unit"]
 ): ChartModel | null =>
-  points.length > 0 ? { id, title, kind: "hbars", series: ["Total"], points: points.slice(0, 10), unit } : null;
+  points.length > 0 ? { id, title, kind: "hbars", series: ["Total"], points: points.slice(0, 10), unit, ...(points.length > 10 ? {truncatedFrom: points.length} : {}) } : null;
 
 const locHbars = (
   id: string,

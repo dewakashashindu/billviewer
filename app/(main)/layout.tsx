@@ -10,6 +10,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { isAdminSession } from "@/lib/auth";
 import { getPool, isDbConfigured } from "@/lib/db";
 import AppShell from "@/components/AppShell";
+import "@/components/staff-ui-consistency.css";
 import {loadWebAuthorization} from "@/lib/webAuthorization";
 
 export const dynamic = "force-dynamic";

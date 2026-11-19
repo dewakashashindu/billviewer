@@ -10,7 +10,7 @@ const EVENT='app-feedback-popup';
 export function useFeedbackState<T extends string|null>(initial:T,kind:InputKind):[T,Dispatch<SetStateAction<T>>]{
  const [value,setValue]=useState<T>(initial);
  const set=useCallback<Dispatch<SetStateAction<T>>>((next)=>{
-   if(typeof next==='string'&&next.trim()&&!/generating PDF/i.test(next)){const resolved:Kind=kind==='status'?(/unable|could not|failed|no tables|add at least|select a confirmed|locked|not connected/i.test(next)?'error':/already exists|only one/i.test(next)?'info':'success'):kind;window.dispatchEvent(new CustomEvent<Feedback>(EVENT,{detail:{message:next,kind:resolved}}))}
+   if(typeof next==='string'&&next.trim()&&!/generating PDF/i.test(next)){const resolved:Kind=kind==='status'?(/unable|could not|failed|no tables|add at least|select a confirmed|locked|not connected/i.test(next)?'error':/already exists|only one|attach the downloaded|not attached automatically/i.test(next)?'info':'success'):kind;window.dispatchEvent(new CustomEvent<Feedback>(EVENT,{detail:{message:next,kind:resolved}}))}
    setValue(next);
  },[kind]);
  return [value,set];

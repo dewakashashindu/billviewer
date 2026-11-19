@@ -1,4 +1,5 @@
 "use client";
+import SkeletonLoader from "@/components/SkeletonLoader";
 import ReportEmptyState from "@/components/reports/ReportEmptyState";
 import "@/components/reports/report-screen-font.css";
 import {useFeedbackState} from "@/components/FeedbackPopup";
@@ -186,7 +187,7 @@ const fmtDMonY = (iso: string) => {
 };
 
 // ── shared loading block (identical for every report) ──
-function LoadingBlock() {
+function PerformanceLoadingBlock() {
   return (
     <div style={{ padding: "60px 20px", textAlign: "center" }}>
       <style>{`@keyframes rep-spin{to{transform:rotate(360deg)}}`}</style>
@@ -212,6 +213,8 @@ function LoadingBlock() {
     </div>
   );
 }
+
+function LoadingBlock(){ return <SkeletonLoader label="Loading report data…"/>; }
 
 // ── shared error banner (identical for every report) ──
 function ErrorBlock({ message }: { message: string }) {
@@ -2109,7 +2112,7 @@ export default function DynamicReportPage() {
       search={search} onSearchChange={setSearch} searchPlaceholder="Search saved rows..."
       pdfDocument={pdf} pdfFileName={`performance-report-${startDate}.pdf`} chartSupported={true} chartMode={chartMode} onChartToggle={()=>setChartMode(!chartMode)}/>
       {perfData && <div style={{display:'flex',gap:8,flexWrap:'wrap',padding:'12px 24px 0'}}>{perfData.locations.map(location=><button key={location.code} type="button" onClick={()=>setLoc(location.code)} style={{padding:'9px 14px',borderRadius:8,border:'1px solid #decbb0',cursor:'pointer',background:perfData.location===location.code?'#684830':'white',color:perfData.location===location.code?'white':'#45301d'}}>{location.name}</button>)}</div>}
-      <div id="report-zoom-area" style={{flex:1}}>{loading?<LoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<ReportEmptyState>No matching rows for this search.</ReportEmptyState>:filtered?(chartMode?<ReportChartsView charts={performanceCharts(perfData!,search)} title={config.title}/>:<PerformanceReport report={filtered}/>):null}</div></>;
+      <div id="report-zoom-area" style={{flex:1}}>{loading?<PerformanceLoadingBlock/>:error?<ErrorBlock message={error}/>:filtered&&perfData?.rows.length&&!filtered.rows.length?<ReportEmptyState>No matching rows for this search.</ReportEmptyState>:filtered?(chartMode?<ReportChartsView charts={performanceCharts(perfData!,search)} title={config.title}/>:<PerformanceReport report={filtered}/>):null}</div></>;
   }
 
   // ── Generic reports (Transaction Summary etc.) ──

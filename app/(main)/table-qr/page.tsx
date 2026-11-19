@@ -1,4 +1,5 @@
 "use client";
+import SkeletonLoader from "@/components/SkeletonLoader";
 import {useFeedbackState} from "@/components/FeedbackPopup";
 import {displayMessage} from "@/lib/displayMessage";
 import {PermissionGate} from "@/components/WebPermissions";
@@ -477,6 +478,7 @@ export default function TableQrPage() {
   const [source, setSource] = useState<"database" | "mock" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useFeedbackState<string | null>(null,'error');
+  const [, setExportError] = useFeedbackState<string | null>(null,'error');
 
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -763,7 +765,7 @@ export default function TableQrPage() {
         "image/png"
       );
     } catch {
-      alert("PNG download failed. Please try again.");
+      setExportError("PNG download failed. Please try again.");
     } finally {
       setBusy(null);
     }
@@ -778,7 +780,7 @@ export default function TableQrPage() {
       const dataUrl = canvas.toDataURL("image/png");
       const win = window.open("", "_blank", "width=640,height=640");
       if (!win) {
-        alert("Allow pop-ups for this site to print the card.");
+        setExportError("Allow pop-ups for this site to print the card.");
         return;
       }
       // Use DOM text/property APIs: table numbers can come from the database and
@@ -796,7 +798,7 @@ export default function TableQrPage() {
       image.src = dataUrl;
       doc.body.appendChild(image);
     } catch {
-      alert("Print failed. Please try again.");
+      setExportError("Print failed. Please try again.");
     } finally {
       setBusy(null);
     }
@@ -825,7 +827,7 @@ export default function TableQrPage() {
       }
       pdf.save(`table-qr-cards-${widthIn}x${heightIn}in.pdf`);
     } catch {
-      alert("PDF download failed. Please try again.");
+      setExportError("PDF download failed. Please try again.");
     } finally {
       setBusy(null);
     }
@@ -1094,9 +1096,7 @@ export default function TableQrPage() {
           </div>
           <div style={{ maxHeight: 300, overflowY: "auto" }}>
             {loading ? (
-              <p style={{ padding: 14, margin: 0, color: FAINT, fontSize: 13 }}>
-                Loading tables…
-              </p>
+              <SkeletonLoader label="Loading tables…" rows={3} compact/>
             ) : visible.length === 0 ? (
               <p style={{ padding: 14, margin: 0, color: FAINT, fontSize: 13 }}>
                 No tables in this group. Use “Custom table name” below to add one.

@@ -151,17 +151,17 @@ const NAV: NavItem[] = [
         children: [
           {
             key: "r-ss-om",
-            label: "Sales Summery – Order Mode Wise",
+            label: "Sales Summary – Order Mode Wise",
             reportId: "sales-summary-order-mode",
           },
           {
             key: "r-ss-bt",
-            label: "Sales Summery – Bill Type Wise",
+            label: "Sales Summary – Bill Type Wise",
             reportId: "sales-summary-bill-type",
           },
           {
             key: "r-ss-all",
-            label: "Sales Summery – ALL",
+            label: "Sales Summary – ALL",
             reportId: "sales-summary",
           },
           {
@@ -179,7 +179,7 @@ const NAV: NavItem[] = [
             label: "Sales Detail – All",
             reportId: "sales-details",
           },
-          { key: "r-sbc-s", label: "Sales By Category – Summery", reportId: "sales-category-summary" },
+          { key: "r-sbc-s", label: "Sales By Category – Summary", reportId: "sales-category-summary" },
           { key: "r-sbc-d", label: "Sales By Category – Detail", reportId: "sales-category-detail" },
           { key: "r-hourly", label: "Hourly Sales", reportId: "hourly-sales" },
         ],
@@ -189,7 +189,7 @@ const NAV: NavItem[] = [
         key: "cat-payment",
         label: "Payment Mode",
         children: [
-          { key: "r-pay-summary", label: "Payment Summery", reportId: "payment-summary" },
+          { key: "r-pay-summary", label: "Payment Summary", reportId: "payment-summary" },
           { key: "r-pay-mode", label: "Pay Mode Wise", reportId: "payment-summary-wise" },
           { key: "r-pay-daily", label: "Sales By Pay Types", reportId: "payment-daily-modes" },
           { key: "r-pay-grid", label: "Bill Pay Mode Wise Grid", reportId: "payment-bill-paymode-grid" },
@@ -234,7 +234,7 @@ const NAV: NavItem[] = [
         children: [
           {
             key: "r-trans-summary",
-            label: "Transaction Summery",
+            label: "Transaction Summary",
             reportId: "transaction-summary",
           },
         ],
@@ -258,7 +258,7 @@ const NAV: NavItem[] = [
         // 10 Void
         key: "cat-void",
         label: "Void Reports",
-        children: [{ key: "r-void", label: "Void Summery and Detail", reportId: "void-report" }],
+        children: [{ key: "r-void", label: "Void Summary and Detail", reportId: "void-report" }],
       },
       {
         // 11 Pax Count
@@ -298,7 +298,7 @@ const NAV: NavItem[] = [
         key: "cat-credit",
         label: "Credit Settlement",
         children: [
-          { key: "r-cred-ccs", label: "Current Credit Summery", reportId: "credit-summary" },
+          { key: "r-cred-ccs", label: "Current Credit Summary", reportId: "credit-summary" },
           { key: "r-cred-history", label: "Credit History", reportId: "credit-history" },
           { key: "r-cred-pay", label: "Payment History", reportId: "credit-pay-history" },
           { key: "r-cred-account", label: "Account Detail", reportId: "credit-account-detail" },
@@ -454,6 +454,7 @@ const SHELL_CSS = `
     transition:color 0.13s ease;
     text-align:left;
   }
+  .sh-cat-btn span { line-height:1.35; }
   .sh-cat-btn:hover { color:#2E1E0F; }
   .sh-cat-btn.has-active { color:#352211; }
   .sh-cat-chev {
@@ -922,7 +923,7 @@ export default function AppShell({
                   className="sh-children"
                   style={{
                     maxHeight: isExpanded
-                      ? `${item.children.length * 460}px`
+                      ? `${item.children.reduce((height, cat) => height + 60 + cat.children.length * 76, 20)}px`
                       : "0px",
                     opacity: isExpanded ? 1 : 0,
                   }}
@@ -946,9 +947,9 @@ export default function AppShell({
                             </span>
                             <span
                               style={{
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
+                                whiteSpace: "normal",
+                                overflowWrap: "anywhere",
+                                minWidth: 0,
                               }}
                             >
                               {cat.label}
@@ -960,7 +961,7 @@ export default function AppShell({
                             className="sh-children"
                             style={{
                               maxHeight: catExpanded
-                                ? `${cat.children.length * 42 + 12}px`
+                                ? `${cat.children.length * 76 + 12}px`
                                 : "0px",
                               opacity: catExpanded ? 1 : 0,
                             }}
@@ -1004,9 +1005,9 @@ export default function AppShell({
                                     )}
                                     <span
                                       style={{
-                                        whiteSpace: "nowrap",
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
+                                        whiteSpace: "normal",
+                                        overflowWrap: "anywhere",
+                                        minWidth: 0,
                                       }}
                                     >
                                       {leaf.label}
@@ -1141,6 +1142,13 @@ export default function AppShell({
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#FCF7F3" }}>
       <style>{SHELL_CSS}</style>
+      <style>{`@media screen {
+        .sh-main-body :where(button,input,select,textarea,a):focus-visible, .sh-desktop :where(button,a):focus-visible, .sh-mobile :where(button,a):focus-visible { outline: 3px solid #b37e4c; outline-offset: 2px; }
+        .sh-main-body :where(button):disabled { cursor: not-allowed; }
+        .sh-main-body :where(table) { font-variant-numeric: tabular-nums; }
+        .sh-main-body :where(button,input,select,textarea) { font-family: inherit; }
+        .sh-main-body :where(input:not([type=checkbox]):not([type=radio]),select,textarea) { max-width: 100%; box-sizing: border-box; }
+      }`}</style>
       <InventoryEnterNavigation/>
 
       {sidebar}

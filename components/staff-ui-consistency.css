@@ -1,0 +1,47 @@
+/* Staff screens only. Preserve report typography, data and print layouts. */
+@media screen {
+  .sh-main-body {
+    --staff-ink: #45301d;
+    --staff-brown: #684830;
+    --staff-border: #e4d6bf;
+    --staff-soft: #fcf7f3;
+    --staff-focus: #b37e4c;
+  }
+  .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(button) {
+    border-radius: 8px !important;
+    min-height: 36px;
+    line-height: 1.35;
+  }
+  .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea) {
+    border-radius: 8px !important;
+    line-height: 1.35;
+    min-width: 0;
+  }
+  .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(button:not(:disabled)):hover {
+    filter: brightness(.97);
+  }
+  .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(button:disabled,input:disabled,select:disabled,textarea:disabled) {
+    cursor: not-allowed;
+  }
+  .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(table) {
+    font-variant-numeric: tabular-nums;
+  }
+  .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(th,td) {
+    vertical-align: middle;
+  }
+  .sh-main-body :where(input,select,textarea)::placeholder { color: #806e5f; opacity: 1; }
+  .sh-main-body :where(button,a,input,select,textarea,summary):focus-visible {
+    outline: 3px solid var(--staff-focus);
+    outline-offset: 2px;
+  }
+  @media(max-width: 600px) {
+    .report-toolbar { padding: 12px !important; }
+    .report-toolbar .report-date-range { width: 100%; min-width: 0; flex-shrink: 1 !important; box-sizing: border-box; }
+    .report-toolbar .report-date-range input[type=date] { width: 0 !important; flex: 1 1 0; min-width: 0; }
+    .report-toolbar .report-search { max-width: none !important; flex-basis: 100% !important; min-width: 0 !important; }
+    .sh-main-body :where(.inventory-report-typography,.admin-report-typography) :where(button) { min-height: 40px; }
+  }
+  @media(prefers-reduced-motion:reduce) {
+    .sh-main-body :where(button,a,input,select,textarea) { scroll-behavior: auto; }
+  }
+}
