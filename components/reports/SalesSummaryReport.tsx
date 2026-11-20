@@ -1,4 +1,5 @@
 "use client";
+import GroupPagination from "./GroupPagination";
 
 // ============================================================
 // LOCATION: components/reports/SalesSummaryReport.tsx
@@ -412,9 +413,7 @@ export default function SalesSummaryReport({
           </div>
 
           {/* date cards for this location */}
-          {loc.dateGroups.map((g) => (
-            <DateGroupCard key={`${loc.locCode}-${g.date}`} g={g} />
-          ))}
+          <GroupPagination resetKey={JSON.stringify(loc.dateGroups)} groups={loc.dateGroups.map(g=>({key:g.date,count:g.rows.length,content:<DateGroupCard g={g}/>}))} />
         </div>
       ))}
 

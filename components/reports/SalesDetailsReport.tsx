@@ -1,4 +1,5 @@
 "use client";
+import GroupPagination from "./GroupPagination";
 
 // ============================================================
 // LOCATION: components/reports/SalesDetailsReport.tsx
@@ -275,7 +276,7 @@ export default function SalesDetailsReport({
           </div>
 
           {/* date sub-groups */}
-          {loc.dateGroups.map((g) => (
+          <GroupPagination resetKey={JSON.stringify(loc.dateGroups)} unit="bills" groups={loc.dateGroups.map((g) => ({key:g.date,count:g.bills.length,content: (
           <div key={g.date}>
           {/* light date band */}
           <div
@@ -520,7 +521,7 @@ export default function SalesDetailsReport({
           ))}
 
           </div>
-          ))}
+          )}))} />
 
           {/* footer strip — location totals */}
           <div

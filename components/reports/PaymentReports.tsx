@@ -1,4 +1,5 @@
 "use client";
+import GroupPagination from "./GroupPagination";
 import ReportEmptyState from './ReportEmptyState';
 
 // ============================================================
@@ -137,7 +138,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
             <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtAmt(loc.locTotal)}</span>
           </div>
 
-          {loc.dateGroups.map((g) => (
+          <GroupPagination resetKey={JSON.stringify(loc.dateGroups)} unit="rows" groups={loc.dateGroups.map((g) => ({key:g.date,count:g.bills.reduce((n,b)=>n+b.payments.length,0),content: (
             <div key={g.date} style={{ marginTop: 10 }}>
               <div
                 style={{
@@ -195,7 +196,7 @@ export default function PaymentSummaryReport({ report }: { report: PaymentSummar
                 </tbody>
               </table></div>
             </div>
-          ))}
+          )}))} />
         </div>
       ))}
       <div
