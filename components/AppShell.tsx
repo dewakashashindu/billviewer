@@ -4,7 +4,7 @@
 // AppShell — reporting side eke sidebar + mobile bottom nav
 // (Bill viewer pages meka ain — /bill, / me shell eken wenaskai)
 // ============================================================
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import InventoryEnterNavigation from "./InventoryEnterNavigation";
 import {WebPermissionsContext} from './WebPermissions';
 import {ReportPermissionsContext} from "./ReportPermissionsContext";
@@ -27,6 +27,9 @@ function IGrid() {
       <rect x="14" y="14" width="7" height="7" rx="1.5" />
     </svg>
   );
+}
+function IAssistant() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14zM5 14l.6 1.7L7.3 16.3l-1.7.6L5 18.6l-.6-1.7-1.7-.6 1.7-.6L5 14z"/></svg>;
 }
 function IChart() {
   return (
@@ -126,6 +129,12 @@ const NAV: NavItem[] = [
     label: "Dashboard",
     icon: <IGrid />,
     path: "/dashboard",
+  },
+  {
+    key: "ai-assistant",
+    label: "AI Assistant",
+    icon: <IAssistant />,
+    path: "/ai-assistant",
   },
   {
     key: "reports",
@@ -377,6 +386,51 @@ const NAV: NavItem[] = [
   },
 ];
 
+// Applies only while the AI Assistant route is active; other screens keep their existing theme.
+const ASSISTANT_SHELL_CSS = `
+  /* Persistent shell elements interpolate when the assistant theme is toggled. */
+  .sh-shell, .sh-shell .sh-main-body, .sh-shell .sh-desktop, .sh-shell .sh-mob-drawer,
+  .sh-shell .sh-user-bar, .sh-shell .sh-user-name, .sh-shell .sh-user-role,
+  .sh-shell .sh-user-location, .sh-shell .sh-user-logout, .sh-shell .sh-mob-hamburger,
+  .sh-shell .sh-mobile-drawer-head, .sh-shell .sh-mobile-drawer-head button,
+  .sh-shell .sh-group-btn, .sh-shell .sh-cat-btn, .sh-shell .sh-leaf-btn {
+    transition-property: background-color, background, color, border-color, box-shadow;
+    transition-duration: 400ms; transition-timing-function: ease;
+  }
+  .sh-shell .sh-desktop img, .sh-shell .sh-mobile-drawer-head img { transition:filter 400ms ease; }
+  .sh-shell .sh-mob-drawer { transition: transform .25s cubic-bezier(.22,1,.36,1), background-color 400ms ease, border-color 400ms ease; }
+  .sh-theme-fade { position:fixed; inset:0; z-index:200; background:#110c09; pointer-events:none; animation:sh-theme-fade-out 420ms ease-out forwards; }
+  @keyframes sh-theme-fade-out { from { opacity:.65; } to { opacity:0; } }
+  @media(prefers-reduced-motion:reduce) {
+    .sh-shell, .sh-shell .sh-main-body, .sh-shell .sh-desktop, .sh-shell .sh-mob-drawer,
+    .sh-shell .sh-user-bar, .sh-shell .sh-user-name, .sh-shell .sh-user-role,
+    .sh-shell .sh-user-location, .sh-shell .sh-user-logout, .sh-shell .sh-mob-hamburger,
+    .sh-shell .sh-mobile-drawer-head, .sh-shell .sh-mobile-drawer-head button,
+    .sh-shell .sh-group-btn, .sh-shell .sh-cat-btn, .sh-shell .sh-leaf-btn,
+    .sh-shell .sh-desktop img, .sh-shell .sh-mobile-drawer-head img { transition-duration:0s; }
+    .sh-shell .sh-desktop { transition:none !important; }
+    .sh-theme-fade { display:none; }
+  }
+  .assistant-shell, .assistant-shell .sh-main-body { background:#110c09 !important; color:#f6ece1 !important; }
+  .assistant-shell .sh-desktop, .assistant-shell .sh-mob-drawer { background:#19110c !important; border-color:rgba(255,200,140,.18) !important; }
+  .assistant-shell .sh-desktop img, .assistant-shell .sh-mobile-drawer-head img { filter:invert(.9) sepia(.25); }
+  .assistant-shell .sh-group-btn.row-mode, .assistant-shell .sh-group-btn.icon-mode { background:rgba(255,240,225,.045); color:#ead9c9; border-color:rgba(255,200,140,.18); }
+  .assistant-shell .sh-group-btn.row-mode:hover, .assistant-shell .sh-group-btn.icon-mode:hover { background:rgba(255,180,90,.12); color:#fff3e5; border-color:rgba(255,180,90,.42); }
+  .assistant-shell .sh-group-btn.row-mode.active, .assistant-shell .sh-group-btn.icon-mode.active { background:rgba(224,122,58,.19); color:#ffbf73; border-color:rgba(255,180,90,.48); box-shadow:inset 3px 0 0 #ffb45a; }
+  .assistant-shell .sh-lvl2-list, .assistant-shell .sh-lvl3-list { border-color:rgba(255,200,140,.2); }
+  .assistant-shell .sh-cat-btn, .assistant-shell .sh-leaf-btn { color:#d7c2b0; border-color:rgba(255,200,140,.14); }
+  .assistant-shell .sh-cat-btn:hover, .assistant-shell .sh-cat-btn.has-active, .assistant-shell .sh-leaf-btn:hover, .assistant-shell .sh-leaf-btn.active { color:#ffbe70; }
+  .assistant-shell .sh-cat-chev, .assistant-shell .sh-cat-btn.has-active .sh-cat-chev { color:#d5a779; }
+  .assistant-shell .sh-leaf-btn::before { background:rgba(255,200,140,.3); }
+  .assistant-shell .sh-grip { background:linear-gradient(#754e31,#422719); border-color:rgba(255,180,90,.25); }
+  .assistant-shell .sh-nav-scroll::-webkit-scrollbar-thumb { background:rgba(255,180,90,.35); }
+  .assistant-shell .sh-user-bar { background:#110c09; padding-bottom:8px !important; border-bottom:1px solid rgba(255,200,140,.12); }
+  .assistant-shell .sh-user-name { color:#ead9c9 !important; }
+  .assistant-shell .sh-user-role, .assistant-shell .sh-user-location { background:rgba(255,180,90,.1) !important; color:#e6c4a4 !important; border-color:rgba(255,200,140,.22) !important; }
+  .assistant-shell .sh-user-logout, .assistant-shell .sh-mob-hamburger, .assistant-shell .sh-mobile-drawer-head button { background:#271a12 !important; color:#f2ddca !important; border-color:rgba(255,200,140,.25) !important; }
+  .assistant-shell .sh-mobile-drawer-head { border-color:rgba(255,200,140,.18) !important; }
+`;
+
 const SHELL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -573,6 +627,7 @@ function UserBar({
 
   return (
     <div
+      className="sh-user-bar"
       style={{
         display: "flex",
         alignItems: "center",
@@ -608,7 +663,7 @@ function UserBar({
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: 10, minWidth: 0 }}>
         {name && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span className="sh-user-identity" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <span
               style={{
                 width: 26,
@@ -626,11 +681,12 @@ function UserBar({
             >
               {name.trim().charAt(0) || "U"}
             </span>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#684830" }}>
+            <span className="sh-user-name" style={{ fontSize: 12.5, fontWeight: 600, color: "#684830" }}>
               {name}
             </span>
             {user && (
               <span
+                className="sh-user-role"
                 style={{
                   fontSize: 10,
                   fontWeight: 700,
@@ -649,7 +705,7 @@ function UserBar({
           </span>
         )}
         {user?.defaultLocation && (
-          <span title={`Default location: ${user.defaultLocationName || user.defaultLocation} (${user.defaultLocation})`}
+          <span className="sh-user-location" title={`Default location: ${user.defaultLocationName || user.defaultLocation} (${user.defaultLocation})`}
             aria-label={`Default location: ${user.defaultLocationName || user.defaultLocation}, ${user.defaultLocation}`}
             style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600,
               color: "#684830", background: "#F8F4EE", border: "1px solid #E4D6BF", borderRadius: 8,
@@ -662,6 +718,7 @@ function UserBar({
         )}
         <button
           onClick={logout}
+          className="sh-user-logout"
           title="Sign out"
           style={{
             display: "inline-flex",
@@ -702,6 +759,14 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const previousPath = useRef(pathname);
+  const [themeFade, setThemeFade] = useState(0);
+  useLayoutEffect(() => {
+    const wasAssistant = previousPath.current === "/ai-assistant";
+    const isAssistant = pathname === "/ai-assistant";
+    previousPath.current = pathname;
+    if (wasAssistant !== isAssistant) setThemeFade(value => value + 1);
+  }, [pathname]);
   const [userInfo, setUserInfo] = useState<ShellUserInfo | null>(
     currentUser ?? null
   );
@@ -1049,7 +1114,7 @@ export default function AppShell({
         overflow: "visible",
         zIndex: 20,
         transition:
-          "width 0.24s cubic-bezier(.4,0,.2,1),min-width 0.24s cubic-bezier(.4,0,.2,1)",
+          "width 0.24s cubic-bezier(.4,0,.2,1),min-width 0.24s cubic-bezier(.4,0,.2,1),background-color 0.4s ease,border-color 0.4s ease",
       }}
     >
       {/* Logo */}
@@ -1095,6 +1160,7 @@ export default function AppShell({
       />
       <aside className={`sh-mob-drawer ${mobOpen ? "open" : ""}`}>
         <div
+          className="sh-mobile-drawer-head"
           style={{
             padding: "12px 14px 10px",
             borderBottom: "1px solid #E4D6BF",
@@ -1140,8 +1206,9 @@ export default function AppShell({
   );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#FCF7F3" }}>
+    <div className={`sh-shell${pathname === "/ai-assistant" ? " assistant-shell" : ""}`} style={{ display: "flex", minHeight: "100vh", background: "#FCF7F3" }}>
       <style>{SHELL_CSS}</style>
+      <style>{ASSISTANT_SHELL_CSS}</style>
       <style>{`@media screen {
         .sh-main-body :where(button,input,select,textarea,a):focus-visible, .sh-desktop :where(button,a):focus-visible, .sh-mobile :where(button,a):focus-visible { outline: 3px solid #b37e4c; outline-offset: 2px; }
         .sh-main-body :where(button):disabled { cursor: not-allowed; }
@@ -1150,6 +1217,7 @@ export default function AppShell({
         .sh-main-body :where(input:not([type=checkbox]):not([type=radio]),select,textarea) { max-width: 100%; box-sizing: border-box; }
       }`}</style>
       <InventoryEnterNavigation/>
+      {themeFade > 0 && <div key={themeFade} className="sh-theme-fade" aria-hidden="true" />}
 
       {sidebar}
       {mobileDrawer}
