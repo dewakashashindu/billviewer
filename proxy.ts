@@ -25,4 +25,4 @@ export function proxy(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = {matcher: ['/api/auth/:path*','/api/admin/:path*','/api/inventory/:path*','/api/billing-control/:path*']};
+export const config = {matcher: ['/api/auth/:path*','/api/admin/:path*','/api/inventory/:path*','/api/billing-control/:path*','/api/ai-assistant/:path*']};
