@@ -3,7 +3,13 @@ export type PrintLine={item:string;name?:string;unit:string;unitName?:string;qty
 export type PrintDoc={profile?:{address:string[];tel:string};title:string;id:string;date:string;status:string;location:string;locationName?:string;destination?:string;supplier?:string;supplierName?:string;invoice?:string;due?:string;delivery?:string;remarks?:string;total:number;discount?:number;adjustment?:number;type?:string;lines:PrintLine[]};
 export type PrintColumn={label:string;width:number;align:'left'|'right';value:(line:PrintLine)=>string};
 export const money=(n:number|undefined)=>Number(n||0).toFixed(2);
-export function columns(d:PrintDoc,copy:PrintCopy):PrintColumn[]{const standard=copy==='standard',extra=d.type==='grn'||d.type==='recon';return [
+export function columns(d:PrintDoc,copy:PrintCopy):PrintColumn[]{const standard=copy==='standard',extra=d.type==='grn'||d.type==='recon';if(d.type==='po')return [
+ {label:'Item code',width:.12,align:'left',value:l=>l.item},
+ {label:'Item description',width:standard?.35:.63,align:'left',value:l=>l.name||''},
+ {label:'Unit',width:.13,align:'left',value:l=>l.unitName||l.unit},
+ {label:'Qty',width:.12,align:'right',value:l=>String(l.qty)},
+ ...(standard?[{label:'Cost price',width:.13,align:'right' as const,value:(l:PrintLine)=>money(l.cost)},{label:'Item value',width:.15,align:'right' as const,value:(l:PrintLine)=>money(l.value)}]:[]),
+ ];return [
  {label:'Item code',width:.14,align:'left',value:l=>l.item},
  {label:'Item description',width:standard?(extra?.22:.32):(extra?.54:.64),align:'left',value:l=>l.name||''},
  {label:'Unit',width:.12,align:'left',value:l=>l.unitName||l.unit},
