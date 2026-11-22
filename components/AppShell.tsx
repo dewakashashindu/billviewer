@@ -857,6 +857,7 @@ export default function AppShell({
   }, [router, userInfo]);
 
   const pathPermissions:Record<string,string>={
+    '/ai-assistant':'ai-assistant:VIEW',
     '/inventory/locations':'locations:VIEW','/inventory/categories':'categories:VIEW','/inventory/items':'items:VIEW','/inventory/units':'units:VIEW','/inventory/suppliers':'suppliers:VIEW',
     '/inventory/po':'po:VIEW','/inventory/grn':'grn:VIEW','/inventory/srn':'srn:VIEW','/inventory/damage':'damage:VIEW','/inventory/transfer-requisition':'trq:VIEW','/inventory/transfer-note':'tn:VIEW','/inventory/transfer-return':'tr:VIEW','/inventory/issue-requisition':'irq:VIEW','/inventory/issue-note':'inn:VIEW','/inventory/stock-reconciliation':'recon:VIEW',
     '/billing-control/void-approval':'void-approval:VIEW','/settings/user-groups':'groups:VIEW','/user-creation':'users:VIEW','/settings/access-profiles':'profiles:VIEW','/settings/assign-profiles':'assign:VIEW','/table-qr':'tableqr:VIEW'};
