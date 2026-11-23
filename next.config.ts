@@ -19,7 +19,11 @@ const nextConfig = {
       {key: 'X-Content-Type-Options', value: 'nosniff'},
       {key: 'X-Frame-Options', value: 'SAMEORIGIN'},
       {key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin'},
-      {key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()'},
+      {key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), ch-ua-model=(self), ch-ua-platform-version=(self), ch-ua-full-version-list=(self)'},
+      // Ask Chrome for high-entropy Client Hints so login audit can record
+      // the real device model / OS version (the plain User-Agent hides them).
+      {key: 'Accept-CH', value: 'sec-ch-ua-model, sec-ch-ua-platform-version, sec-ch-ua-full-version-list'},
+      {key: 'Critical-CH', value: 'sec-ch-ua-model, sec-ch-ua-platform-version, sec-ch-ua-full-version-list'},
       // Report-only while real PDF/print flows are tested; not an enforced XSS control.
       {key: 'Content-Security-Policy-Report-Only', value: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"},
       ...(process.env.ENABLE_HSTS === 'true' ? [{key: 'Strict-Transport-Security', value: 'max-age=31536000'}] : []),

@@ -3,6 +3,9 @@ import sql from "mssql";
 import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
+import {logActivityForToken} from '@/lib/activityLog';
+import {SESSION_COOKIE as ACT_SESSION_COOKIE} from '@/lib/auth';
+
 
 // The table identifier is selected only from this server-side allowlist.
 const tables = ["[dbo].[Tbl_Maincategory]", "[dbo].[Tbl_Subcategory1]", "[dbo].[Tbl_Subcategory2]", "[dbo].[Tbl_Subcategory3]", "[dbo].[Tbl_Subcategory4]", "[dbo].[Tbl_Subcategory5]"] as const;
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest) {
     if (typeof body.code !== "string" || typeof body.name !== "string" || typeof body.enabled !== "boolean" || !body.code.trim() || !body.name.trim() || body.code.length > 4000 || body.name.length > 4000) return NextResponse.json({ error: "A valid category code, description and status are required." }, { status: 400 });
     const pool = await getPool();
     await pool.request().input("code", sql.NVarChar(sql.MAX), body.code.trim()).input("name", sql.NVarChar(sql.MAX), body.name.trim()).input("enabled", sql.Bit, body.enabled).query(`INSERT INTO ${result.table} (${result.codeColumn}, ${result.nameColumn}, [Enable]) VALUES (@code, @name, @enabled)`);
+    await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'CATEGORY_CREATED',targetType:'category',targetId:body.code.trim(),targetName:body.name.trim(),details:`Category level ${result.level} created; enabled: ${body.enabled?'yes':'no'}`});
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
@@ -58,6 +62,7 @@ export async function PUT(req: NextRequest) {
     if (typeof body.code !== "string" || typeof body.name !== "string" || typeof body.enabled !== "boolean" || !body.code.trim() || !body.name.trim() || body.code.length > 4000 || body.name.length > 4000) return NextResponse.json({ error: "A valid category code, description and status are required." }, { status: 400 });
     const updated = await (await getPool()).request().input("code", sql.NVarChar(sql.MAX), body.code.trim()).input("name", sql.NVarChar(sql.MAX), body.name.trim()).input("enabled", sql.Bit, body.enabled).query(`UPDATE ${result.table} SET ${result.nameColumn} = @name, [Enable] = @enabled WHERE ${result.codeColumn} = @code AND (SELECT COUNT(*) FROM ${result.table} WHERE ${result.codeColumn} = @code) = 1`);
     if (!updated.rowsAffected[0]) return NextResponse.json({ error: "Category not found or its code is duplicated. Check the table before editing or deleting." }, { status: 404 });
+    await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'CATEGORY_UPDATED',targetType:'category',targetId:body.code.trim(),targetName:body.name.trim(),details:`Category level ${result.level} updated; enabled: ${body.enabled?'yes':'no'}`});
     return NextResponse.json({ success: true });
   } catch (e) { return errorResponse(e); }
 }
@@ -67,6 +72,7 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json(); if (typeof body.code !== "string" || !body.code.trim() || body.code.length > 4000) return NextResponse.json({ error: "Category code is required." }, { status: 400 });
     const deleted = await (await getPool()).request().input("code", sql.NVarChar(sql.MAX), body.code.trim()).query(`DELETE FROM ${result.table} WHERE ${result.codeColumn} = @code AND (SELECT COUNT(*) FROM ${result.table} WHERE ${result.codeColumn} = @code) = 1 AND NOT EXISTS (SELECT 1 FROM dbo.Tbl_RowItems WITH (UPDLOCK,HOLDLOCK) WHERE [RowLevel${result.level + 1}]=@code)`);
     if (!deleted.rowsAffected[0]) return NextResponse.json({ error: "Category is missing, duplicated, or used by an item." }, { status: 404 });
+    await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'CATEGORY_DELETED',targetType:'category',targetId:body.code.trim(),details:`Category level ${result.level} deleted.`});
     return NextResponse.json({ success: true });
   } catch (e) { return errorResponse(e); }
 }

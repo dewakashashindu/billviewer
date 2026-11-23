@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import sql from 'mssql';
 import {getPool,isDbConfigured} from '@/lib/db';
+import {logActivity} from '@/lib/activityLog';
 import {verifySessionValue,hashPassword,SESSION_COOKIE} from '@/lib/auth';
 import {requireWebPermission} from '@/lib/webAuthorization';
 
@@ -61,7 +62,9 @@ async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|und
   await new sql.Request(tx).input('id',sql.Char(10),id).query('DELETE FROM dbo.Tbl_UserLocationAccess WHERE UserID=@id');
   for(const value of work as string[]){const code=clean(value);const inserted=await new sql.Request(tx).input('id',sql.Char(10),id).input('loc',sql.Char(10),code).input('isDefault',sql.Bit,code.toUpperCase()===defaultLocation.toUpperCase()).query(`INSERT dbo.Tbl_UserLocationAccess(UserID,LocationID,LocationDescription,IsDefault) SELECT @id,LocCode,COALESCE(NULLIF(LTRIM(RTRIM(LocDes)),''),LTRIM(RTRIM(LocCode))),@isDefault FROM dbo.Tbl_LocationMaster WITH (UPDLOCK,HOLDLOCK) WHERE LocCode=@loc AND ISNULL(SubLoc,0)=0 AND Enable=1`);if(inserted.rowsAffected[0]!==1)throw Error('INVALID_WORKING_LOCATION')}
 
-  await tx.commit();tx=undefined;return NextResponse.json({success:true});
+  await tx.commit();tx=undefined;
+  await logActivity({actor:auth.session!,category:'USER',action:creating?'USER_CREATED':'USER_UPDATED',targetType:'user',targetId:id,targetName:name,locationCode:loc,details:`${creating?'Created':'Updated'} user ${name} (${login||id}) at location ${loc}; enabled: ${Boolean(b.enabled)?'yes':'no'}${password&&!creating?'; password was changed':''}${!b.enabled&&!creating?'; user deactivated and sessions revoked':''}`});
+  return NextResponse.json({success:true});
 }catch(e){if(tx)try{await tx.rollback()}catch{}if((e as Error).message==='INVALID_WORKING_LOCATION')return NextResponse.json({error:'A working location is inactive, missing or duplicated. Please update your selection.'},{status:409});return fail(e)}}
 export async function POST(req:NextRequest){return save(req,true)}
 export async function PUT(req:NextRequest){return save(req,false)}

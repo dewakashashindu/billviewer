@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth";
 import { clientIp } from "@/lib/rateLimit";
 import {authLimit,resetTokenHash} from "@/lib/sqlAuthSecurity";
+import {logActivity} from "@/lib/activityLog";
 
 /** Same lifetime as the OTP cookie — 10 minutes. */
 const WINDOW_MS = 10 * 60_000;
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
     if(result.rowsAffected[0]!==1){await tx.rollback();tx=undefined;return NextResponse.json({success:false,error:"Reset failed. Please try again."},{status:409})}
     await new sql.Request(tx).input("id",sql.Char(10),user.UserId).query("DELETE FROM dbo.Tbl_WebSession WHERE UserID=@id");
     await tx.commit();tx=undefined;
-
+    await logActivity({actor:{userId:String(user.UserId),loginName:String(user.LoginName),userName:loginName},category:'USER',action:'PASSWORD_RESET',targetType:'user',targetId:String(user.UserId),targetName:loginName,locationCode:String(user.LocCode),details:'Password reset completed after OTP verification; all sessions revoked. The new password is never stored in this log.',ipAddress:ip});
     const out = NextResponse.json({ success: true });
     out.cookies.set(OTP_COOKIE, "", { path: "/", maxAge: 0 });
     out.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });

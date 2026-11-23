@@ -173,6 +173,13 @@ export default function ReportToolbar({
   singleDateLabel = "Business Date",
 }: ReportToolbarProps) {
   const reportPermissions = useContext(ReportPermissionsContext);
+  // Activity log beacon (server records the actor from the session).
+  const beacon=(action:string)=>{
+    try{fetch("/api/activity/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,title,from,to}),keepalive:true}).catch(()=>{});}catch{}
+  };
+  const beaconRef = useRef(beacon); beaconRef.current = beacon;
+  const viewLoggedRef = useRef(false);
+  useEffect(()=>{ if(viewLoggedRef.current) return; viewLoggedRef.current=true; beaconRef.current("VIEW"); },[title]);
   const params = useParams<{reportId:string}>();
   const pdfDocument = reportPermissions.includes(`report-${params?.reportId}:PRINT`) ? suppliedPdfDocument : undefined;
   const [zoom, setZoom] = useState(100);
@@ -288,6 +295,7 @@ export default function ReportToolbar({
       setShareMsg(status === "building" ? "Please wait a moment — generating PDF..." : "Unable to build PDF for this report");
       return;
     }
+    beacon(target === "save" ? "EXPORT" : "SHARE");
     if (target === "save") {
       downloadPdfBlob(blob, file.name);
       openPdfInTab(blob);
@@ -424,6 +432,7 @@ export default function ReportToolbar({
         <div style={{ flex: 1 }} />
 
         {pdfDocument && (
+         <span onClickCapture={() => beacon("EXPORT")} style={{display:"inline-flex"}}>
           <PDFDownloadLink
             document={pdfDocument as any}
             fileName={pdfFileName}
@@ -451,6 +460,7 @@ export default function ReportToolbar({
               )
             }
           </PDFDownloadLink>
+         </span>
         )}
       </div>
 

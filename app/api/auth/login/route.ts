@@ -15,6 +15,8 @@ import {
 import {clientIp} from "@/lib/rateLimit";
 import {issueWebSession} from "@/lib/webSession";
 import {authLimit} from "@/lib/sqlAuthSecurity";
+import crypto from "crypto";
+import {captureLoginAudit} from "@/lib/loginAudit";
 
 /** Per-IP: how many login POSTs in the window (any outcome). */
 const IP_LIMIT = 30;
@@ -29,7 +31,6 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const loginName = String(body?.loginName ?? body?.username ?? "").trim();
   const password = String(body?.password ?? "");
-
   try {
     const ip = clientIp(req.headers);
     const ipLimit = await authLimit(`login-ip:${ip}`, IP_LIMIT, WINDOW_MS / 1000);
@@ -69,8 +70,8 @@ export async function POST(req: NextRequest) {
     `);
 
     const user = res.recordset[0];
-    if (res.recordset.length !== 1 || !user || !user.Enable) return NextResponse.json(INVALID, { status: 401 });
-    if (!verifyPassword(password, String(user.Password ?? ""))) return NextResponse.json(INVALID, { status: 401 });
+    if (res.recordset.length !== 1 || !user || !user.Enable) { await captureLoginAudit(req.headers,{loginName,success:false,failReason:"Invalid credentials or disabled account"}); return NextResponse.json(INVALID, { status: 401 }); }
+    if (!verifyPassword(password, String(user.Password ?? ""))) { await captureLoginAudit(req.headers,{loginName,userId:String(user.UserId),userName:String(user.UserName),success:false,failReason:"Invalid password"}); return NextResponse.json(INVALID, { status: 401 }); }
 
 
     const sessionPayload = {
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
     };
 
     const token = await issueWebSession(sessionPayload, String(user.Password ?? ""));
+    let defaultLocation: string | undefined;
+    try { const locRes = await pool.request().input("uid", sql.Char(10), sessionPayload.userId).query("SELECT TOP 1 LTRIM(RTRIM(LocationID)) AS code FROM dbo.Tbl_UserLocationAccess WHERE UserID=@uid AND IsDefault=1"); defaultLocation = locRes.recordset[0]?.code ? String(locRes.recordset[0].code) : undefined; } catch { /* location is best-effort */ }
+    await captureLoginAudit(req.headers,{loginName:sessionPayload.loginName,userId:sessionPayload.userId,userName:sessionPayload.userName,success:true,locationCode:defaultLocation,sessionRef:crypto.createHash("sha256").update(token).digest("hex")});
 
     const out = NextResponse.json({
       success: true,

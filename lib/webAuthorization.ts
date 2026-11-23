@@ -1,5 +1,6 @@
 import 'server-only';
 import sql from 'mssql';
+import {logActivity} from '@/lib/activityLog';
 import {getPool} from '@/lib/db';
 import {decryptAccess,requireAccessKey} from '@/lib/webAccessCrypto';
 import {WEB_ACCESS_SECTIONS,WEB_ACCESS_KEYS} from '@/lib/webAccessCatalog';
@@ -58,9 +59,9 @@ export async function loadWebAuthorization(session:SessionUser){
   return {permissions,locations,mainLocations,defaultLocation:[...mainLocations].find(code=>code.toUpperCase()===defaultCode.toUpperCase())!};
 }
 export async function requireWebPermission(session:SessionUser,key:string){
-  if(!WEB_ACCESS_KEYS.has(key))throw new AccessDeniedError();
+  if(!WEB_ACCESS_KEYS.has(key)){await logActivity({actor:session,category:'SECURITY',action:'ACCESS_DENIED',targetType:'permission',targetId:key,details:`Attempted to use unknown permission ${key}`});throw new AccessDeniedError()}
   const access=await loadWebAuthorization(session);
-  if(!access.permissions.has(key))throw new AccessDeniedError();
+  if(!access.permissions.has(key)){await logActivity({actor:session,category:'SECURITY',action:'ACCESS_DENIED',targetType:'permission',targetId:key,details:`Permission denied: ${key}`});throw new AccessDeniedError()}
   return access;
 }
 export function requireWebLocation(access:{locations:Set<string>},location:string){

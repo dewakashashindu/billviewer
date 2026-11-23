@@ -3,6 +3,9 @@ import sql from "mssql";
 import {requireWebPermission} from "@/lib/webAuthorization";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { SESSION_COOKIE, verifySessionValue } from "@/lib/auth";
+import {logActivityForToken} from '@/lib/activityLog';
+import {SESSION_COOKIE as ACT_SESSION_COOKIE} from '@/lib/auth';
+
 
 const definitions = {
   master: { table: "[dbo].[Tbl_Unit]", code: "[UnitID]", name: "[UnitDes]", enabled: "[Enable]" },
@@ -41,6 +44,7 @@ export async function POST(req: NextRequest) {
       const result = await pool.request().input("master", sql.NVarChar(sql.MAX), x.master.trim()).input("sub", sql.NVarChar(sql.MAX), x.sub.trim()).input("ratio", sql.Float, x.ratio).input("enabled", sql.Bit, x.enabled).query(`INSERT INTO dbo.Tbl_UnitConversion (MasterUnitID, SubUnitID, Units, Enable) SELECT @master, @sub, @ratio, @enabled WHERE EXISTS (SELECT 1 FROM dbo.Tbl_Unit WHERE UnitID=@master) AND EXISTS (SELECT 1 FROM dbo.Tbl_UnitSub WHERE SubUnitID=@sub)`);
       if (!result.rowsAffected[0]) return NextResponse.json({ error: "Selected unit does not exist. Refresh and try again." }, { status: 400 });
     } else { if (!validUnit(x)) return NextResponse.json({ error: "Unit code, description and status are required." }, { status: 400 }); const d = definitions[ctx.kind]; await pool.request().input("code", sql.NVarChar(sql.MAX), x.code.trim()).input("name", sql.NVarChar(sql.MAX), x.name.trim()).input("enabled", sql.Bit, x.enabled).query(`INSERT INTO ${d.table} (${d.code}, ${d.name}, ${d.enabled}) VALUES (@code, @name, @enabled)`); }
+    await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'UNIT_CREATED',targetType:'unit',targetId:ctx.kind==='conversion'?`${x.master}/${x.sub}`:String(x.code??''),targetName:ctx.kind==='conversion'?`ratio ${x.ratio}`:String(x.name??''),details:`Unit (${ctx.kind}) created.`});
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (e) { return fail(e); }
 }
@@ -48,7 +52,7 @@ export async function PUT(req: NextRequest) {
   try { const ctx = await setup(req); if (ctx.error || !ctx.kind) return ctx.error!; const x = await req.json(); const pool = await getPool(); let count = 0;
     if (ctx.kind === "conversion") { if (!validConversion(x)) return NextResponse.json({ error: "Select both units and enter a conversion ratio greater than zero." }, { status: 400 }); const r = await pool.request().input("master", sql.NVarChar(sql.MAX), x.master.trim()).input("sub", sql.NVarChar(sql.MAX), x.sub.trim()).input("ratio", sql.Float, x.ratio).input("enabled", sql.Bit, x.enabled).query("UPDATE dbo.Tbl_UnitConversion SET Units=@ratio, Enable=@enabled WHERE MasterUnitID=@master AND SubUnitID=@sub"); count = r.rowsAffected[0];
     } else { if (!validUnit(x)) return NextResponse.json({ error: "Unit code, description and status are required." }, { status: 400 }); const d = definitions[ctx.kind]; const r = await pool.request().input("code", sql.NVarChar(sql.MAX), x.code.trim()).input("name", sql.NVarChar(sql.MAX), x.name.trim()).input("enabled", sql.Bit, x.enabled).query(`UPDATE ${d.table} SET ${d.name}=@name, ${d.enabled}=@enabled WHERE ${d.code}=@code`); count = r.rowsAffected[0]; }
-    if (!count) return NextResponse.json({ error: "Record not found. Refresh and try again." }, { status: 404 }); return NextResponse.json({ success: true });
+    if (!count) return NextResponse.json({ error: "Record not found. Refresh and try again." }, { status: 404 }); await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'UNIT_UPDATED',targetType:'unit',targetId:ctx.kind==='conversion'?`${x.master}/${x.sub}`:String(x.code??''),targetName:ctx.kind==='conversion'?`ratio ${x.ratio}`:String(x.name??''),details:`Unit (${ctx.kind}) updated.`}); return NextResponse.json({ success: true });
   } catch (e) { return fail(e); }
 }
 export async function DELETE(req: NextRequest) {
@@ -57,6 +61,6 @@ export async function DELETE(req: NextRequest) {
     } else { if (typeof x.code !== "string" || !x.code.trim() || x.code.length > 4000) return NextResponse.json({ error: "Unit ID is required." }, { status: 400 }); const d = definitions[ctx.kind]; const key = ctx.kind === "master" ? "MasterUnitID" : "SubUnitID";
       // Protect conversion references even if this database has no foreign key.
       const r = await pool.request().input("code", sql.NVarChar(sql.MAX), x.code.trim()).query(`DELETE FROM ${d.table} WHERE ${d.code}=@code AND NOT EXISTS (SELECT 1 FROM dbo.Tbl_UnitConversion WITH (UPDLOCK,HOLDLOCK) WHERE ${key}=@code) ${ctx.kind === "master" ? "AND NOT EXISTS (SELECT 1 FROM dbo.Tbl_RowItems WITH (UPDLOCK,HOLDLOCK) WHERE UnitID=@code)" : ""}`); count = r.rowsAffected[0]; }
-    if (!count) return NextResponse.json({ error: "Record not found or this unit is used in a conversion or item." }, { status: 409 }); return NextResponse.json({ success: true });
+    if (!count) return NextResponse.json({ error: "Record not found or this unit is used in a conversion or item." }, { status: 409 }); await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'UNIT_DELETED',targetType:'unit',targetId:ctx.kind==='conversion'?`${x.master}/${x.sub}`:String(x.code??''),details:`Unit (${ctx.kind}) deleted.`}); return NextResponse.json({ success: true });
   } catch (e) { return fail(e); }
 }
