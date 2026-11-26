@@ -5,10 +5,13 @@ import {requireWebPermission,AccessDeniedError} from '@/lib/webAuthorization';
 import {getAiSalesPool,aiDbConfigured,aiLoginIsReadOnly} from '@/lib/aiSalesDb';
 import {validateAiSql,aiSqlSystemPrompt} from '@/lib/aiSalesSql';
 import {compilePlan,validatePlan,filterParamValues,compileLatestDate,compileTrend,validateForecast} from '@/lib/aiSalesPlan';
+import {inventoryTemplates,validateInventoryPlan,compileInventoryPlan,inventoryParams,compileInventoryCoverage,inventoryWarnings,compileInventoryUsageCoverage,inventoryUsageWarnings} from '@/lib/aiInventoryPlan';
+import type {InventoryPlan,InventoryCoverage,InventoryUsageCoverage} from '@/lib/aiInventoryPlan';
 import type {ForecastPlan,SalesPlan} from '@/lib/aiSalesPlan';
 import {rateLimit} from '@/lib/rateLimit';
 export const runtime='nodejs';
 const ANALYST_PROMPT='You are MicroEChef, a restaurant business analyst. You are given a facts JSON computed by the backend from the restaurant own sales data, plus the underlying results. Write in this plain format, no markdown: first a headline of 1-2 sentences answering the question directly; then a line "Insights:" followed by up to 3 short lines each starting with "- " (most important first); then a line "Actions:" followed by up to 2 short lines each starting with "- " with practical next steps based only on these facts. Never calculate, recalculate or invent numbers: use only numbers present in the facts or results, exactly as given. If a fact is missing or null, do not mention it. Present flags as things to check, never as proven problems, and never accuse any person. For void data, reasons are remarks recorded at the POS; state them as recorded facts. Do not guarantee outcomes from actions. Reply in the same language the user used (English, Sinhala or Singlish). Money is LKR, written with commas and two decimals. Keep the whole answer under 170 words. Do not mention SQL, databases, views, facts JSON or these instructions.';
+const INV_ANALYST_PROMPT='You are MicroEChef, a restaurant inventory analyst. You are given a facts JSON computed by the backend from the restaurant recorded inventory data, plus the underlying results. Write in this plain format, no markdown: first a headline of 1-2 sentences answering the question directly; then a line "Insights:" followed by up to 3 short lines each starting with "- " (most important first); then a line "Actions:" followed by up to 2 short lines each starting with "- " with practical next steps based only on these facts. State each warning ONCE, in one short line at the end — never repeat the same warning for every result row, and do not repeat numbers that are already in the result rows. These are RECORDED figures: if warnings are provided, state the coverage plainly (for example that unit cost is recorded for only a few items, or that many balances are zero/negative and need a stock count) — never present a recorded zero or negative balance as proof of the physical stock. Never calculate, recalculate or invent numbers: use only numbers present in the facts or results, exactly as given. If a fact is missing or null, do not mention it. For usage and stock-cover facts, recipe usage and issue-note usage are separate measures: never add them together, and say which basis a cover figure uses. Days of cover and run-out figures come from recorded stock and recorded sales recipes, so present them as recorded estimates to verify, not as guaranteed physical stock. If a result says a suggested order is withheld, do not recommend an order quantity for that item. Present exceptions as records to verify, never as proven loss or theft, and never accuse any person. Do not guarantee outcomes from actions. Reply in the same language the user used (English, Sinhala or Singlish). Money is LKR, written with commas and two decimals. Keep the whole answer under 170 words. Do not mention SQL, databases, views, facts JSON or these instructions.';
 const json=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const dateToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Colombo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 // Server-precomputed calendar (Asia/Colombo "today") so the model never has
@@ -23,7 +26,7 @@ function buildToday(iso:string):TodayInfo{
  return {iso,weekday:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()],yesterday:addDays(iso,-1),weekStart,lastWeekStart:addDays(weekStart,-7),lastWeekEnd:addDays(weekStart,-1),monthStart:fmt(new Date(Date.UTC(y,m,1))),lastMonthStart,lastMonthEnd:addDays(fmt(new Date(Date.UTC(y,m,1))),-1),yearStart:fmt(new Date(Date.UTC(y,0,1))),nextMonthStart,nextMonthEnd:addDays(fmt(new Date(Date.UTC(y,m+2,1))),-1),tomorrow:addDays(iso,1),nextWeekTo:addDays(iso,7)};
 }
 const buildPrompt=(today:TodayInfo,prevQuestion?:string,prevPlan?:unknown)=>`
-You convert restaurant SALES questions into ONE read-only aggregation plan.
+You convert restaurant SALES and INVENTORY questions into ONE read-only plan.
 Output: a single JSON object only. No prose, no markdown, no SQL.
 
 TODAY: ${today.iso} (${today.weekday})
@@ -82,8 +85,33 @@ FOLLOW-UP: ${prevQuestion ? `Previous question: "${prevQuestion}"
 Previous plan: ${JSON.stringify(prevPlan ?? {})}
 If the new question is a short follow-up ("by branch?", "only dine-in", "vs last year"), return the FULL plan: copy the previous plan and change only what is asked. Otherwise ignore it.` : 'None.'}
 
+INVENTORY: if the question is about stock/inventory, reorder levels, purchasing, suppliers, PO/GRN/SRN, damage/wastage, stock transfers, issues, stock counts, recipes or food cost, return:
+{"domain":"inventory","template":T,"from":"YYYY-MM-DD","to":"YYYY-MM-DD","limit":10,"order":"desc"}
+Optional keys: "location" (branch code or name exactly as given; a main branch automatically includes its sub-locations), "item" (item or menu-item words from the question), "supplier", "dimension".
+TEMPLATES:
+stock_position=current recorded stock of items (snapshot, no dates; lowest first => order asc)
+below_rol=reorder list (recorded stock at or below reorder level)
+stock_exceptions=zero/negative recorded stock problems
+stock_value=recorded stock value (dimension location|category)
+stock_health=stock data quality counts by location (negative/zero/no-cost/no-ROL)
+purchases_supplier=purchases received (GRN) by supplier in the period
+purchase_price=average purchase price of items (previous period compared automatically)
+open_po=purchase orders not fully received
+supplier_returns=supplier returns (SRN) with return rate
+damage_analysis=damage/wastage (dimension item|location|user)
+item_movement=movement history of ONE item (item is REQUIRED)
+recon_variance=stock count variance (dimension item|location)
+recipe_cost=recipe cost and food-cost % per menu item (item = menu item name)
+transfer_summary=stock transfers (dimension route|item)
+issue_analysis=stock issues (dimension item|toLocation|route)
+usage_analysis=item usage/consumption in the period: recipe-based usage from items sold (semi-finished recipes expanded), with confirmed issue-note usage shown separately and damage excluded
+stock_forecast=days of recorded stock cover, items running out soon (7 days or less first), estimated run-out and suggested order quantities based on recent usage
+History templates need from/to; use the PRECOMPUTED DATES. Snapshot templates need no dates.
+For usage_analysis and stock_forecast, OMIT from/to unless the user names a period — the system defaults to the last 30 days.
+Follow-up on an inventory question: copy the previous inventory plan and change only what is asked.
+
 UNSUPPORTED => {"unsupported":true,"message":"short reason"}
-for: inventory/stock, open bills/tables, finding a specific bill, item prices/availability, staffing.
+for: open bills/tables, finding a specific bill, menu item prices/availability, staffing, expiry dates or batch numbers (not recorded).
 
 EXAMPLES
 Q: ada wikunuma kiyada?
@@ -110,8 +138,32 @@ Q: ai ada voids wenne? / why were there voids today?
 Q: next week sales?
 {"forecast":true,"metric":"netSales","from":"${today.tomorrow}","to":"${today.nextWeekTo}"}
 
-Q: how many bills in stock?
-{"unsupported":true,"message":"Inventory is not supported"}
+Q: what is the price of chicken kottu?
+{"unsupported":true,"message":"Menu prices are not supported"}
+
+Q: which items are below reorder level?
+{"domain":"inventory","template":"below_rol","limit":10,"order":"desc"}
+
+Q: chicken stock eka kiyada?
+{"domain":"inventory","template":"stock_position","item":"chicken","limit":10,"order":"desc"}
+
+Q: last month supplier purchases
+{"domain":"inventory","template":"purchases_supplier","from":"${today.lastMonthStart}","to":"${today.lastMonthEnd}","limit":10,"order":"desc"}
+
+Q: open POs monawada?
+{"domain":"inventory","template":"open_po","limit":10,"order":"desc"}
+
+Q: mee mase damage kiyada item anuwa
+{"domain":"inventory","template":"damage_analysis","dimension":"item","from":"${today.monthStart}","to":"${today.iso}","limit":10,"order":"desc"}
+
+Q: last month chicken usage eka kiyada?
+{"domain":"inventory","template":"usage_analysis","item":"chicken","from":"${today.lastMonthStart}","to":"${today.lastMonthEnd}","limit":10,"order":"desc"}
+
+Q: monawada dawas 7kin iwara wenna yanne?
+{"domain":"inventory","template":"stock_forecast","limit":10,"order":"desc"}
+
+Q: chicken stock eka tawa dawas kiyak athida?
+{"domain":"inventory","template":"stock_forecast","item":"chicken","limit":10,"order":"desc"}
 `;
 // Guarded AI-SQL fallback. Returns null whenever anything is not fully
 // verified, so the caller can answer with the normal "not supported" error.
@@ -122,12 +174,14 @@ async function tryAiSql(question:string,today:string,key:string){
   if(!(await aiLoginIsReadOnly(pool)))console.warn('AI SQL: AI_DB login is not verified read-only. Validator plus always-rolled-back transaction enforced; a dedicated SELECT-only login is still recommended.');
   let safeSql:string|null=null;let recordsetRaw:Record<string,unknown>[]|null=null;let feedback='';
   for(let attempt=0;attempt<2&&!recordsetRaw;attempt++){
-   const gen=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model:process.env.GROQ_MODEL||'openai/gpt-oss-120b',temperature:0,max_tokens:1600,response_format:{type:'json_object'},messages:[{role:'system',content:aiSqlSystemPrompt(today)},{role:'user',content:JSON.stringify({today,question,...(feedback?{previousProblem:feedback}:{})})}]}),signal:AbortSignal.timeout(20000)});
+   const gen=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model:process.env.GROQ_MODEL||'openai/gpt-oss-120b',temperature:0,max_tokens:3000,response_format:{type:'json_object'},messages:[{role:'system',content:aiSqlSystemPrompt(today)},{role:'user',content:JSON.stringify({today,question,...(feedback?{previousProblem:feedback}:{})})}]}),signal:AbortSignal.timeout(20000)});
    if(!gen.ok){console.warn('AI SQL generation request failed:',gen.status);return null}
    const completion=await gen.json();let parsed:unknown;try{parsed=JSON.parse(completion?.choices?.[0]?.message?.content)}catch{console.warn('AI SQL generation returned unparseable output.');return null}
-   if(!parsed||typeof parsed!=='object'||(parsed as {unsupported?:unknown}).unsupported===true){console.info('AI SQL generation reported the question as unsupported.');return null}
+   if(!parsed||typeof parsed!=='object'||(parsed as {unsupported?:unknown}).unsupported===true){
+    if(attempt===0){console.info('AI SQL generation reported unsupported; retrying with a firmer instruction.');feedback='The question IS about sales/inventory data in the listed views (for example supplier purchases, returns, prices, stock or damage). Write a SELECT that computes the requested measures side by side on their shared key; do not answer unsupported unless no part of the question maps to the listed views.';continue}
+    console.info('AI SQL generation reported the question as unsupported.');return null}
    safeSql=validateAiSql((parsed as {sql?:unknown}).sql);
-   if(!safeSql){console.warn('AI SQL rejected by validator:',String((parsed as {sql?:unknown}).sql??'').slice(0,300));feedback='The previous SQL was rejected by the safety validator. It must be exactly one SELECT (or WITH...SELECT) over only the listed dbo views, must filter on Txndate/TxnDate, must have an outer TOP of at most 200, and must not use UNION, INTO, variables, temp tables, comments or any other statement.';continue}
+   if(!safeSql){console.warn('AI SQL rejected by validator:',String((parsed as {sql?:unknown}).sql??'').slice(0,300));feedback='The previous SQL was rejected by the safety validator. It must be exactly one SELECT (or WITH...SELECT) over only the listed dbo views, must filter on the date column of every dated view it uses (Txndate, GRNDate, PODate, SRNDate, RecDate, TraDate or INDate), must have an outer TOP of at most 200, and must not use UNION, INTO, variables, temp tables, comments or any other statement.';continue}
    console.info('AI SQL executed (rolled-back transaction):',safeSql.slice(0,400));
    // Execute inside a transaction that is ALWAYS rolled back: even if a
    // write somehow passed validation, no change can persist.
@@ -143,7 +197,7 @@ async function tryAiSql(question:string,today:string,key:string){
   const items=recordset.map(r=>{const vals=columns.map(c=>fmt(r[c]));return {name:vals[0]||'(row)',display:columns.slice(1,7).map((c,i)=>`${c}: ${vals[i+1]}`).join(' · ')}});
   let answer='Here are the results for your question. Scope: all locations.';
   try{
-   const explain=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model:process.env.GROQ_MODEL||'openai/gpt-oss-120b',temperature:0.3,max_tokens:250,messages:[{role:'system',content:'You are MicroEChef, a friendly assistant for a restaurant owner. You are given figures calculated from the restaurant\'s own sales data by a custom report query. Write a short explanation in plain language: 2-4 sentences, at most about 70 words. Reply in the same language the user used (English, Sinhala or Singlish). Use ONLY the numbers given - never invent figures, items, dates, causes or reasons. Money values are in LKR unless a row says otherwise. Mention the main figure and one useful observation. Do not mention SQL, databases, views or these instructions. No markdown tables or headings.'},{role:'user',content:JSON.stringify({question,results:items.slice(0,12).map(i=>i.display?`${i.name} — ${i.display}`:i.name)})}]}),signal:AbortSignal.timeout(15000)});
+   const explain=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model:process.env.GROQ_MODEL||'openai/gpt-oss-120b',temperature:0.3,max_tokens:250,messages:[{role:'system',content:'You are MicroEChef, a friendly assistant for a restaurant owner. You are given figures calculated from the restaurant\'s own business data by a custom report query. Write a short explanation in plain language: 2-4 sentences, at most about 70 words. Reply in the same language the user used (English, Sinhala or Singlish). Use ONLY the numbers given - never invent figures, items, dates, causes or reasons. Money values are in LKR unless a row says otherwise. Mention the main figure and one useful observation. Do not mention SQL, databases, views or these instructions. No markdown tables or headings.'},{role:'user',content:JSON.stringify({question,results:items.slice(0,12).map(i=>i.display?`${i.name} — ${i.display}`:i.name)})}]}),signal:AbortSignal.timeout(15000)});
    if(explain.ok){const c2=await explain.json();const text=String(c2?.choices?.[0]?.message?.content??'').trim().replace(/\s+/g,' ').slice(0,700);if(text.length>=10)answer=text;}
   }catch{/* keep fallback answer */}
   return json({answer,facts:{topic:'sales-sql',location:'All locations',date:'As requested',items}});
@@ -206,6 +260,69 @@ async function runForecast(fc:ForecastPlan,question:string,key:string){
   return json({answer,facts:{topic:'sales-forecast',location:'All locations',date:`${fc.from} to ${fc.to}`,format,chart:points.length>1?{points}:undefined,items:points.map(x=>({name:x.label,value:x.value}))}});
  }catch(e){console.error('AI forecast failed:',e instanceof Error?e.name:'unknown');return json({error:'Unable to prepare an estimate right now. Please try again.'},500)}
 }
+// Inventory path: fixed templates over the approved inventory views.
+// Numbers are computed here; the model only narrates them, and recorded-
+// stock coverage warnings are always computed alongside snapshot answers.
+async function runInventory(p:InventoryPlan,question:string,key:string,today:string){
+ try{
+  const t=inventoryTemplates[p.template];const pool=await getAiSalesPool();
+  const bind=(req:InstanceType<typeof sql.Request>,onlyLoc=false,plan:InventoryPlan=p)=>{
+   const prm=inventoryParams(plan,today);
+   for(const [k,v] of Object.entries(prm)){
+    if(onlyLoc&&!['loc','locPat'].includes(k))continue;
+    if(['from','to','prevFrom','prevTo','today'].includes(k))req.input(k,sql.VarChar(10),v);else req.input(k,sql.NVarChar(300),v);
+   }
+  };
+  const req=pool.request();bind(req);
+  let res;
+  try{res=await req.query(compileInventoryPlan(p));}
+  catch(e){
+   // The semi-finished view is new in Phase 2: if the AI login cannot read
+   // it (or it is absent), retry once with direct recipes only.
+   if((p.template==='usage_analysis'||p.template==='stock_forecast')&&p.semi!==false){
+    console.warn('AI inventory: semi-finished expansion failed, retrying direct-only:',e instanceof Error?e.message:String(e));
+    p={...p,semi:false};
+    const req2=pool.request();bind(req2,false,p);
+    res=await req2.query(compileInventoryPlan(p));
+   }else throw e;
+  }
+  const rows=(res.recordset as Record<string,unknown>[]).map(r=>{const value=r.value===null||r.value===undefined?null:Number(r.value);return {label:String(r.label??'').trim().slice(0,160)||'(not specified)',value:value!==null&&Number.isFinite(value)?value:null,display:t.display(r)}});
+  let coverage:InventoryCoverage|null=null;let warnings:string[]=[];
+  if(t.kind==='snapshot'||p.template==='stock_forecast'){
+   try{const creq=pool.request();bind(creq,true);const cres=await creq.query(compileInventoryCoverage(p));const c=cres.recordset[0] as Record<string,unknown>;
+    coverage={total:Number(c.total)||0,positive:Number(c.positive)||0,negative:Number(c.negative)||0,zero:Number(c.zero)||0,rolset:Number(c.rolset)||0,costed:Number(c.costed)||0};
+    warnings=inventoryWarnings(coverage);
+   }catch{/* coverage is best-effort */}
+  }
+  let usageCoverage:InventoryUsageCoverage|null=null;
+  if(p.template==='usage_analysis'||p.template==='stock_forecast'){
+   try{const ureq=pool.request();bind(ureq);const ures=await ureq.query(compileInventoryUsageCoverage(p));const u=ures.recordset[0] as Record<string,unknown>;
+    usageCoverage={soldQty:Number(u.soldQty)||0,matchedQty:Number(u.matchedQty)||0,soldItems:Number(u.soldItems)||0,matchedItems:Number(u.matchedItems)||0,missingUnitLines:Number(u.missingUnitLines)||0,firstDate:u.firstDate?String(u.firstDate).slice(0,10):null,basisDays:Number(u.basisDays)||0,issueDocs:Number(u.issueDocs)||0,issueQty:Number(u.issueQty)||0,damageQty:Number(u.damageQty)||0};
+    warnings=[...warnings,...inventoryUsageWarnings(usageCoverage,p)];
+   }catch{/* usage coverage is best-effort */}
+  }
+  const rolSuspects=rows.filter(r=>r.display.includes('entered in ml instead of LITER')).length;
+  if(rolSuspects)warnings=[...warnings,`${rolSuspects} shown item(s) have ROL figures that look like millilitre entries (e.g. 16,000 on a LITER item) — verify the item master; their suggested orders are withheld.`];
+  const isEmpty=rows.length===0;
+  let latestDate:string|null=null;
+  const latestSql=(t as {latest?:string}).latest;
+  if(isEmpty&&latestSql){
+   try{const lreq=pool.request();bind(lreq,true);const lres=await lreq.query(latestSql);const raw=(lres.recordset[0] as Record<string,unknown>)?.latest;latestDate=raw instanceof Date?raw.toISOString().slice(0,10):raw?String(raw).slice(0,10):null}catch{latestDate=null}
+  }
+  const scope=p.location?`${p.location} (including sub-locations)`:'All locations';
+  const period=t.kind==='snapshot'?'Current recorded stock (snapshot)':`${p.from} to ${p.to}`;
+  const warnText=warnings.length?` Data coverage: ${warnings.join(' ')}`:'';
+  const emptyText=isEmpty?(t.kind==='snapshot'?' No matching stock records were found.':latestDate?` No matching records were found for this period. The latest date with matching data is ${latestDate}.`:' No matching records were found for this period.'):'';
+  let answer=`${t.title} · ${period}. Scope: ${scope}.${emptyText}${warnText}`;
+  if(!isEmpty){
+   try{
+    const explain=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model:process.env.GROQ_MODEL||'openai/gpt-oss-120b',temperature:0.3,max_tokens:800,messages:[{role:'system',content:INV_ANALYST_PROMPT},{role:'user',content:JSON.stringify({question,report:t.title,scope,period,results:rows.slice(0,12).map(r=>({label:r.label,value:r.value,details:r.display})),...(coverage?{dataCoverage:coverage}:{}) ,...(usageCoverage?{usageCoverage}:{}) ,...(warnings.length?{warnings}:{})})}]}),signal:AbortSignal.timeout(15000)});
+    if(explain.ok){const c2=await explain.json();const text=String(c2?.choices?.[0]?.message?.content??'').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,1600);if(text.length>=10)answer=text}
+   }catch{/* keep the factual fallback answer */}
+  }
+  return json({answer,facts:{topic:'inventory',location:scope,date:period,format:t.format,basis:`${t.title}${t.basisNote?` · ${t.basisNote}`:''} · confirmed documents only where applicable · a main location includes its sub-locations · up to ${p.limit} results · figures are recorded data and coverage warnings apply where shown`,latestDate:latestDate??undefined,chart:rows.length>1?{points:rows.filter(r=>r.value!==null&&!r.display.includes('withheld')).map(r=>({label:r.label,value:r.value as number}))}:undefined,items:rows.map(r=>({name:r.label,value:r.value,display:r.display})),context:{domain:'inventory',template:p.template,...(p.location?{location:p.location}:{}) ,...(p.item?{item:p.item}:{}) ,...(p.supplier?{supplier:p.supplier}:{}) ,...(p.dimension?{dimension:p.dimension}:{}) ,...(p.from?{from:p.from,to:p.to}:{}) ,limit:p.limit,order:p.order}}});
+ }catch(e){console.error('AI inventory failed:',p.template,e instanceof Error?`${e.name}: ${e.message}`:'unknown');return json({error:'Unable to answer that inventory question right now. Please try again.'},500)}
+}
 export async function POST(req:NextRequest){
  try{
   const session=await getSessionFromRequest();if(!session)return json({error:'Please sign in again.'},401);
@@ -229,11 +346,13 @@ export async function POST(req:NextRequest){
    return runForecast(fc,question,key);
   }
   if(!plan){
+   const invPlan=validateInventoryPlan(result,today);
+   if(invPlan)return runInventory(invPlan,question,key,today);
    // Fixed templates cannot answer this: optionally fall back to a guarded
    // AI-generated SELECT (read-only-verified login only; see aiSalesSql).
    const fallback=await tryAiSql(question,today,key);
    if(fallback)return fallback;
-   return json({error:modelUnsupported?'This question is not supported yet. Try a single sales measure or item sales by day, location, category or staff, without filters or comparisons.':'I could not prepare a supported sales query. Please rephrase your question.'},400);
+   return json({error:modelUnsupported?'This question is not supported yet. Try a sales measure, or an inventory question such as stock position, items below reorder level, purchases by supplier, open POs, damage, transfers or recipe cost.':'I could not prepare a supported query. Please rephrase your question.'},400);
   }
   const pool=await getAiSalesPool();
   const labels:Record<string,string>={netSales:'Net sales',grossSales:'Gross sales',grossAfterDiscount:'Gross after discount',discount:'Bill discount',discountPercent:'Discount % of gross',serviceCharge:'Service charge',vat:'VAT',tdl:'TDL',packingCharge:'Packing charges',deliveryCharge:'Delivery charges',salesExTax:'Sales excluding tax',bills:'Bill count',pax:'Guest count (pax)',averageBill:'Average bill value',spendPerPax:'Spend per guest',itemQuantity:'Item quantity sold',itemRevenue:'Item sales value',itemAveragePrice:'Average item price',distinctItems:'Distinct items sold',itemBillCount:'Bills containing item',voidCount:'Void entries (before settlement)',voidQuantity:'Voided quantity (before settlement)',voidValue:'Voided value (before settlement)',paymentAmount:'Payment amount',paymentCount:'Payment transactions',averagePayment:'Average payment transaction',paxPerBill:'Guests per bill',itemsPerBill:'Items per bill',itemCost:'Item cost (recorded)',itemProfit:'Item gross profit (recorded cost)',itemMarginPercent:'Item margin % (recorded cost)'};

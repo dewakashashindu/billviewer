@@ -37,6 +37,10 @@ export interface ReportFilter {
   cusId?: string;
   /** 3.3 Cashier Breakdown Grid — cashier filter */
   cashier?: string;
+  /** Transaction Log — user filter (UserID) */
+  txnUser?: string;
+  /** Transaction Log — transaction type filter (Txn) */
+  txnType?: string;
 }
 
 // Keep schema diagnostics on the server, not in client-visible action results.
@@ -216,8 +220,8 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
     const sum = (c: string | null) => (c ? `SUM(ISNULL(v.[${c}], 0))` : "0");
 
     const r = pool.request();
-    r.input("startDate", sql.DateTime2, new Date(startDate));
-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    r.input("startDate", sql.VarChar(10), startDate);
+    r.input("endDate", sql.VarChar(10), endDate);
     if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
@@ -371,8 +375,8 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
     });
 
     const req = pool.request();
-    req.input("startDate", sql.DateTime2, new Date(startDate));
-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    req.input("startDate", sql.VarChar(10), startDate);
+    req.input("endDate", sql.VarChar(10), endDate);
     if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     pf.bind(req);
 
@@ -415,15 +419,15 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
 
     const p2 = (n: number) => String(n).padStart(2, "0");
     const time12 = (d: Date): string => {
-      let h = d.getHours();
+      let h = d.getUTCHours();
       const ap = h >= 12 ? "PM" : "AM";
       h = h % 12 || 12;
-      return `${h}:${p2(d.getMinutes())}:${p2(d.getSeconds())}${ap}`;
+      return `${h}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}${ap}`;
     };
     const dayStr = (d: Date) =>
-      `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
+      `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
     const isMidnight = (d: Date) =>
-      d.getHours() + d.getMinutes() + d.getSeconds() === 0;
+      d.getUTCHours() + d.getUTCMinutes() + d.getUTCSeconds() === 0;
     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
     // ── LOCATION-WISE grouping (POS PDF eka wage):
@@ -1111,10 +1115,10 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
 
     const p2 = (n: number) => String(n).padStart(2, "0");
     const time12 = (d: Date): string => {
-      let h = d.getHours();
+      let h = d.getUTCHours();
       const ap = h >= 12 ? "PM" : "AM";
       h = h % 12 || 12;
-      return `${h}:${p2(d.getMinutes())}:${p2(d.getSeconds())} ${ap}`;
+      return `${h}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())} ${ap}`;
     };
 
     const req = pool.request();
@@ -1150,7 +1154,7 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
 
     const rows = (result.recordset as Array<{ [k: string]: unknown }>).map((r) => {
       const str = (k: string) => String(r[k] ?? "");
-      const t = r.TxnTimeRaw ? new Date(String(r.TxnTimeRaw)) : null;
+      const t = r.TxnTimeRaw instanceof Date ? r.TxnTimeRaw : r.TxnTimeRaw ? new Date(String(r.TxnTimeRaw)) : null;
       return {
         LocCode: str("LocCode"),
         LocDes: str("LocDes"),
@@ -1516,8 +1520,8 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
   const donot = pickCol(cols, ["DoNotShowInSales"]);
 
   const r = pool.request();
-  r.input("startDate", sql.DateTime2, new Date(startDate));
-  r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+  r.input("startDate", sql.VarChar(10), startDate);
+  r.input("endDate", sql.VarChar(10), endDate);
   if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
   const result = await r.query(`
@@ -1774,8 +1778,8 @@ export async function getPaxCountAction(filters: ReportFilter) {
     const bill = pickCol(cols, ["BillNo", "BILLNO", "BillNO", "Bill"]);
 
     const r = pool.request();
-    r.input("startDate", sql.DateTime2, new Date(startDate));
-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    r.input("startDate", sql.VarChar(10), startDate);
+    r.input("endDate", sql.VarChar(10), endDate);
     if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
@@ -1987,8 +1991,8 @@ export async function getSlipTraceAction(filters: ReportFilter) {
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
 
     const r = pool.request();
-    r.input("startDate", sql.DateTime2, new Date(startDate));
-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    r.input("startDate", sql.VarChar(10), startDate);
+    r.input("endDate", sql.VarChar(10), endDate);
     if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
     const result = await r.query(`
@@ -2171,8 +2175,8 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
   const user = pickCol(cols, ["UserName", "sysusername", "SysUserName"]);
 
   const r = pool.request();
-  r.input("startDate", sql.DateTime2, new Date(startDate));
-  r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+  r.input("startDate", sql.VarChar(10), startDate);
+  r.input("endDate", sql.VarChar(10), endDate);
   if (outletId && loc) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
 
   const result = await r.query(`
@@ -2299,8 +2303,8 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
     customers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
 
     const req = pool.request();
-    req.input("startDate", sql.DateTime2, new Date(startDate));
-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    req.input("startDate", sql.VarChar(10), startDate);
+    req.input("endDate", sql.VarChar(10), endDate);
     if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.cusId) req.input("cusId", sql.VarChar(20), String(filters.cusId));
     const result = await req.query(`
@@ -2429,7 +2433,7 @@ function inSlot(h: number, s: TimeSlot): boolean {
 
 function hourOf(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
-  if (raw instanceof Date) return raw.getHours();
+  if (raw instanceof Date) return raw.getUTCHours();
   if (typeof raw === "number") {
     const n = Math.floor(raw);
     return n >= 0 && n <= 23 ? n : null;
@@ -2485,8 +2489,8 @@ export async function getHourlySalesAction(filters: ReportFilter) {
         const date = pickCol(hCols, ["Txndate", "TrnDate"]);
         const bills = pickCol(hCols, ["Bills", "NoOfBills", "BillCount", "TxnCount"]);
         const req = pool.request();
-        req.input("startDate", sql.DateTime2, new Date(startDate));
-        req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+        req.input("startDate", sql.VarChar(10), startDate);
+        req.input("endDate", sql.VarChar(10), endDate);
         if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
         const result = await req.query(`
           SELECT
@@ -2523,8 +2527,8 @@ export async function getHourlySalesAction(filters: ReportFilter) {
       }
       const pf = buildPosFilters({ cols, alias: "v." });
       const req = pool.request();
-      req.input("startDate", sql.DateTime2, new Date(startDate));
-      req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+      req.input("startDate", sql.VarChar(10), startDate);
+      req.input("endDate", sql.VarChar(10), endDate);
       if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
       pf.bind(req);
       const result = await req.query(`
@@ -2757,8 +2761,8 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
     }
     const time = pickCol(cols, ["TxnTime", "TrnTime", "PayTime"]);
     const req = pool.request();
-    req.input("startDate", sql.DateTime2, new Date(startDate));
-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    req.input("startDate", sql.VarChar(10), startDate);
+    req.input("endDate", sql.VarChar(10), endDate);
     if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     const result = await req.query(`
       SELECT
@@ -2927,8 +2931,8 @@ export async function getItemMovementAction(filters: ReportFilter) {
     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
       const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
       const req = pool.request();
-      req.input("startDate", sql.DateTime2, new Date(startDate));
-      req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+      req.input("startDate", sql.VarChar(10), startDate);
+      req.input("endDate", sql.VarChar(10), endDate);
       if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
       const result = await req.query(`
         SELECT
@@ -3057,8 +3061,8 @@ export async function getCashInOutAction(filters: ReportFilter) {
     }
 
     const req = pool.request();
-    req.input("startDate", sql.DateTime2, new Date(startDate));
-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    req.input("startDate", sql.VarChar(10), startDate);
+    req.input("endDate", sql.VarChar(10), endDate);
     if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.payCat && catid) req.input("payCat", sql.VarChar(20), String(filters.payCat));
     const result = await req.query(`
@@ -3179,6 +3183,157 @@ export async function getKotBotAction(filters: ReportFilter) {
 //   Vw_Credit_SettelementHistory_Details Where Txndate Between ...
 //   And LocCode = ... [And CusID = ...] Order By LocCode,CusID,sysserialno
 // ============================================================
+
+// ============================================================
+// Transaction Log (POS Vw_TxnLog) — audit trail of POS actions:
+// logins, table splits/transfers, steward transfers, reprints, ...
+// POS query: Select * from Vw_TxnLog Where Txndate Between ...
+//   [And LocCode = ...] [And UserID = ...] [And Txn = ...]
+//   Order By DefDateTime
+// The view is auto-discovered (name/columns vary between installs).
+// ============================================================
+export async function getTxnLogAction(filters: ReportFilter) {
+  try {
+    filters = await scopedReportFilters(filters, ['transaction-log']);
+    if (!isDbConfigured()) return { success: false, error: reportSourceError('Database not configured (DB_* env vars missing)') };
+    const { startDate, endDate, outletId } = filters;
+    const pool = await getPool();
+
+    // --- discover the view (name differs between installs) ---
+    const candidates = [process.env.TXNLOG_VIEW, 'Vw_TxnLog', 'VW_TxnLog', 'Vw_Txn_Log', 'Vw_TransactionLog', 'VW_TransactionLog'].filter(Boolean) as string[];
+    let viewRef = '';
+    let viewLabel = '';
+    let cols = new Set<string>();
+    for (const v of candidates) {
+      const c = await viewColumnsGeneric(pool, v);
+      if (c.size > 0) { viewRef = `[dbo].[${v}]`; viewLabel = `dbo.${v}`; cols = c; break; }
+    }
+    if (!viewRef) {
+      const dv = await pool.request().query(
+        `SELECT s.name AS sch, o.name AS nm FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id
+          WHERE o.type IN ('V','U') AND (o.name LIKE '%Txn%Log%' OR o.name LIKE '%Transaction%Log%') ORDER BY o.name`
+      );
+      for (const row of dv.recordset as Array<{ sch: string; nm: string }>) {
+        const req0 = pool.request();
+        req0.input('vn', sql.NVarChar(300), `${row.sch}.${row.nm}`);
+        const cr = await req0.query(`SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(@vn)`);
+        if (cr.recordset.length > 0) {
+          viewRef = `[${String(row.sch).replace(/\]/g, ']]')}].[${String(row.nm).replace(/\]/g, ']]')}]`;
+          viewLabel = `${row.sch}.${row.nm}`;
+          cols = new Set(cr.recordset.map((r: { name: string }) => String(r.name)));
+          break;
+        }
+      }
+    }
+    if (!viewRef) {
+      return { success: false, error: reportSourceError('Transaction Log view (Vw_TxnLog) not found in database') };
+    }
+
+    // --- map columns (names vary between installs) ---
+    const loc = pickCol(cols, ['LocCode', 'LOCCODE', 'Loc_Code', 'LocationCode', 'LocID', 'LocationID', 'OutletCode', 'Loc']);
+    if (!loc) {
+      console.error(`Transaction Log: ${viewLabel} has no location column. Actual columns: ${Array.from(cols).join(', ')}`);
+      throw new Error('Report source has no location column; location access cannot be enforced.');
+    }
+    const locDes = pickCol(cols, ['LocDes', 'LocName', 'LocationName', 'LocDescription', 'LocationDes']);
+    const userIdC = pickCol(cols, ['UserID', 'UserId', 'USERID', 'UserCode']);
+    const userNameC = pickCol(cols, ['UserName', 'Username', 'UserDes']);
+    const dateC = pickCol(cols, ['Txndate', 'TxnDate', 'TXNDATE', 'Txn_Date', 'TransDate', 'TranDate', 'LogDate', 'DefDateTime', 'Date']);
+    const timeC = pickCol(cols, ['TxnTime', 'TXNTIME', 'Time', 'LogTime']);
+    const txnC = pickCol(cols, ['Txn', 'TXN', 'TxnType', 'TransactionType', 'TxnTyp', 'TxnDesc', 'Type', 'ActionType', 'LogType']);
+    const remarksC = pickCol(cols, ['TxnRemarks', 'Remarks', 'Remark', 'Description', 'TxnDescription', 'Details']);
+    const defC = pickCol(cols, ['DefDateTime', 'DefDatetime', 'SysDateTime', 'CreatedOn']);
+    const wsC = pickCol(cols, ['Workstation', 'WORKSTATION', 'WorkStation', 'Terminal', 'MachineName', 'ComputerName']);
+    if (!dateC || !txnC) {
+      console.error(`Transaction Log: ${viewLabel} columns: ${Array.from(cols).join(', ')}`);
+      return { success: false, error: reportSourceError(`Unable to map ${viewLabel} — missing date/type column.`) };
+    }
+
+    const locExpr = `LTRIM(RTRIM(v.[${loc}]))`;
+    const scopeCond = `${locExpr} IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))`;
+    const rangeCond = `v.[${dateC}] >= CONVERT(date,@startDate,23) AND v.[${dateC}] < DATEADD(day,1,CONVERT(date,@endDate,23))`;
+    const baseReq = () => {
+      const r = pool.request();
+      r.input('startDate', sql.VarChar(10), startDate);
+      r.input('endDate', sql.VarChar(10), endDate);
+      if (outletId) r.input('outletId', sql.NVarChar(sql.MAX), String(outletId));
+      return r;
+    };
+
+    // Filter options: users + txn types present in this range/scope.
+    let users: Array<{ id: string; name: string }> = [];
+    let types: string[] = [];
+    if (userIdC) {
+      const ur = await baseReq().query(`SELECT LTRIM(RTRIM(v.[${userIdC}])) AS id, ${userNameC ? `MAX(LTRIM(RTRIM(v.[${userNameC}])))` : `LTRIM(RTRIM(v.[${userIdC}]))`} AS name FROM ${viewRef} v WITH (NOLOCK) WHERE ${rangeCond} AND ${scopeCond} AND LTRIM(RTRIM(v.[${userIdC}])) <> '' GROUP BY LTRIM(RTRIM(v.[${userIdC}])) ORDER BY id`);
+      users = ur.recordset.map((r: any) => ({ id: String(r.id ?? '').trim(), name: String(r.name ?? '').trim() }));
+    }
+    {
+      const tr = await baseReq().query(`SELECT DISTINCT LTRIM(RTRIM(v.[${txnC}])) AS t FROM ${viewRef} v WITH (NOLOCK) WHERE ${rangeCond} AND ${scopeCond} AND LTRIM(RTRIM(v.[${txnC}])) <> '' ORDER BY t`);
+      types = tr.recordset.map((r: any) => String(r.t ?? '').trim()).filter(Boolean);
+    }
+
+    const selUser = String(filters.txnUser ?? '').trim();
+    const selType = String(filters.txnType ?? '').trim();
+    const req = baseReq();
+    if (selUser && userIdC) req.input('txnUser', sql.NVarChar(50), selUser);
+    if (selType) req.input('txnType', sql.NVarChar(200), selType);
+    const timeExpr = timeC ? `CONVERT(varchar(8), v.[${timeC}], 108)` : `CONVERT(varchar(8), v.[${dateC}], 108)`;
+    const result = await req.query(`
+      SELECT TOP (5001)
+        ${locExpr} AS LocCode,
+        ${locDes ? `LTRIM(RTRIM(v.[${locDes}]))` : `''`} AS LocDes,
+        ${userIdC ? `LTRIM(RTRIM(v.[${userIdC}]))` : `''`} AS UserID,
+        ${userNameC ? `LTRIM(RTRIM(v.[${userNameC}]))` : `''`} AS UserName,
+        CONVERT(varchar(10), v.[${dateC}], 23) AS TxnDate,
+        ${timeExpr} AS TxnTime,
+        LTRIM(RTRIM(v.[${txnC}])) AS Txn,
+        ${remarksC ? `LTRIM(RTRIM(v.[${remarksC}]))` : `''`} AS TxnRemarks,
+        ${wsC ? `LTRIM(RTRIM(v.[${wsC}]))` : `''`} AS Workstation
+      FROM ${viewRef} v WITH (NOLOCK)
+      WHERE ${rangeCond} AND ${scopeCond}
+      ${selUser && userIdC ? `AND LTRIM(RTRIM(v.[${userIdC}])) = @txnUser` : ''}
+      ${selType ? `AND LTRIM(RTRIM(v.[${txnC}])) = @txnType` : ''}
+      ORDER BY ${locExpr}, ${userIdC ? `LTRIM(RTRIM(v.[${userIdC}])), ` : ''}${defC ? `v.[${defC}]` : `v.[${dateC}]`}`);
+    const truncated = result.recordset.length > 5000;
+    const recordset = truncated ? result.recordset.slice(0, 5000) : result.recordset;
+    type Row = { txn: string; remarks: string; time: string; workstation: string };
+    type Day = { date: string; rows: Row[] };
+    type Usr = { userId: string; userName: string; days: Map<string, Day> };
+    type Loc = { locCode: string; locName: string; users: Map<string, Usr> };
+    const locations = new Map<string, Loc>();
+    let total = 0;
+    for (const r of recordset) {
+      const str = (k: string) => String((r as any)[k] ?? '').trim();
+      const lc = str('LocCode');
+      let l = locations.get(lc);
+      if (!l) { l = { locCode: lc, locName: str('LocDes') || lc, users: new Map() }; locations.set(lc, l); }
+      const uid = str('UserID');
+      let u = l.users.get(uid);
+      if (!u) { u = { userId: uid, userName: str('UserName') || uid, days: new Map() }; l.users.set(uid, u); }
+      const dkey = str('TxnDate') || 'Unknown date';
+      let d = u.days.get(dkey);
+      if (!d) { d = { date: dkey, rows: [] }; u.days.set(dkey, d); }
+      d.rows.push({ txn: str('Txn'), remarks: str('TxnRemarks'), time: str('TxnTime'), workstation: str('Workstation') });
+      total++;
+    }
+    return {
+      success: true,
+      data: {
+        locations: Array.from(locations.values()).map((l) => ({
+          locCode: l.locCode,
+          locName: l.locName,
+          users: Array.from(l.users.values()).map((u) => ({ userId: u.userId, userName: u.userName, days: Array.from(u.days.values()) })),
+        })),
+        total,
+        truncated,
+        users,
+        types,
+      },
+    };
+  } catch (error) { console.error('Transaction Log Action Error:', error); return actionError(error); }
+}
+
+
 export async function getCreditAccountDetailAction(filters: ReportFilter) {
   try {
     filters = await scopedReportFilters(filters, ['credit-account-detail']);
@@ -3225,8 +3380,8 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
     customers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
 
     const req = pool.request();
-    req.input("startDate", sql.DateTime2, new Date(startDate));
-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    req.input("startDate", sql.VarChar(10), startDate);
+    req.input("endDate", sql.VarChar(10), endDate);
     if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.cusId) req.input("cusId", sql.VarChar(20), String(filters.cusId));
     const result = await req.query(`
@@ -3337,8 +3492,8 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
     }
 
     const r0 = pool.request();
-    r0.input("startDate", sql.DateTime2, new Date(startDate));
-    r0.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
+    r0.input("startDate", sql.VarChar(10), startDate);
+    r0.input("endDate", sql.VarChar(10), endDate);
     if (outletId) r0.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
     if (filters.cashier && cash) r0.input("cashier", sql.VarChar(20), String(filters.cashier));
     const result = await r0.query(`

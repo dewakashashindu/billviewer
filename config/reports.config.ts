@@ -29,6 +29,7 @@ import {
   getCreditAccountDetailAction,
   getCashierBreakdownGridAction,
   getPerformanceReportAction,
+  getTxnLogAction,
 } from "@/app/actions/reports";
 
 export interface ColumnConfig {
@@ -80,7 +81,8 @@ export interface ReportConfig {
     | "item-movement"
     | "cash-inout"
     | "kot-bot"
-    | "performance-report";
+    | "performance-report"
+    | "transaction-log";
   filter?: ReportFilterSpec;
   // fixed bill type (9 Complimentary Cost = CM)
   lockBillType?: string;
@@ -468,6 +470,15 @@ export const REPORTS_CONFIG: Record<string, ReportConfig> = {
     subtitle: "Saved performance values for the selected date and location",
     render: "performance-report",
     fetchAction: getPerformanceReportAction,
+    columns: [],
+  },
+  // Transaction Log (POS Vw_TxnLog) — POS audit trail
+  "transaction-log": {
+    id: "transaction-log",
+    title: "Transaction Log",
+    subtitle: "POS transaction audit trail (logins, table splits/transfers, reprints)",
+    render: "transaction-log",
+    fetchAction: getTxnLogAction,
     columns: [],
   },
 };

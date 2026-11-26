@@ -146,6 +146,11 @@ import CashInOutReport, {
   CashInOutPdfDocument,
   type CioData,
 } from "@/components/reports/CashInOutReport";
+import TxnLogReport, {
+  filterTxnLog,
+  TxnLogPdfDocument,
+  type TxnLogData,
+} from "@/components/reports/TxnLogReport";
 import KotBotReport, {
   filterKot,
   kotToRows,
@@ -422,6 +427,8 @@ export default function DynamicReportPage() {
   const [imvThr, setImvThr] = useState(10);
   const [cioCat, setCioCat] = useState("");
   const [kotType, setKotType] = useState("all");
+  const [txnUserSel, setTxnUserSel] = useState("");
+  const [txnTypeSel, setTxnTypeSel] = useState("");
   const [credCus, setCredCus] = useState("");
   const [cashSel, setCashSel] = useState("");
   const [stewardSelection, setStewardSelection] = useState("all");
@@ -508,6 +515,8 @@ export default function DynamicReportPage() {
           threshold: imvThr,
           payCat: cioCat || undefined,
           trcType: kotType,
+          txnUser: txnUserSel || undefined,
+          txnType: txnTypeSel || undefined,
           cusId: credCus || undefined,
           cashier: cashSel || undefined,
         });
@@ -537,7 +546,7 @@ export default function DynamicReportPage() {
     return () => {
       alive = false;
     };
-  }, [reportId, config, startDate, endDate, loc, orderMode, billType, payMode, miiCost, miiDept, imvMode, imvThr, cioCat, kotType, credCus, cashSel, router]);
+  }, [reportId, config, startDate, endDate, loc, orderMode, billType, payMode, miiCost, miiDept, imvMode, imvThr, cioCat, kotType, txnUserSel, txnTypeSel, credCus, cashSel, router]);
 
   useEffect(() => {
     invoiceRequest.current++;
@@ -547,6 +556,8 @@ export default function DynamicReportPage() {
   // reset view state on report change
   useEffect(() => {
     setSearch("");
+    setTxnUserSel("");
+    setTxnTypeSel("");
     setStewardSelection("all");
     setCreditCustomerSelection("all");
     setChartMode(false);
@@ -1409,6 +1420,94 @@ export default function DynamicReportPage() {
             <ReportChartsView charts={chartsKOT} title={config.title} />
           ) : filteredKOT ? (
             <KotBotReport report={filteredKOT} />
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+
+  // ── Transaction Log (Vw_TxnLog) ──
+  if (config.render === "transaction-log") {
+    const txnData = objectData ? (objectData as unknown as TxnLogData) : null;
+    const filteredTxn = txnData ? filterTxnLog(txnData, search) : null;
+    const hasTxnData = !loading && !error && Boolean(filteredTxn && filteredTxn.locations.length > 0);
+    const pdfDocTxn = hasTxnData && filteredTxn ? (
+      <TxnLogPdfDocument
+        title={config.title}
+        printDate={printDate}
+        printTime={printTime}
+        from={fmtDMonY(startDate)}
+        to={fmtDMonY(endDate)}
+        data={filteredTxn}
+      />
+    ) : undefined;
+    const selStyle = {
+      padding: "5px 8px",
+      border: "1px solid #C8B8A8",
+      borderRadius: 6,
+      fontFamily: "Inter, sans-serif",
+      fontSize: 12,
+      background: "#fff",
+      minWidth: 160,
+    } as const;
+    return (
+      <>
+        <ReportToolbar
+          title={config.title}
+          subtitle={config.subtitle}
+          from={startDate}
+          to={endDate}
+          onRangeChange={rangeChange}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search type, remarks, user, workstation..."
+          pdfDocument={pdfDocTxn}
+          pdfFileName={`transaction-log-${startDate}_to_${endDate}.pdf`}
+          chartSupported={false}
+          chartMode={false}
+          onChartToggle={() => {}}
+        />
+        {filterBarNode}
+        <div
+          style={{
+            display: "flex",
+            gap: 14,
+            flexWrap: "wrap",
+            padding: "10px 24px 0",
+            fontFamily: "Inter, sans-serif",
+            fontSize: 12,
+            color: "#684830",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <label style={{ fontWeight: 600 }}>User</label>
+            <select value={txnUserSel} onChange={(e) => setTxnUserSel(e.target.value)} style={selStyle}>
+              <option value="">All Users</option>
+              {(txnData?.users ?? []).map((u) => (
+                <option key={u.id} value={u.id}>{u.id}{u.name && u.name !== u.id ? ` · ${u.name}` : ""}</option>
+              ))}
+            </select>
+          </span>
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <label style={{ fontWeight: 600 }}>Txn Type</label>
+            <select value={txnTypeSel} onChange={(e) => setTxnTypeSel(e.target.value)} style={selStyle}>
+              <option value="">All Types</option>
+              {(txnData?.types ?? []).map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </span>
+          {txnData?.truncated ? <span>Showing the first 5,000 records — narrow the range or filters.</span> : null}
+        </div>
+        <div id="report-zoom-area" style={{ flex: 1 }}>
+          {loading ? (
+            <LoadingBlock />
+          ) : error ? (
+            <ErrorBlock message={error} />
+          ) : filteredTxn ? (
+            <TxnLogReport report={filteredTxn} />
           ) : null}
         </div>
       </>

@@ -313,6 +313,12 @@ const NAV: NavItem[] = [
           { key: "r-cred-account", label: "Account Detail", reportId: "credit-account-detail" },
         ],
       },
+      {
+        // Transaction Log (Vw_TxnLog) — POS audit trail
+        key: "cat-txnlog",
+        label: "Transaction Log",
+        children: [{ key: "r-txnlog", label: "Transaction Log", reportId: "transaction-log" }],
+      },
     ],
   },
   {

@@ -115,9 +115,9 @@ function toDateIso(raw: unknown): string {
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   const parsed = new Date(str);
   if (!Number.isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const mo = String(parsed.getMonth() + 1).padStart(2, "0");
-    const da = String(parsed.getDate()).padStart(2, "0");
+    const y = parsed.getUTCFullYear();
+    const mo = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(parsed.getUTCDate()).padStart(2, "0");
     return `${y}-${mo}-${da}`;
   }
   return "";
