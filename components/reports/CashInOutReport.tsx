@@ -155,6 +155,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
               >
                 {dt.date}
               </div>
+              <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
                 <thead>
                   <tr style={{ background: "#F0E8D8" }}>
@@ -162,7 +163,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
                     <th style={{ ...cell, textAlign: "left", width: 90, fontWeight: 700 }}>Txn Time</th>
                     <th style={{ ...cell, textAlign: "right", width: 100, fontWeight: 700 }}>Pay IN</th>
                     <th style={{ ...cell, textAlign: "right", width: 100, fontWeight: 700 }}>Pay Out</th>
-                    <th style={{ ...cell, textAlign: "left", width: 140, fontWeight: 700 }}>Category</th>
+                    <th style={{ ...cell, textAlign: "left", width: "1%", whiteSpace: "nowrap", fontWeight: 700 }}>Category</th>
                     <th style={{ ...cell, textAlign: "left", fontWeight: 700 }}>Remarks</th>
                     <th style={{ ...cell, textAlign: "left", width: 90, fontWeight: 700 }}>User</th>
                   </tr>
@@ -178,7 +179,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
                       <td style={{ ...num, background: r.payOut ? "#fee2e2" : undefined, fontWeight: r.payOut ? 700 : 400, color: r.payOut ? "#b91c1c" : "#45301D" }}>
                         {r.payOut ? fmtAmt(r.payOut) : ""}
                       </td>
-                      <td style={cell}>{r.category}</td>
+                      <td style={{ ...cell, whiteSpace: "nowrap" }}>{r.category}</td>
                       <td style={cell}>{r.remarks}</td>
                       <td style={cell}>{r.user}</td>
                     </tr>
@@ -191,6 +192,7 @@ export default function CashInOutReport({ report }: { report: CioData }) {
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           ))}
         </div>
@@ -236,7 +238,7 @@ const pStyles = StyleSheet.create({
   totalRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#45301D", marginTop: 2 },
   grandRow: { flexDirection: "row", borderTopWidth: 2, borderTopColor: "#45301D", marginTop: 6, paddingTop: 4 },
 });
-const KW = { id: 60, time: 55, in: 60, out: 60, cat: 80, rem: 130, user: 55 };
+const KW = { id: 60, time: 55, in: 60, out: 60, cat: 110, rem: 100, user: 55 };
 
 export function CashInOutPdfDocument({
   title,

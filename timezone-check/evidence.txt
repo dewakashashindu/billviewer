@@ -1,0 +1,40 @@
+
+SALT / billviewer — REPORT DATE SHIFT CHECK (v2)
+code edit karala nē · app eke logic eka copy karala simulate karala thiyenne
+machine TZ : UTC   Windows: tzutil /g   ·   Linux: timedatectl
+reports.ts : /home/user/salt/app/actions/reports.ts  →  patch applied ✔
+
+UTC
+  ✔ bill date  DB 2026-11-25 00:00  →  report 25/11/2026  ok
+  ✔ bill time  DB 19:30:00         →  report 7:30:00PM  ok
+  ✔ filter window  →  2026-11-25 00:00:00  →  2026-11-25 23:59:59  ok
+
+Asia/Colombo
+  ✔ bill date  DB 2026-11-25 00:00  →  report 25/11/2026  ok
+  ✘ bill time  DB 19:30:00         →  report 1:00:00AM  ← වෙලාව මාරු  [UTC fix: 7:30:00PM]
+  ✘ filter window  →  2026-11-25 00:00:00  →  2026-11-25 18:29:59  ← end 2026-11-25 18:29:59 daka witharai (2026-11-25 18:29 passe bills මග හැරෙනවා)
+     expected: 2026-11-25 00:00:00  →  2026-11-25 23:59:59
+
+America/New_York
+  ✘ bill date  DB 2026-11-25 00:00  →  report 24/11/2026  ← දවසක් පස්සට  [UTC fix: 25/11/2026]
+  ✘ bill time  DB 19:30:00         →  report 2:30:00PM  ← වෙලාව මාරු  [UTC fix: 7:30:00PM]
+  ✘ filter window  →  2026-11-25 00:00:00  →  2026-11-26 04:59:59  ← end 2026-11-26 04:59:59 daka witharai (2026-11-26 04:59 passe bills මග හැරෙනවා)
+     expected: 2026-11-25 00:00:00  →  2026-11-25 23:59:59
+
+America/Los_Angeles
+  ✘ bill date  DB 2026-11-25 00:00  →  report 24/11/2026  ← දවසක් පස්සට  [UTC fix: 25/11/2026]
+  ✘ bill time  DB 19:30:00         →  report 11:30:00AM  ← වෙලාව මාරු  [UTC fix: 7:30:00PM]
+  ✘ filter window  →  2026-11-25 00:00:00  →  2026-11-26 07:59:59  ← end 2026-11-26 07:59:59 daka witharai (2026-11-26 07:59 passe bills මග හැරෙනවා)
+     expected: 2026-11-25 00:00:00  →  2026-11-25 23:59:59
+
+Europe/London
+  ✔ bill date  DB 2026-11-25 00:00  →  report 25/11/2026  ok
+  ✔ bill time  DB 19:30:00         →  report 7:30:00PM  ok
+  ✔ filter window  →  2026-11-25 00:00:00  →  2026-11-25 23:59:59  ok
+
+─── VERDICT ───
+  date shift: 2/5   ·   time shift: 3/5   ·   filter window: 3/5
+  (simulated: app/actions/reports.ts eke CURRENT logic eka — patch eka nähä nam 3 window issues)
+  → Server timezone eka (−) offset ekak (US) nam: date dawasak passta + time maru.
+  → Server timezone eka (+) offset ekak (Colombo/India) nam: date hari, ඒත් time + window end හැරෙනවා.
+  → Fix eka damma nam (patch applied) mekedi pennana gætaluva nawathinawa.

@@ -20,6 +20,8 @@ import {
 } from "@/app/actions/dashboardOps";
 import { demoOps } from "./demoData";
 import RangeController, { presetRange, type RangePreset } from "./RangeController";
+import { getOpenTablesAction } from "@/app/actions/reports";
+import type { OpenTablesData } from "@/components/reports/OpenTablesReport";
 import {
   ChartCard,
   ComboChart,
@@ -40,6 +42,8 @@ import {
   gridStyle,
   kpiGridStyle,
 } from "./charts";
+
+const fmtAmtDash = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const HOUR_LABEL = Array.from({ length: 24 }, (_, h) => (h < 10 ? `0${h}` : String(h)));
 const DAY_LABEL = (iso: string) => {
@@ -142,9 +146,12 @@ export default function DashboardOpsSection({
   demoOnly = false,
   /** tab active da nattam da — active weddi animations aye run wenawa */
   active = true,
+  /** range eka "today" da kiyala parent ekata kiyanawa (Live tab pulse ekata) */
+  onLiveTodayChange,
 }: {
   demoOnly?: boolean;
   active?: boolean;
+  onLiveTodayChange?: (isToday: boolean) => void;
 } = {}) {
   /* Live default = Today (presets walin maru karanna puluwan) */
   const initToday = useMemo(() => presetRange("today"), []);
@@ -157,6 +164,9 @@ export default function DashboardOpsSection({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useFeedbackState<string | null>(null,'error');
   const [runId, setRunId] = useState(1);
+  /* Ongoing (open) tables — Today (Live) ekadi witharak */
+  const [openTables, setOpenTables] = useState<OpenTablesData | null>(null);
+  const [showTables, setShowTables] = useState(false);
   const paneRef = useRef<HTMLDivElement | null>(null);
   const locationInitialized = useRef(false);
 
@@ -196,6 +206,37 @@ export default function DashboardOpsSection({
     }, 60_000);
     return () => clearInterval(id);
   }, [from, preset]);
+
+  /* parent ekata kiyanawa range eka today da kiyala (Live tab pulse) */
+  useEffect(() => {
+    onLiveTodayChange?.(preset === "today");
+  }, [preset, onLiveTodayChange]);
+
+  /* Ongoing tables fetch — Today ekadi witharak. Permission nathnam card eka pennanne na. */
+  useEffect(() => {
+    if (preset !== "today") { setOpenTables(null); setShowTables(false); return; }
+    if (demoOnly) {
+      setOpenTables(DEMO_OPEN_TABLES);
+      return;
+    }
+    let alive = true;
+    getOpenTablesAction({ reportId: "open-tables", startDate: from, endDate: to, outletId: loc || undefined })
+      .then((res) => {
+        if (!alive) return;
+        if (res?.success && res.data) setOpenTables(res.data as unknown as OpenTablesData);
+        else setOpenTables(null);
+      })
+      .catch(() => { if (alive) setOpenTables(null); });
+    return () => { alive = false; };
+  }, [preset, from, to, loc, demoOnly]);
+
+  /* popup eka Escape walin wahanawa */
+  useEffect(() => {
+    if (!showTables) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowTables(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showTables]);
 
   /* animations — tab ekata awama aye run karanna */
   useEffect(() => {
@@ -265,8 +306,19 @@ export default function DashboardOpsSection({
               preset={preset}
               disabled={busy}
               compact
+              onPreset={(p) => setPreset(p)}
               onChange={(f, t) => {
-                setPreset(undefined); // custom
+                // preset chip eken awa nam onPreset eken preset eka set wela thiyenawa;
+                // custom date inputs walin witharak meka call weddi preset eka ain karanna
+                // onPreset passe ena onChange eka chip click ekada kiyala danaganna
+                // chip eken set wuna preset ekata adala range ekamada balanawa.
+                setPreset((prev) => {
+                  if (prev) {
+                    const r = presetRange(prev);
+                    if (r.from === f && r.to === (t || f)) return prev;
+                  }
+                  return undefined; // custom
+                });
                 setFrom(f);
                 setTo(t || f);
               }}
@@ -343,6 +395,60 @@ export default function DashboardOpsSection({
                 delay={0.25}
               />
             </div>
+
+
+            {preset === "today" && openTables ? (
+              <div
+                className="da-anim"
+                role="button"
+                tabIndex={0}
+                title="View ongoing table details"
+                onClick={() => setShowTables(true)}
+                onKeyDown={(e) => { if (e.key === "Enter") setShowTables(true); }}
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${DASH.border}`,
+                  borderRadius: 14,
+                  padding: "13px 16px",
+                  marginBottom: 14,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 4px rgba(114,86,60,0.05)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: DASH.dark }}>Ongoing Tables</div>
+                    <div style={{ fontSize: 11, color: DASH.muted, marginTop: 2 }}>Tables still open — not yet billed</div>
+                  </div>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 9, fontWeight: 800, letterSpacing: 0.8, color: "#1e6b3e", background: "#e2f2e7", border: "1px solid #9fd4ae", borderRadius: 999, padding: "3px 9px" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2F8F5B", animation: "daLiveBlink 1.1s ease-in-out infinite" }} />
+                    LIVE NOW
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginTop: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 21, fontWeight: 800, color: DASH.dark }}>{fmtInt(openTables.sections.length)}</div>
+                    <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.9, color: DASH.muted }}>OPEN TABLES</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 21, fontWeight: 800, color: DASH.dark }}>{fmtRs(openTables.grandTotal)}</div>
+                    <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.9, color: DASH.muted }}>PENDING VALUE</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 21, fontWeight: 800, color: DASH.dark }}>{fmtInt(openTables.sections.reduce((n, sec) => n + sec.rows.length, 0))}</div>
+                    <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.9, color: DASH.muted }}>ITEMS ON TABLES</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                  {openTables.sections.map((sec) => (
+                    <span key={`${sec.locCode}-${sec.code}`} style={{ fontSize: 10.5, fontWeight: 700, color: DASH.accent, background: DASH.band, border: `1px solid ${DASH.border}`, borderRadius: 999, padding: "3px 10px" }}>
+                      {sec.code} · {fmtRs(sec.amount)}
+                    </span>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: DASH.accent, marginTop: 10 }}>Click to view table details →</div>
+              </div>
+            ) : null}
 
             <div className="da-ops-responsive-grid" style={gridStyle}>
               <style>{`@media (max-width: 680px) {
@@ -453,7 +559,113 @@ export default function DashboardOpsSection({
             </div>
           </>
         )}
+
+      {showTables && openTables ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ongoing table details"
+          onClick={() => setShowTables(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 90,
+            background: "rgba(69,48,29,0.38)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              border: `1px solid ${DASH.border}`,
+              width: "min(880px, 96vw)",
+              maxHeight: "88vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              boxShadow: "0 18px 50px rgba(69,48,29,0.3)",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${DASH.border}` }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: DASH.dark }}>Ongoing Tables{loc ? ` — ${loc}` : ""}</div>
+                <div style={{ fontSize: 11, color: DASH.muted }}>{openTables.sections.length} open table(s) · items shown per table</div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setShowTables(false)}
+                style={{ border: `1px solid ${DASH.border}`, background: "#fff", color: DASH.accent, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ overflowY: "auto" }}>
+              {openTables.sections.map((sec) => (
+                <div key={`${sec.locCode}-${sec.code}`}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: DASH.band, padding: "8px 18px", borderBottom: `1px solid ${DASH.border}` }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: DASH.dark }}>{sec.code} <span style={{ color: DASH.muted, fontWeight: 700 }}>· {sec.rows.length} item(s)</span></span>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: DASH.accent }}>{fmtRs(sec.amount)}</span>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 11.5 }}>
+                      <thead>
+                        <tr style={{ background: "#FBF7F0" }}>
+                          {["Item Code", "Description", "Qty", "Sales Price", "Item Price", "Order Mode", "Cancel", "Cashier"].map((h, hi) => (
+                            <th key={h} style={{ textAlign: hi >= 2 && hi <= 4 ? "right" : "left", padding: "6px 10px", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: DASH.muted, borderBottom: `1px solid ${DASH.border}`, whiteSpace: "nowrap" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sec.rows.map((r, ri) => (
+                          <tr key={ri} style={{ background: ri % 2 ? "#FDFAF5" : "#fff" }}>
+                            <td style={{ padding: "6px 10px", fontWeight: 700, color: DASH.dark, whiteSpace: "nowrap" }}>{r.itemCode}</td>
+                            <td style={{ padding: "6px 10px", color: DASH.dark }}>{r.desc}</td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.qty.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtAmtDash(r.price)}</td>
+                            <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtAmtDash(r.value)}</td>
+                            <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{r.mode}</td>
+                            <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{r.cancel}</td>
+                            <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>{r.cashier}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 18px", background: DASH.dark, color: "#FDF6E9", fontSize: 13, fontWeight: 800 }}>
+              <span>Grand Total (open)</span>
+              <span>{fmtRs(openTables.grandTotal)}</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
       </SectionShell>
     </>
   );
 }
+
+
+/* demoOnly preview ekata ongoing tables sample */
+const DEMO_OPEN_TABLES: OpenTablesData = {
+  sections: [
+    { code: "T04", locCode: "01", amount: 8600, rows: [
+      { itemCode: "MD134", desc: "COCONUT MATCHA CLOUD", qty: 2, price: 1800, value: 3600, mode: "DI", cancel: "—", cashier: "aura" },
+      { itemCode: "MB001", desc: "MILA TROPICAL BOWL (VG)", qty: 1, price: 2400, value: 2400, mode: "DI", cancel: "—", cashier: "aura" },
+      { itemCode: "MB059", desc: "CEYLON GARDEN (VG)", qty: 1, price: 2600, value: 2600, mode: "DI", cancel: "—", cashier: "aura" },
+    ]},
+    { code: "T09", locCode: "01", amount: 7920, rows: [
+      { itemCode: "MB018", desc: "THAI PRAWN SALAD (GF)", qty: 2, price: 2500, value: 5000, mode: "DI", cancel: "—", cashier: "SAMAN" },
+      { itemCode: "MD120", desc: "PASSION FRUIT MOJITO", qty: 2, price: 1460, value: 2920, mode: "DI", cancel: "—", cashier: "SAMAN" },
+    ]},
+  ],
+  grandTotal: 16520,
+};

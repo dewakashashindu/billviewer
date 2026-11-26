@@ -3046,9 +3046,9 @@ export async function getCashInOutAction(filters: ReportFilter) {
     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
     const txnid = pickCol(cols, ["TxnID", "TxnId", "ID", "TxnNo"]);
     const time = pickCol(cols, ["TxnTime", "Time", "Tm"]);
-    const cat = pickCol(cols, ["Category", "CategoryDes", "PayCatDes"]);
+    const cat = pickCol(cols, ["CatDes", "Category", "CategoryDes", "PayCatDes"]);
     const catid = pickCol(cols, ["PAYCatID", "PayCatID", "CatID"]);
-    const remarks = pickCol(cols, ["Remarks", "Remark"]);
+    const remarks = pickCol(cols, ["TxnRmks", "Remarks", "Remark"]);
     const user = pickCol(cols, ["UserName", "User", "UserId"]);
 
     // full category list for the filter dropdown (POS combo)

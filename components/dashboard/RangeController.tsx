@@ -59,6 +59,7 @@ export default function RangeController({
   from,
   to,
   onChange,
+  onPreset,
   preset,
   disabled = false,
   compact = false,
@@ -67,6 +68,8 @@ export default function RangeController({
   from: string;
   to: string;
   onChange: (from: string, to: string) => void;
+  /** preset chip ekak click kalama kiyanawa — parent ekata active preset eka set karanna */
+  onPreset?: (p: RangePreset) => void;
   /** highlight the active preset (undefined = custom) */
   preset?: RangePreset;
   disabled?: boolean;
@@ -120,6 +123,7 @@ export default function RangeController({
             onClick={() => {
               setBusy(p.key);
               const r = presetRange(p.key);
+              onPreset?.(p.key);
               onChange(r.from, r.to);
             }}
             style={{

@@ -1,0 +1,217 @@
+diff --git a/app/actions/reports.ts b/app/actions/reports.ts
+index fe6ec75..547aa85 100644
+--- a/app/actions/reports.ts
++++ b/app/actions/reports.ts
+@@ -216,8 +216,8 @@ export async function getTransactionSummaryAction(filters: ReportFilter) {
+     const sum = (c: string | null) => (c ? `SUM(ISNULL(v.[${c}], 0))` : "0");
+ 
+     const r = pool.request();
+-    r.input("startDate", sql.DateTime2, new Date(startDate));
+-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    r.input("startDate", sql.VarChar(10), startDate);
++    r.input("endDate", sql.VarChar(10), endDate);
+     if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+ 
+     const result = await r.query(`
+@@ -371,8 +371,8 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
+     });
+ 
+     const req = pool.request();
+-    req.input("startDate", sql.DateTime2, new Date(startDate));
+-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    req.input("startDate", sql.VarChar(10), startDate);
++    req.input("endDate", sql.VarChar(10), endDate);
+     if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+     pf.bind(req);
+ 
+@@ -414,16 +414,19 @@ export async function getSalesSummaryAction(filters: ReportFilter) {
+     };
+ 
+     const p2 = (n: number) => String(n).padStart(2, "0");
++    // tedious `useUTC: true` nisa DB eken ena Date eke wall-clock eka UTC eken
++    // thiyenawa (e.g. DB 25 Nov 19:30 -> 2026-11-25T19:30:00Z). E nisa getUTC*
++    // use karanna one — getHours()/getDate() nam server timezone ekata maru wenawa.
+     const time12 = (d: Date): string => {
+-      let h = d.getHours();
++      let h = d.getUTCHours();
+       const ap = h >= 12 ? "PM" : "AM";
+       h = h % 12 || 12;
+-      return `${h}:${p2(d.getMinutes())}:${p2(d.getSeconds())}${ap}`;
++      return `${h}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}${ap}`;
+     };
+     const dayStr = (d: Date) =>
+-      `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
++      `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+     const isMidnight = (d: Date) =>
+-      d.getHours() + d.getMinutes() + d.getSeconds() === 0;
++      d.getUTCHours() + d.getUTCMinutes() + d.getUTCSeconds() === 0;
+     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+ 
+     // ── LOCATION-WISE grouping (POS PDF eka wage):
+@@ -1111,10 +1114,10 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
+ 
+     const p2 = (n: number) => String(n).padStart(2, "0");
+     const time12 = (d: Date): string => {
+-      let h = d.getHours();
++      let h = d.getUTCHours(); // DB wall-clock = UTC (tedious useUTC)
+       const ap = h >= 12 ? "PM" : "AM";
+       h = h % 12 || 12;
+-      return `${h}:${p2(d.getMinutes())}:${p2(d.getSeconds())} ${ap}`;
++      return `${h}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())} ${ap}`;
+     };
+ 
+     const req = pool.request();
+@@ -1150,7 +1153,11 @@ export async function getCategoryDetailAction(filters: ReportFilter) {
+ 
+     const rows = (result.recordset as Array<{ [k: string]: unknown }>).map((r) => {
+       const str = (k: string) => String(r[k] ?? "");
+-      const t = r.TxnTimeRaw ? new Date(String(r.TxnTimeRaw)) : null;
++      const t = r.TxnTimeRaw instanceof Date
++        ? (r.TxnTimeRaw as Date)
++        : r.TxnTimeRaw
++          ? new Date(`${String(r.TxnTimeRaw).replace(" ", "T")}Z`)
++          : null;
+       return {
+         LocCode: str("LocCode"),
+         LocDes: str("LocDes"),
+@@ -1516,8 +1523,8 @@ async function stewardAggregate(filters: ReportFilter, serCharge: boolean) {
+   const donot = pickCol(cols, ["DoNotShowInSales"]);
+ 
+   const r = pool.request();
+-  r.input("startDate", sql.DateTime2, new Date(startDate));
+-  r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++  r.input("startDate", sql.VarChar(10), startDate);
++  r.input("endDate", sql.VarChar(10), endDate);
+   if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+ 
+   const result = await r.query(`
+@@ -1774,8 +1781,8 @@ export async function getPaxCountAction(filters: ReportFilter) {
+     const bill = pickCol(cols, ["BillNo", "BILLNO", "BillNO", "Bill"]);
+ 
+     const r = pool.request();
+-    r.input("startDate", sql.DateTime2, new Date(startDate));
+-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    r.input("startDate", sql.VarChar(10), startDate);
++    r.input("endDate", sql.VarChar(10), endDate);
+     if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+ 
+     const result = await r.query(`
+@@ -1987,8 +1994,8 @@ export async function getSlipTraceAction(filters: ReportFilter) {
+     const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
+ 
+     const r = pool.request();
+-    r.input("startDate", sql.DateTime2, new Date(startDate));
+-    r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    r.input("startDate", sql.VarChar(10), startDate);
++    r.input("endDate", sql.VarChar(10), endDate);
+     if (outletId) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+ 
+     const result = await r.query(`
+@@ -2171,8 +2178,8 @@ async function runCreditHistory(viewName: string, filters: ReportFilter) {
+   const user = pickCol(cols, ["UserName", "sysusername", "SysUserName"]);
+ 
+   const r = pool.request();
+-  r.input("startDate", sql.DateTime2, new Date(startDate));
+-  r.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++  r.input("startDate", sql.VarChar(10), startDate);
++  r.input("endDate", sql.VarChar(10), endDate);
+   if (outletId && loc) r.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+ 
+   const result = await r.query(`
+@@ -2299,8 +2306,8 @@ export async function getCreditPayHistoryAction(filters: ReportFilter) {
+     customers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
+ 
+     const req = pool.request();
+-    req.input("startDate", sql.DateTime2, new Date(startDate));
+-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    req.input("startDate", sql.VarChar(10), startDate);
++    req.input("endDate", sql.VarChar(10), endDate);
+     if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+     if (filters.cusId) req.input("cusId", sql.VarChar(20), String(filters.cusId));
+     const result = await req.query(`
+@@ -2429,7 +2436,7 @@ function inSlot(h: number, s: TimeSlot): boolean {
+ 
+ function hourOf(raw: unknown): number | null {
+   if (raw == null || raw === "") return null;
+-  if (raw instanceof Date) return raw.getHours();
++  if (raw instanceof Date) return raw.getUTCHours();
+   if (typeof raw === "number") {
+     const n = Math.floor(raw);
+     return n >= 0 && n <= 23 ? n : null;
+@@ -2485,8 +2492,8 @@ export async function getHourlySalesAction(filters: ReportFilter) {
+         const date = pickCol(hCols, ["Txndate", "TrnDate"]);
+         const bills = pickCol(hCols, ["Bills", "NoOfBills", "BillCount", "TxnCount"]);
+         const req = pool.request();
+-        req.input("startDate", sql.DateTime2, new Date(startDate));
+-        req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++        req.input("startDate", sql.VarChar(10), startDate);
++        req.input("endDate", sql.VarChar(10), endDate);
+         if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+         const result = await req.query(`
+           SELECT
+@@ -2523,8 +2530,8 @@ export async function getHourlySalesAction(filters: ReportFilter) {
+       }
+       const pf = buildPosFilters({ cols, alias: "v." });
+       const req = pool.request();
+-      req.input("startDate", sql.DateTime2, new Date(startDate));
+-      req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++      req.input("startDate", sql.VarChar(10), startDate);
++      req.input("endDate", sql.VarChar(10), endDate);
+       if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+       pf.bind(req);
+       const result = await req.query(`
+@@ -2757,8 +2764,8 @@ export async function getCashierBreakdownAction(filters: ReportFilter) {
+     }
+     const time = pickCol(cols, ["TxnTime", "TrnTime", "PayTime"]);
+     const req = pool.request();
+-    req.input("startDate", sql.DateTime2, new Date(startDate));
+-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    req.input("startDate", sql.VarChar(10), startDate);
++    req.input("endDate", sql.VarChar(10), endDate);
+     if (outletId) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+     const result = await req.query(`
+       SELECT
+@@ -2927,8 +2934,8 @@ export async function getItemMovementAction(filters: ReportFilter) {
+     if (!loc) throw new Error("Report source has no location column; location access cannot be enforced.");
+       const locDes = pickCol(cols, ["LocDes", "LocName", "LocationName"]);
+       const req = pool.request();
+-      req.input("startDate", sql.DateTime2, new Date(startDate));
+-      req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++      req.input("startDate", sql.VarChar(10), startDate);
++      req.input("endDate", sql.VarChar(10), endDate);
+       if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+       const result = await req.query(`
+         SELECT
+@@ -3057,8 +3064,8 @@ export async function getCashInOutAction(filters: ReportFilter) {
+     }
+ 
+     const req = pool.request();
+-    req.input("startDate", sql.DateTime2, new Date(startDate));
+-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    req.input("startDate", sql.VarChar(10), startDate);
++    req.input("endDate", sql.VarChar(10), endDate);
+     if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+     if (filters.payCat && catid) req.input("payCat", sql.VarChar(20), String(filters.payCat));
+     const result = await req.query(`
+@@ -3225,8 +3232,8 @@ export async function getCreditAccountDetailAction(filters: ReportFilter) {
+     customers = (cr.recordset as Array<{ [k: string]: unknown }>).map((r) => ({ id: String(r.CID ?? ""), des: String(r.CDes ?? "") }));
+ 
+     const req = pool.request();
+-    req.input("startDate", sql.DateTime2, new Date(startDate));
+-    req.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    req.input("startDate", sql.VarChar(10), startDate);
++    req.input("endDate", sql.VarChar(10), endDate);
+     if (outletId && loc) req.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+     if (filters.cusId) req.input("cusId", sql.VarChar(20), String(filters.cusId));
+     const result = await req.query(`
+@@ -3337,8 +3344,8 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
+     }
+ 
+     const r0 = pool.request();
+-    r0.input("startDate", sql.DateTime2, new Date(startDate));
+-    r0.input("endDate", sql.DateTime2, new Date(`${endDate} 23:59:59`));
++    r0.input("startDate", sql.VarChar(10), startDate);
++    r0.input("endDate", sql.VarChar(10), endDate);
+     if (outletId) r0.input("outletId", sql.NVarChar(sql.MAX), String(outletId));
+     if (filters.cashier && cash) r0.input("cashier", sql.VarChar(20), String(filters.cashier));
+     const result = await r0.query(`

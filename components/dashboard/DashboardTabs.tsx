@@ -37,6 +37,8 @@ export default function DashboardTabs({
   initial?: TabKey;
 }) {
   const [tab, setTab] = useState<TabKey>(initial);
+  /* Live tab pulse eka — ops range eka "today" weddi witharak */
+  const [liveNow, setLiveNow] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -122,6 +124,18 @@ export default function DashboardTabs({
       }}
     >
       <DashStyles />
+      <style>{`
+        @keyframes daLiveRing {
+          0% { box-shadow: 0 0 0 0 rgba(47,143,91,.45), 0 3px 10px rgba(69,48,29,0.28) }
+          70% { box-shadow: 0 0 0 13px rgba(47,143,91,0), 0 3px 10px rgba(69,48,29,0.28) }
+          100% { box-shadow: 0 0 0 0 rgba(47,143,91,0), 0 3px 10px rgba(69,48,29,0.28) }
+        }
+        @keyframes daLiveBlink { 0%,100% { opacity:1 } 50% { opacity:.3 } }
+        @media (prefers-reduced-motion: reduce) {
+          .da-live-tab { animation: none !important; }
+          .da-live-dot { animation: none !important; }
+        }
+      `}</style>
 
       <div
         role="tablist"
@@ -142,12 +156,16 @@ export default function DashboardTabs({
               role="tab"
               aria-selected={on}
               onClick={() => setTab(t.key)}
+              className={t.key === "live" && liveNow ? "da-live-tab" : undefined}
               style={{
                 position: "relative",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "flex-start",
                 gap: 2,
+                ...(t.key === "live" && liveNow
+                  ? { animation: "daLiveRing 1.8s ease-out infinite" }
+                  : {}),
                 border: `1px solid ${on ? DASH.dark : "transparent"}`,
                 background: on
                   ? "linear-gradient(135deg, #45301D 0%, #684830 100%)"
@@ -169,8 +187,24 @@ export default function DashboardTabs({
                   fontSize: 13,
                   fontWeight: 800,
                   letterSpacing: 0.2,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
                 }}
               >
+                {t.key === "live" && liveNow ? (
+                  <span
+                    className="da-live-dot"
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: "#3ECF6F",
+                      animation: "daLiveBlink 1.1s ease-in-out infinite",
+                      flexShrink: 0,
+                    }}
+                  />
+                ) : null}
                 {t.label}
               </span>
               <span
@@ -191,7 +225,7 @@ export default function DashboardTabs({
 
       {/* panes */}
       <div style={{ display: tab === "live" ? "block" : "none", marginTop: 14 }}>
-        <DashboardOpsSection demoOnly={demoOnly} active={tab === "live"} />
+        <DashboardOpsSection demoOnly={demoOnly} active={tab === "live"} onLiveTodayChange={setLiveNow} />
       </div>
 
       <div style={{ display: tab === "performance" ? "block" : "none", marginTop: 14 }}>
