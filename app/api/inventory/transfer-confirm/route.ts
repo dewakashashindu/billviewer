@@ -4,6 +4,7 @@ import {getPool} from '@/lib/db';
 import {SESSION_COOKIE,verifySessionValue} from '@/lib/auth';
 import {AccessDeniedError,requireWebPermission} from '@/lib/webAuthorization';
 import {nextStockSerial,writeStockMovement} from '@/lib/stockPosting';
+import {logActivity} from '@/lib/activityLog';
 export const runtime='nodejs';
 const docs={
  trq:{header:'Tbl_TransferReqHeder',detail:'Tbl_TransferReqDetail',id:'TRNO',qty:'TRQty',source:''},
@@ -57,6 +58,7 @@ export async function POST(req:NextRequest){
    }
   }
   // No auto-creation of stock rows. Lock all item rows for the duration of posting.
+  const stockChanges:string[]=[];
   for(const line of [...lines.recordset].sort((a,b)=>clean(a.item).localeCompare(clean(b.item)))){
    const item=clean(line.item),qty=Number(line.qty);
    const stock=await params(tx,from,to,id).input('item',sql.Char(15),item).query('SELECT RTRIM(LocCode) AS loc,StkBal,Enable FROM dbo.Tbl_RowItems WITH (UPDLOCK,HOLDLOCK) WHERE RowItemCode=@item AND (LocCode=@from OR LocCode=@to)');
@@ -72,6 +74,7 @@ export async function POST(req:NextRequest){
    const current=await params(tx,from,to,id).input('item',sql.Char(15),item).query('SELECT RTRIM(LocCode) AS loc,StkBal FROM dbo.Tbl_RowItems WHERE RowItemCode=@item AND (LocCode=@from OR LocCode=@to)');
    const afterFrom=current.recordset.filter(x=>clean(x.loc).toUpperCase()===from.toUpperCase()),afterTo=current.recordset.filter(x=>clean(x.loc).toUpperCase()===to.toUpperCase());
    if(afterFrom.length!==1||afterTo.length!==1||afterFrom[0].StkBal===null||afterTo[0].StkBal===null)throw Error('ITEM_ROW');
+   stockChanges.push(`${item}: ${from} ${sending[0].StkBal} -> ${Number(afterFrom[0].StkBal)}; ${to} ${receiving[0].StkBal} -> ${Number(afterTo[0].StkBal)}`);
    const common={item,doc:id,user:clean(user.userId),serial,qty,remarks:`${kind==='tn'?'Transfer Note':'Transfer Return'} ${id}`};
    await writeStockMovement(tx,{...common,loc:from,type:kind==='tn'?'TO':'TRTO',pre:Number(sending[0].StkBal),last:Number(afterFrom[0].StkBal),direction:'-'});
    await writeStockMovement(tx,{...common,loc:to,type:kind==='tn'?'TI':'TRTI',pre:Number(receiving[0].StkBal),last:Number(afterTo[0].StkBal),direction:'+'});
@@ -87,7 +90,10 @@ export async function POST(req:NextRequest){
   }
   const result=await params(tx,from,to,id).input('user',sql.Char(10),clean(user.userId)).input('serial',sql.Float,serial).query(`UPDATE dbo.[${d.header}] SET Confirmed='Y',ConUserID=@user,ConDatetime=GETDATE(),SysSerialNo=@serial WHERE FromLocCode=@from AND ToLoc=@to AND [${d.id}]=@id AND UPPER(RTRIM(Confirmed))='N'`);
   if(result.rowsAffected[0]!==1)throw Error('LOCKED');
-  await tx.commit();tx=undefined;return NextResponse.json({success:true});
+  await tx.commit();tx=undefined;
+  const kindName=kind==='trq'?'Transfer request approval':kind==='tn'?'Transfer note':'Transfer return';
+  await logActivity({actor:user,category:'STOCK',action:kind.toUpperCase()+'_CONFIRMED',targetType:'movement',targetId:id,targetName:`${kindName} ${id}`,details:`${kindName} ${id} confirmed (${from} to ${to}); ${lines.recordset.length} line(s); serial ${serial}${kind==='trq'?'; approval only, stock not moved':''}.`,locationCode:from,beforeValue:`Confirmed: N`,afterValue:`Confirmed: Y | Serial: ${serial}${stockChanges.length?` | Stock: ${stockChanges.join('; ')}`:''}`});
+  return NextResponse.json({success:true});
  }catch(e){
   if(tx)try{await tx.rollback()}catch{}
   const m=(e as Error).message;console.error('Transfer confirmation error:',e);

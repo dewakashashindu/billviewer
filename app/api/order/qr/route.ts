@@ -18,6 +18,7 @@ import { TAKEAWAY_TABLE_NO } from "@/lib/tableLink";
 import { signTableToken } from "@/lib/orderToken";
 import { QR_MENU_BASE_URL } from "@/config/qr.config";
 import { AccessDeniedError, requireWebPermission, requireWebLocation } from "@/lib/webAuthorization";
+import { logActivity } from "@/lib/activityLog";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const generated = urls.filter((u) => u.url);
+    await logActivity({
+      actor: session,
+      category: "ORDER",
+      action: "TABLE_QR_URLS_GENERATED",
+      targetType: "table-qr",
+      targetId: defaultLocCode || "tables",
+      details: `Table QR links generated for ${generated.length} table(s)${defaultLocCode ? ` at ${defaultLocCode}` : ""}.`,
+      locationCode: defaultLocCode,
+    });
     return NextResponse.json({
       ok: true,
       data: {

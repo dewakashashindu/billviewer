@@ -78,9 +78,14 @@ export async function POST(req: NextRequest) {
       WHERE LOCCODE=@loc AND UserId=@id AND LTRIM(RTRIM(LoginNameWeb))=@loginName AND Enable=1
     `);
     if(result.rowsAffected[0]!==1){await tx.rollback();tx=undefined;return NextResponse.json({success:false,error:"Reset failed. Please try again."},{status:409})}
+    const sessionRows=await new sql.Request(tx).input("id",sql.Char(10),user.UserId).query("SELECT SessionHash FROM dbo.Tbl_WebSession WITH (UPDLOCK,HOLDLOCK) WHERE UserID=@id");
+    const revokedSessionRefs=(sessionRows.recordset as Array<{SessionHash?:unknown}>).map(r=>String(r.SessionHash??'').trim()).filter(h=>/^[0-9a-f]{64}$/i.test(h));
     await new sql.Request(tx).input("id",sql.Char(10),user.UserId).query("DELETE FROM dbo.Tbl_WebSession WHERE UserID=@id");
     await tx.commit();tx=undefined;
     await logActivity({actor:{userId:String(user.UserId),loginName:String(user.LoginName),userName:loginName},category:'USER',action:'PASSWORD_RESET',targetType:'user',targetId:String(user.UserId),targetName:loginName,locationCode:String(user.LocCode),details:'Password reset completed after OTP verification; all sessions revoked. The new password is never stored in this log.',ipAddress:ip});
+    for (const ref of revokedSessionRefs) {
+      await logActivity({actor:{userId:String(user.UserId),loginName:String(user.LoginName),userName:loginName},sessionRef:ref,category:'SESSION',action:'SESSION_REVOKED',targetType:'user',targetId:String(user.UserId),targetName:loginName,locationCode:String(user.LocCode),details:'Web session revoked by a password reset (OTP verification).'});
+    }
     const out = NextResponse.json({ success: true });
     out.cookies.set(OTP_COOKIE, "", { path: "/", maxAge: 0 });
     out.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });

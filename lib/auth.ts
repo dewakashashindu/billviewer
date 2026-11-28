@@ -14,6 +14,13 @@ import crypto from "crypto";
 export const SESSION_COOKIE = "mcf_session";
 export const OTP_COOKIE = "mcf_otp";
 
+/** Stable per-session reference: SHA-256 of the raw sessionId. Matches the
+    value stored in Tbl_WebSession.SessionHash exactly, so login audit rows,
+    activity rows and live-session checks can all be linked by this key. */
+export function sessionRefFromSessionId(sessionId: string | undefined | null): string {
+  return sessionId ? crypto.createHash("sha256").update(sessionId, "utf8").digest("hex") : "";
+}
+
 export const UNAUTHORIZED_ERROR = "UNAUTHORIZED";
 const SESSION_SECONDS = 24 * 60 * 60;
 const OTP_MINUTES = 10;

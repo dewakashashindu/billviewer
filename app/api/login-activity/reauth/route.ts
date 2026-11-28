@@ -7,6 +7,7 @@ import {verifyPassword} from '@/lib/auth';
 import {getSessionFromRequest} from '@/lib/session';
 import {authLimit} from '@/lib/sqlAuthSecurity';
 import {makeLoginActivityToken,isUAdmin,LOGIN_ACTIVITY_COOKIE} from '@/lib/loginActivityGuard';
+import {logActivity} from '@/lib/activityLog';
 
 export const runtime='nodejs';
 const json=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -26,10 +27,13 @@ export async function POST(req:NextRequest){
   const res=await pool.request().input('uid',sql.Char(10),session.userId)
    .query(`SELECT TOP 1 u.PasswordWeb AS Password,u.Enable FROM Tbl_UserDetails u WHERE LTRIM(RTRIM(u.UserId))=@uid`);
   const user=res.recordset[0];
-  if(!user||!user.Enable||!verifyPassword(password,String(user.Password??'')))return json({error:'Incorrect password.'},401);
+  if(!user||!user.Enable||!verifyPassword(password,String(user.Password??''))){await logActivity({actor:session,category:'SECURITY',action:'REAUTH_FAILED',targetType:'auth',targetId:String(session.userId),details:'Login-activity re-authentication failed (incorrect password).'});return json({error:'Incorrect password.'},401)}
+  await logActivity({actor:session,category:'SECURITY',action:'REAUTH_OK',targetType:'auth',targetId:String(session.userId),details:'Login-activity re-authentication succeeded.'});
   const out=json({success:true});
   out.cookies.set(LOGIN_ACTIVITY_COOKIE,makeLoginActivityToken(session),{
-   httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/login-activity',maxAge:10*60,
+   // Must reach BOTH /login-activity (screen) and /api/login-activity/* (PDF);
+   // with path '/login-activity' the browser never sent it to the API route.
+   httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:10*60,
   });
   return out;
  }catch(e){console.error('Login activity re-auth failed:',e instanceof Error?e.name:'unknown');return json({error:'Unable to verify right now. Please try again.'},500)}

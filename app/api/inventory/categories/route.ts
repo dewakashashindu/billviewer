@@ -40,6 +40,7 @@ async function validate(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const result = await validate(req); if ("response" in result) return result.response;
+    await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'CATEGORIES_VIEWED',targetType:'category',targetId:String(result.level),details:`Category level ${result.level} list viewed.`});
     const data = await (await getPool()).request().query(`SELECT RTRIM(${result.codeColumn}) AS code, ${result.nameColumn} AS name, [Enable] AS enabled FROM ${result.table} ORDER BY ${result.nameColumn}, ${result.codeColumn}`);
     return NextResponse.json({ data: data.recordset }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) { return errorResponse(e); }

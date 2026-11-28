@@ -11,11 +11,11 @@ import {
   verifyPassword,
   isAdminSession,
   SESSION_COOKIE,
+  sessionRefFromSessionId,
 } from "@/lib/auth";
 import {clientIp} from "@/lib/rateLimit";
 import {issueWebSession} from "@/lib/webSession";
 import {authLimit} from "@/lib/sqlAuthSecurity";
-import crypto from "crypto";
 import {captureLoginAudit} from "@/lib/loginAudit";
 
 /** Per-IP: how many login POSTs in the window (any outcome). */
@@ -81,10 +81,10 @@ export async function POST(req: NextRequest) {
       groupId: String(user.GroupId ?? ""),
     };
 
-    const token = await issueWebSession(sessionPayload, String(user.Password ?? ""));
+    const { token, sessionId } = await issueWebSession(sessionPayload, String(user.Password ?? ""));
     let defaultLocation: string | undefined;
     try { const locRes = await pool.request().input("uid", sql.Char(10), sessionPayload.userId).query("SELECT TOP 1 LTRIM(RTRIM(LocationID)) AS code FROM dbo.Tbl_UserLocationAccess WHERE UserID=@uid AND IsDefault=1"); defaultLocation = locRes.recordset[0]?.code ? String(locRes.recordset[0].code) : undefined; } catch { /* location is best-effort */ }
-    await captureLoginAudit(req.headers,{loginName:sessionPayload.loginName,userId:sessionPayload.userId,userName:sessionPayload.userName,success:true,locationCode:defaultLocation,sessionRef:crypto.createHash("sha256").update(token).digest("hex")});
+    await captureLoginAudit(req.headers,{loginName:sessionPayload.loginName,userId:sessionPayload.userId,userName:sessionPayload.userName,success:true,locationCode:defaultLocation,sessionRef:sessionRefFromSessionId(sessionId)});
 
     const out = NextResponse.json({
       success: true,

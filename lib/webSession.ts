@@ -18,7 +18,7 @@ export async function issueWebSession(user:Omit<SessionUser,'exp'|'sessionId'>, 
    IF EXISTS (SELECT 1 FROM dbo.Tbl_WebSession WITH (UPDLOCK,HOLDLOCK) WHERE UserID=@id)
     UPDATE dbo.Tbl_WebSession SET SessionHash=@hash,ExpireAt=DATEADD(hour,24,GETUTCDATE()) WHERE UserID=@id;
    ELSE INSERT dbo.Tbl_WebSession(UserID,SessionHash,ExpireAt) VALUES(@id,@hash,DATEADD(hour,24,GETUTCDATE()));`);
-  await tx.commit();return token;
+  await tx.commit();return {token,sessionId};
  } catch(e){try{await tx.rollback()}catch{}throw e}
 }
 export async function checkWebSession(user:SessionUser){

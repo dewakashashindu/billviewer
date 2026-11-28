@@ -21,6 +21,7 @@ import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
 import { requireWebPermission, AccessDeniedError } from "@/lib/webAuthorization";
+import { logActivity } from "@/lib/activityLog";
 import { demoOps } from "@/components/dashboard/demoData";
 
 /* ───────────────────────── types ───────────────────────── */
@@ -225,7 +226,12 @@ export async function getDashboardOpsAction(
   range: OpsRange
 ): Promise<OpsResult<DashboardOpsData>> {
   try {
-    const access = await requireWebPermission(await requireSession(), "dashboard:VIEW");
+    const session = await requireSession();
+    const access = await requireWebPermission(session, "dashboard:VIEW");
+    {
+      const f = str(range?.from), t = str(range?.to) || str(range?.from), l = str(range?.loc);
+      await logActivity({ actor: session, category: "DASHBOARD", action: "DASHBOARD_OPS_VIEWED", targetType: "dashboard", targetId: "ops", details: `Dashboard live-operations view loaded: ${f} to ${t}${l && l.toUpperCase() !== "ALL" ? `, location ${l}` : ""}.`, locationCode: l && l.toUpperCase() !== "ALL" ? l : "" });
+    }
     const allowed = [...access.locations].map(x => x.trim().toUpperCase());
     const from = str(range?.from);
     const to = str(range?.to) || from;

@@ -16,6 +16,7 @@ async function authorize(req:NextRequest,action:'VIEW'|'SAVE'){
 function fail(e:unknown){console.error('User management error:',e);const n=(e as {number?:number}).number;return NextResponse.json({error:n===2627||n===2601?'Duplicate user ID or login name.':n===547?'Referenced record or invalid group/location.':'Unable to save or load user. Verify table schema, defaults and database permissions.'},{status:n===2627||n===2601||n===547?409:500});}
 export async function GET(req:NextRequest){try{
   const auth=await authorize(req,'VIEW');if(auth.error)return auth.error;
+  await logActivity({actor:auth.session!,category:'USER',action:'USERS_VIEWED',targetType:'user',targetId:'',details:'Viewed the user list.'});
   const pool=await getPool();const loc=clean(req.nextUrl.searchParams.get('loc')),id=clean(req.nextUrl.searchParams.get('id'));
   if(loc||id){if(!loc||!id||loc.length>10||id.length>10)return NextResponse.json({error:'Invalid user.'},{status:400});
     const r=await pool.request().input('loc',sql.VarChar(10),loc).input('id',sql.VarChar(10),id).query(`SELECT LTRIM(RTRIM(LOCCODE)) AS locCode,LTRIM(RTRIM(UserId)) AS userId,LTRIM(RTRIM(NIC)) AS nic,LTRIM(RTRIM(GroupId)) AS groupId,UserName AS userName,Rmks AS remarks,Add1 AS add1,Add2 AS add2,Add3 AS add3,Add4 AS add4,ContNo AS contact,Email AS email,CONVERT(varchar(10),DOB,23) AS dob,CONVERT(varchar(10),DOJ,23) AS doj,CONVERT(varchar(10),DOL,23) AS dol,Enable AS enabled,LoginNameWeb AS loginNameWeb,CASE WHEN PasswordWeb LIKE 'scrypt$%$%' THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS hasPassword,CONVERT(varbinary(max),Picture) AS picture FROM dbo.Tbl_UserDetails WHERE LTRIM(RTRIM(LOCCODE))=@loc AND LTRIM(RTRIM(UserId))=@id`);
@@ -54,7 +55,12 @@ async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|und
   if(password)r.input('pw',sql.VarChar(255),hashPassword(password));if(picture)r.input('picture',sql.VarBinary(sql.MAX),picture);
   if(creating){await r.query(`INSERT INTO dbo.Tbl_UserDetails (LOCCODE,UserId,NIC,LogName,PSW,GroupId,UserName,Rmks,Add1,Add2,Add3,Add4,ContNo,Email,DOB,DOJ,DOL,CreateUser,Picture,Enable,ByPassGroupTable,Password,LoginName,Uploaded,PasswordWeb,LoginNameWeb) VALUES (@loc,@id,@nic,' ',' ',@group,@name,@remarks,@add1,@add2,@add3,@add4,@contact,@email,@dob,@doj,@dol,@creator,${picture?'@picture':'NULL'},@enable,0,' ',' ',0,${password?'@pw':"' '"},@login)`);}
   else {await r.query(`UPDATE dbo.Tbl_UserDetails SET NIC=@nic,GroupId=@group,UserName=@name,Rmks=@remarks,Add1=@add1,Add2=@add2,Add3=@add3,Add4=@add4,ContNo=@contact,Email=@email,DOB=@dob,DOJ=@doj,DOL=@dol,Enable=@enable,LoginNameWeb=@login ${password?',PasswordWeb=@pw':''} ${picture?',Picture=@picture':''} WHERE LTRIM(RTRIM(LOCCODE))=@loc AND LTRIM(RTRIM(UserId))=@id`);}
-  if (!creating && (password || !b.enabled)) await new sql.Request(tx).input('id',sql.Char(10),id).query('DELETE FROM dbo.Tbl_WebSession WHERE UserID=@id');
+  let revokedSessionRefs: string[] = [];
+  if (!creating && (password || !b.enabled)) {
+    const sessionRows = await new sql.Request(tx).input('id',sql.Char(10),id).query('SELECT SessionHash FROM dbo.Tbl_WebSession WITH (UPDLOCK,HOLDLOCK) WHERE UserID=@id');
+    revokedSessionRefs = (sessionRows.recordset as Array<{SessionHash?:unknown}>).map(r=>String(r.SessionHash??'').trim()).filter(h=>/^[0-9a-f]{64}$/i.test(h));
+    await new sql.Request(tx).input('id',sql.Char(10),id).query('DELETE FROM dbo.Tbl_WebSession WHERE UserID=@id');
+  }
   // Serialize the complete replacement; clearing before inserting prevents a second
   // default even with the supplied multi-row trigger. Rollback restores old grants.
   await new sql.Request(tx).input('id',sql.Char(10),id).query('SELECT LocationID FROM dbo.Tbl_UserLocationAccess WITH (UPDLOCK,HOLDLOCK) WHERE UserID=@id');
@@ -64,6 +70,9 @@ async function save(req:NextRequest,creating:boolean){let tx:sql.Transaction|und
 
   await tx.commit();tx=undefined;
   await logActivity({actor:auth.session!,category:'USER',action:creating?'USER_CREATED':'USER_UPDATED',targetType:'user',targetId:id,targetName:name,locationCode:loc,details:`${creating?'Created':'Updated'} user ${name} (${login||id}) at location ${loc}; enabled: ${Boolean(b.enabled)?'yes':'no'}${password&&!creating?'; password was changed':''}${!b.enabled&&!creating?'; user deactivated and sessions revoked':''}`});
+  for (const ref of revokedSessionRefs) {
+    await logActivity({actor:{userId:id,loginName:login||id,userName:name},sessionRef:ref,category:'SESSION',action:'SESSION_REVOKED',targetType:'user',targetId:id,targetName:name,locationCode:loc,details:'Web session revoked by an administrator (password changed or account deactivated).'});
+  }
   return NextResponse.json({success:true});
 }catch(e){if(tx)try{await tx.rollback()}catch{}if((e as Error).message==='INVALID_WORKING_LOCATION')return NextResponse.json({error:'A working location is inactive, missing or duplicated. Please update your selection.'},{status:409});return fail(e)}}
 export async function POST(req:NextRequest){return save(req,true)}

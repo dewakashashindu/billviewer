@@ -9,6 +9,7 @@ import sql from "mssql";
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
 import {requireWebPermission,loadWebAuthorization,requireWebLocation} from "@/lib/webAuthorization";
+import { logActivity } from "@/lib/activityLog";
 
 export interface ReportFilter {
   startDate: string;
@@ -51,10 +52,18 @@ function reportSourceError(detail: string): string {
 
 // Bind escaped XML as one parameter; nodes() supports older SQL Server versions.
 async function scopedReportFilters(filters: ReportFilter, allowedReports: readonly string[]): Promise<ReportFilter> {
-  const access=await loadWebAuthorization(await requireSession());
+  const session=await requireSession();
+  const access=await loadWebAuthorization(session);
   const selected=typeof filters.reportId==='string'?filters.reportId.trim():'';
   const report=selected || (allowedReports.length===1?allowedReports[0]:'');
-  if (!allowedReports.includes(report) || !access.permissions.has(`report-${report}:VIEW`)) throw new Error('Report access denied.');
+  if (!allowedReports.includes(report) || !access.permissions.has(`report-${report}:VIEW`)) {
+    await logActivity({actor:session,category:'REPORT',action:'REPORT_ACCESS_DENIED',targetType:'report',targetId:String(filters.reportId??'').trim()||'unknown',details:`Report access denied (requested '${String(filters.reportId??'').trim()}').`});
+    throw new Error('Report access denied.');
+  }
+  {
+    const f=String(filters.startDate??'').trim(), t=String(filters.endDate??'').trim(), o=String(filters.outletId??'').trim();
+    await logActivity({actor:session,category:'REPORT',action:'REPORT_VIEWED',targetType:'report',targetId:report,targetName:report,details:`Report '${report}' opened${f&&t?` for ${f} to ${t}`:''}${o?` (location scope: ${o.startsWith('<l>')?'selected locations':o})`:''}.`});
+  }
   const requested=String(filters.outletId ?? '').trim();
   const allowed=[...access.mainLocations];
   if (!allowed.length || allowed.some(x=>/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(x))) throw new Error('Location scope cannot be safely represented.');
@@ -3187,9 +3196,11 @@ export async function getKotBotAction(filters: ReportFilter) {
 // ============================================================
 // Transaction Log (POS Vw_TxnLog) — audit trail of POS actions:
 // logins, table splits/transfers, steward transfers, reprints, ...
-// POS query: Select * from Vw_TxnLog Where Txndate Between ...
-//   [And LocCode = ...] [And UserID = ...] [And Txn = ...]
-//   Order By DefDateTime
+// POS query: Select * from Vw_TxnLog Where ... [And LocCode = ...]
+//   [And UserID = ...] [And Txn = ...]
+//   DefDateTime is the transaction datetime everywhere (range, date band,
+//   time column, order). Txndate/TxnTime are fallbacks when DefDateTime
+//   is absent.
 // The view is auto-discovered (name/columns vary between installs).
 // ============================================================
 export async function getTxnLogAction(filters: ReportFilter) {
@@ -3244,14 +3255,18 @@ export async function getTxnLogAction(filters: ReportFilter) {
     const remarksC = pickCol(cols, ['TxnRemarks', 'Remarks', 'Remark', 'Description', 'TxnDescription', 'Details']);
     const defC = pickCol(cols, ['DefDateTime', 'DefDatetime', 'SysDateTime', 'CreatedOn']);
     const wsC = pickCol(cols, ['Workstation', 'WORKSTATION', 'WorkStation', 'Terminal', 'MachineName', 'ComputerName']);
-    if (!dateC || !txnC) {
+    // DefDateTime is the transaction datetime (POS entry stamp). When the
+    // view exposes it, date bands, time column, range filter and sort all
+    // come from it; Txndate/TxnTime are only fallbacks.
+    const dtC = defC ?? dateC;
+    if (!dtC || !txnC) {
       console.error(`Transaction Log: ${viewLabel} columns: ${Array.from(cols).join(', ')}`);
       return { success: false, error: reportSourceError(`Unable to map ${viewLabel} — missing date/type column.`) };
     }
 
     const locExpr = `LTRIM(RTRIM(v.[${loc}]))`;
     const scopeCond = `${locExpr} IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@outletId AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v))`;
-    const rangeCond = `v.[${dateC}] >= CONVERT(date,@startDate,23) AND v.[${dateC}] < DATEADD(day,1,CONVERT(date,@endDate,23))`;
+    const rangeCond = `v.[${dtC}] >= CONVERT(date,@startDate,23) AND v.[${dtC}] < DATEADD(day,1,CONVERT(date,@endDate,23))`;
     const baseReq = () => {
       const r = pool.request();
       r.input('startDate', sql.VarChar(10), startDate);
@@ -3260,12 +3275,25 @@ export async function getTxnLogAction(filters: ReportFilter) {
       return r;
     };
 
+    // Vw_TxnLog often carries no UserName column. Enrich from the master
+    // (dbo.Tbl_UserDetails, same lookup the login screen uses) so both the
+    // dropdown and the user bands show names. Fail open to ids on any error.
+    const nameMap = new Map<string, string>();
+    try {
+      const nr = await pool.request().query(`SELECT LTRIM(RTRIM(UserId)) AS id, MAX(LTRIM(RTRIM(UserName))) AS name FROM dbo.Tbl_UserDetails WITH (NOLOCK) WHERE UserId IS NOT NULL GROUP BY LTRIM(RTRIM(UserId))`);
+      for (const r of nr.recordset as Array<{ id: unknown; name: unknown }>) {
+        const id = String(r.id ?? '').trim(), nm = String(r.name ?? '').trim();
+        if (id) nameMap.set(id.toUpperCase(), nm);
+      }
+    } catch (e) { console.error('Transaction Log: user name lookup failed:', e instanceof Error ? e.message : e); }
+    const nameOf = (id: string, viewName?: string) => String(viewName ?? '').trim() || nameMap.get(String(id ?? '').trim().toUpperCase()) || '';
+
     // Filter options: users + txn types present in this range/scope.
     let users: Array<{ id: string; name: string }> = [];
     let types: string[] = [];
     if (userIdC) {
       const ur = await baseReq().query(`SELECT LTRIM(RTRIM(v.[${userIdC}])) AS id, ${userNameC ? `MAX(LTRIM(RTRIM(v.[${userNameC}])))` : `LTRIM(RTRIM(v.[${userIdC}]))`} AS name FROM ${viewRef} v WITH (NOLOCK) WHERE ${rangeCond} AND ${scopeCond} AND LTRIM(RTRIM(v.[${userIdC}])) <> '' GROUP BY LTRIM(RTRIM(v.[${userIdC}])) ORDER BY id`);
-      users = ur.recordset.map((r: any) => ({ id: String(r.id ?? '').trim(), name: String(r.name ?? '').trim() }));
+      users = ur.recordset.map((r: any) => { const id = String(r.id ?? '').trim(); return { id, name: nameOf(id, String(r.name ?? '')) || id }; });
     }
     {
       const tr = await baseReq().query(`SELECT DISTINCT LTRIM(RTRIM(v.[${txnC}])) AS t FROM ${viewRef} v WITH (NOLOCK) WHERE ${rangeCond} AND ${scopeCond} AND LTRIM(RTRIM(v.[${txnC}])) <> '' ORDER BY t`);
@@ -3277,14 +3305,14 @@ export async function getTxnLogAction(filters: ReportFilter) {
     const req = baseReq();
     if (selUser && userIdC) req.input('txnUser', sql.NVarChar(50), selUser);
     if (selType) req.input('txnType', sql.NVarChar(200), selType);
-    const timeExpr = timeC ? `CONVERT(varchar(8), v.[${timeC}], 108)` : `CONVERT(varchar(8), v.[${dateC}], 108)`;
+    const timeExpr = defC ? `CONVERT(varchar(8), v.[${defC}], 108)` : (timeC ? `CONVERT(varchar(8), v.[${timeC}], 108)` : `CONVERT(varchar(8), v.[${dtC}], 108)`);
     const result = await req.query(`
       SELECT TOP (5001)
         ${locExpr} AS LocCode,
         ${locDes ? `LTRIM(RTRIM(v.[${locDes}]))` : `''`} AS LocDes,
         ${userIdC ? `LTRIM(RTRIM(v.[${userIdC}]))` : `''`} AS UserID,
         ${userNameC ? `LTRIM(RTRIM(v.[${userNameC}]))` : `''`} AS UserName,
-        CONVERT(varchar(10), v.[${dateC}], 23) AS TxnDate,
+        CONVERT(varchar(10), v.[${dtC}], 23) AS TxnDate,
         ${timeExpr} AS TxnTime,
         LTRIM(RTRIM(v.[${txnC}])) AS Txn,
         ${remarksC ? `LTRIM(RTRIM(v.[${remarksC}]))` : `''`} AS TxnRemarks,
@@ -3293,7 +3321,7 @@ export async function getTxnLogAction(filters: ReportFilter) {
       WHERE ${rangeCond} AND ${scopeCond}
       ${selUser && userIdC ? `AND LTRIM(RTRIM(v.[${userIdC}])) = @txnUser` : ''}
       ${selType ? `AND LTRIM(RTRIM(v.[${txnC}])) = @txnType` : ''}
-      ORDER BY ${locExpr}, ${userIdC ? `LTRIM(RTRIM(v.[${userIdC}])), ` : ''}${defC ? `v.[${defC}]` : `v.[${dateC}]`}`);
+      ORDER BY ${locExpr}, ${userIdC ? `LTRIM(RTRIM(v.[${userIdC}])), ` : ''}v.[${dtC}]`);
     const truncated = result.recordset.length > 5000;
     const recordset = truncated ? result.recordset.slice(0, 5000) : result.recordset;
     type Row = { txn: string; remarks: string; time: string; workstation: string };
@@ -3308,8 +3336,9 @@ export async function getTxnLogAction(filters: ReportFilter) {
       let l = locations.get(lc);
       if (!l) { l = { locCode: lc, locName: str('LocDes') || lc, users: new Map() }; locations.set(lc, l); }
       const uid = str('UserID');
+      const un = nameOf(uid, str('UserName'));
       let u = l.users.get(uid);
-      if (!u) { u = { userId: uid, userName: str('UserName') || uid, days: new Map() }; l.users.set(uid, u); }
+      if (!u) { u = { userId: uid, userName: un || uid, days: new Map() }; l.users.set(uid, u); }
       const dkey = str('TxnDate') || 'Unknown date';
       let d = u.days.get(dkey);
       if (!d) { d = { date: dkey, rows: [] }; u.days.set(dkey, d); }
@@ -3585,7 +3614,9 @@ export async function getCashierBreakdownGridAction(filters: ReportFilter) {
 // Performance Report: values and row ordering are read only from the saved snapshot.
 export async function getPerformanceReportAction(filters: ReportFilter) {
   try {
-    const access=await requireWebPermission(await requireSession(),'report-performance-report:VIEW');
+    const sessionPerf=await requireSession();
+    const access=await requireWebPermission(sessionPerf,'report-performance-report:VIEW');
+    await logActivity({actor:sessionPerf,category:'REPORT',action:'REPORT_VIEWED',targetType:'report',targetId:'performance-report',targetName:'performance-report',details:`Report 'performance-report' opened${filters.startDate?` for ${String(filters.startDate).trim()}`:''}.`});
     if(!isDbConfigured()) return {success:false,error:reportSourceError('Database not configured (DB_* env vars missing)')};
     const date=String(filters.startDate ?? '').trim();
     const parsed=new Date(`${date}T00:00:00Z`);
@@ -3619,7 +3650,9 @@ export async function getPerformanceReportAction(filters: ReportFilter) {
 // Invoice Trace — exact invoice and location, independent of the date range.
 export async function getInvoiceTraceAction(invoice: string, location: string) {
   try {
-    const access=await requireWebPermission(await requireSession(), "report-invoice-trace:VIEW");
+    const sessionInv=await requireSession();
+    const access=await requireWebPermission(sessionInv, "report-invoice-trace:VIEW");
+    await logActivity({actor:sessionInv,category:'REPORT',action:'REPORT_VIEWED',targetType:'report',targetId:'invoice-trace',targetName:'invoice-trace',details:`Report 'invoice-trace' opened for invoice ${String(invoice??'').trim().slice(0,40)} at ${String(location??'').trim().slice(0,20)}.`});
     requireWebLocation({locations:access.mainLocations},location);
     if (!isDbConfigured()) return {success:false,error:reportSourceError("Database not configured (DB_* env vars missing)")};
     const bill=String(invoice ?? "").trim(), loc=String(location ?? "").trim();

@@ -5,7 +5,6 @@ import {NextRequest,NextResponse} from 'next/server';
 import {SESSION_COOKIE,verifySessionValue} from '@/lib/auth';
 import {logActivity} from '@/lib/activityLog';
 import {clientIp} from '@/lib/rateLimit';
-import crypto from 'node:crypto';
 
 const ACTIONS:Record<string,string>={VIEW:'REPORT_VIEWED',EXPORT:'REPORT_EXPORTED',PRINT:'REPORT_PRINTED',SHARE:'REPORT_SHARED'};
 const clip=(v:unknown,n:number)=>typeof v==='string'?v.trim().slice(0,n):'';
@@ -21,7 +20,6 @@ export async function POST(req:NextRequest){
  const title=clip(body?.title,200)||'Report';
  const from=clip(body?.from,10),to=clip(body?.to,10);
  await logActivity({actor:session,category:'REPORT',action,targetType:'report',targetId:title,targetName:title,
-  details:`${title}${from&&to?` (${from} to ${to})`:''} — ${kind.toLowerCase()}`,ipAddress:clientIp(req.headers),
-  sessionRef:session.sessionId?crypto.createHash('sha256').update(session.sessionId).digest('hex').slice(0,12):''});
+  details:`${title}${from&&to?` (${from} to ${to})`:''} — ${kind.toLowerCase()}`,ipAddress:clientIp(req.headers)});
  return NextResponse.json({success:true});
 }

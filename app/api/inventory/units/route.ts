@@ -27,7 +27,7 @@ function fail(e: unknown) {
 }
 async function setup(req: NextRequest) { const auth = await authorize(req); if (auth) return { error: auth, kind: null }; const k = kind(req); if (!k) return { error: NextResponse.json({ error: "Invalid unit type." }, { status: 400 }), kind: null }; return { error: null, kind: k }; }
 export async function GET(req: NextRequest) {
-  try { const ctx = await setup(req); if (ctx.error || !ctx.kind) return ctx.error!; const pool = await getPool();
+  try { const ctx = await setup(req); if (ctx.error || !ctx.kind) return ctx.error!; await logActivityForToken(req.cookies.get(ACT_SESSION_COOKIE)?.value,{category:'MASTER_DATA',action:'UNITS_VIEWED',targetType:'unit',targetId:ctx.kind,details:`Unit (${ctx.kind}) list viewed.`}); const pool = await getPool();
     if (ctx.kind === "conversion") {
       const r = await pool.request().query(`SELECT RTRIM(c.MasterUnitID) AS master, RTRIM(c.SubUnitID) AS sub, c.Units AS ratio, c.Enable AS enabled, u.UnitDes AS masterName, s.SubUnitDes AS subName FROM dbo.Tbl_UnitConversion c LEFT JOIN dbo.Tbl_Unit u ON u.UnitID = c.MasterUnitID LEFT JOIN dbo.Tbl_UnitSub s ON s.SubUnitID = c.SubUnitID ORDER BY c.MasterUnitID, c.SubUnitID`);
       return NextResponse.json({ data: r.recordset }, { headers: { "Cache-Control": "no-store" } });

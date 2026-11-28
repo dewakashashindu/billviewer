@@ -11,6 +11,7 @@
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
 import {requireWebPermission} from "@/lib/webAuthorization";
+import { logActivity } from "@/lib/activityLog";
 
 export interface TableLocationRow {
   locCode: string;
@@ -119,7 +120,9 @@ export async function getTablesDataAction(): Promise<{
   error?: string;
 }> {
   try {
-    const access=await requireWebPermission(await requireSession(),"tableqr:VIEW");
+    const session=await requireSession();
+    const access=await requireWebPermission(session,"tableqr:VIEW");
+    await logActivity({actor:session,category:"ORDER",action:"TABLE_QR_VIEWED",targetType:"table-qr",targetId:"tables",details:"Table QR page loaded (table list and locations refreshed)."});
     const allowed=new Set([...access.mainLocations].map(x=>x.toUpperCase()));
 
     if (!isDbConfigured()) {

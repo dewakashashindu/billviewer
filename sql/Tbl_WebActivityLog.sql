@@ -25,3 +25,5 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_WebActivity_At' AND obje
  CREATE INDEX IX_WebActivity_At ON dbo.Tbl_WebActivityLog(ActivityAt DESC);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_WebActivity_User' AND object_id=OBJECT_ID(N'dbo.Tbl_WebActivityLog'))
  CREATE INDEX IX_WebActivity_User ON dbo.Tbl_WebActivityLog(LoginName,ActivityAt DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_WebActivity_SessionRef' AND object_id=OBJECT_ID(N'dbo.Tbl_WebActivityLog'))
+ CREATE INDEX IX_WebActivity_SessionRef ON dbo.Tbl_WebActivityLog(SessionRef,ActivityAt);

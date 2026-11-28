@@ -75,3 +75,5 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_LoginAudit_LoginAt' AND 
  CREATE INDEX IX_LoginAudit_LoginAt ON dbo.Tbl_UserLoginAudit(LoginAt DESC);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_LoginAudit_LoginName' AND object_id=OBJECT_ID(N'dbo.Tbl_UserLoginAudit'))
  CREATE INDEX IX_LoginAudit_LoginName ON dbo.Tbl_UserLoginAudit(LoginName,LoginAt DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_LoginAudit_SessionRef' AND object_id=OBJECT_ID(N'dbo.Tbl_UserLoginAudit'))
+ CREATE INDEX IX_LoginAudit_SessionRef ON dbo.Tbl_UserLoginAudit(SessionRef);

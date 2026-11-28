@@ -5,6 +5,7 @@
 // automatically (once per process start, inside ensure).
 import sql from 'mssql';
 import {getPool} from '@/lib/db';
+import {sessionRefFromSessionId} from '@/lib/auth';
 
 let tableReady:Promise<void>|null=null;
 let lastRetentionRun=0;
@@ -56,13 +57,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_WebActivity_At' AND obje
  CREATE INDEX IX_WebActivity_At ON dbo.Tbl_WebActivityLog(ActivityAt DESC);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_WebActivity_User' AND object_id=OBJECT_ID(N'dbo.Tbl_WebActivityLog'))
  CREATE INDEX IX_WebActivity_User ON dbo.Tbl_WebActivityLog(LoginName,ActivityAt DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_WebActivity_SessionRef' AND object_id=OBJECT_ID(N'dbo.Tbl_WebActivityLog'))
+ CREATE INDEX IX_WebActivity_SessionRef ON dbo.Tbl_WebActivityLog(SessionRef,ActivityAt);
 DELETE FROM dbo.Tbl_WebActivityLog WHERE ActivityAt < @cutoff;`);
   })().catch(e=>{tableReady=null;throw e});
  }
  return tableReady;
 }
 
-export type ActivityActor={userId?:string;loginName?:string;userName?:string};
+export type ActivityActor={userId?:string;loginName?:string;userName?:string;sessionId?:string};
 export type ActivityEntry={
  actor:ActivityActor;category:string;action:string;
  targetType?:string;targetId?:string;targetName?:string;
@@ -76,7 +79,8 @@ export async function logActivity(entry:ActivityEntry):Promise<void>{
   await ensureActivityTable();
   const pool=await getPool();
   void runRetentionIfDue(pool);
-  const req=pool.request();
+ const actorSessionRef=sessionRefFromSessionId(entry.actor?.sessionId);
+ const req=pool.request();
   req.input('at',sql.VarChar(19),colomboNow().text);
   req.input('uid',sql.NVarChar(50),clip(entry.actor.userId,50));
   req.input('ln',sql.NVarChar(100),clip(entry.actor.loginName,100));
@@ -91,7 +95,7 @@ export async function logActivity(entry:ActivityEntry):Promise<void>{
   req.input('bef',sql.NVarChar(1000),clip(entry.beforeValue,1000));
   req.input('aft',sql.NVarChar(1000),clip(entry.afterValue,1000));
   req.input('ip',sql.NVarChar(45),clip(entry.ipAddress,45));
-  req.input('sr',sql.NVarChar(64),clip(entry.sessionRef,64));
+  req.input('sr',sql.NVarChar(64),clip(entry.sessionRef||actorSessionRef,64));
   await req.query(`INSERT INTO dbo.Tbl_WebActivityLog
    (ActivityAt,UserId,LoginName,UserName,LocationCode,Category,Action,TargetType,TargetId,TargetName,Details,BeforeValue,AfterValue,IpAddress,SessionRef)
    VALUES (@at,@uid,@ln,@un,@loc,@cat,@act,@tt,@tid,@tn,@det,@bef,@aft,@ip,@sr)`);

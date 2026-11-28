@@ -3,6 +3,7 @@ import sql from 'mssql';
 import {getPool,isDbConfigured} from '@/lib/db';
 import {SESSION_COOKIE,verifySessionValue} from '@/lib/auth';
 import {requireWebPermission,requireWebLocation,AccessDeniedError} from '@/lib/webAuthorization';
+import {logActivity} from '@/lib/activityLog';
 export const runtime='nodejs';
 const textColumns=['LocCode','TableNo','StewId','ItemCode','ItemDes','KOTBOT','OrderMode','MgrId','CusType','CusId','CusName','NOPax','VOIDREMARKS','CASHERID','KOTBOTNO'] as const;
 const numColumns=['SerialNo','RefNo','Qty','SalesPrice','PrintedQty','ItmCost','TRACENO','BIRTHNO'] as const;
@@ -20,7 +21,8 @@ export async function GET(req:NextRequest){try{
  const escaped=[...access.locations].map(x=>'<i>'+x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</i>').join('');const scope='<l>'+escaped+'</l>';
  const list=await pool.request().input('scope',sql.NVarChar(sql.MAX),scope).query(`SELECT RTRIM(LocCode) AS code, RTRIM(LocDes) AS name FROM dbo.Tbl_LocationMaster WHERE RTRIM(LocCode) IN (SELECT n.v.value('(./text())[1]', 'nvarchar(10)') FROM (SELECT CAST(@scope AS xml) AS x) a CROSS APPLY a.x.nodes('/l/i') n(v)) ORDER BY LocDes,LocCode`);
  const locations=list.recordset.map(r=>({code:asText(r.code),name:asText(r.name)||asText(r.code)}));
- if(!loc)return NextResponse.json({locations,defaultLocation:access.defaultLocation,rows:[],truncated:false},{headers:{'Cache-Control':'no-store'}});
+ const vtoken=req.cookies.get(SESSION_COOKIE)?.value,vsession=vtoken?await verifySessionValue(vtoken):null;
+ if(!loc){await logActivity({actor:vsession??{userId:'',loginName:''},category:'BILLING',action:'VOID_VIEWED',targetType:'void',targetId:'',details:'Void approval screen viewed (location list, no location selected).'});return NextResponse.json({locations,defaultLocation:access.defaultLocation,rows:[],truncated:false},{headers:{'Cache-Control':'no-store'}})}
  requireWebLocation(access,loc);
  const result=await pool.request().input('loc',sql.Char(10),loc).query(`SELECT
   ${textColumns.map(c=>`LTRIM(RTRIM([${c}])) AS [${c}]`).join(',')},
@@ -31,6 +33,7 @@ export async function GET(req:NextRequest){try{
   FROM dbo.Tbl_HoldUps h WHERE LocCode=@loc AND TableNo='ff' 
   ORDER BY TxnDate DESC, TxnTime DESC, SerialNo DESC, ITEMNO DESC`);
  const rows=result.recordset.map(r=>({...r,StewardName:asText(r.StewardName)||asText(r.StewId),CashierName:asText(r.CashierName)||asText(r.CASHERID),VoidApproved:Boolean(r.VoidApproved)}));
+ await logActivity({actor:vsession??{userId:'',loginName:''},category:'BILLING',action:'VOID_VIEWED',targetType:'void',targetId:loc,details:`Void approval list viewed at ${loc}; ${rows.length} void row(s).`,locationCode:loc});
  return NextResponse.json({locations,defaultLocation:access.defaultLocation,rows,truncated:false},{headers:{'Cache-Control':'no-store'}});
 }catch(e){return fail(e)}}
 export async function POST(req:NextRequest){let tx:sql.Transaction|undefined;try{
@@ -51,5 +54,10 @@ export async function POST(req:NextRequest){let tx:sql.Transaction|undefined;try
  const found=await request.query(`SELECT COUNT_BIG(*) AS matches, SUM(CASE WHEN VoidApproved=0 THEN 1 ELSE 0 END) AS pending FROM dbo.Tbl_HoldUps WITH (TABLOCKX,HOLDLOCK) WHERE ${predicate}`);
  if(Number(found.recordset[0].matches)!==1||Number(found.recordset[0].pending)!==1){await tx.rollback();tx=undefined;return NextResponse.json({error:'This row has changed, was already approved, or is not unique. Refresh and review it; no changes were made.'},{status:409})}
  const changed=await request.query(`UPDATE dbo.Tbl_HoldUps SET VoidApproved=1 WHERE ${predicate} AND VoidApproved=0`);
- if(changed.rowsAffected[0]!==1)throw Error('Expected one updated row');await tx.commit();tx=undefined;return NextResponse.json({success:true});
+ if(changed.rowsAffected[0]!==1)throw Error('Expected one updated row');await tx.commit();tx=undefined;
+ const ptoken=req.cookies.get(SESSION_COOKIE)?.value,psession=ptoken?await verifySessionValue(ptoken):null;
+ const qty=Number(row.Qty)||0,price=Number(row.SalesPrice)||0;
+ const snapshot=`Item ${asText(row.ItemCode)} x${qty} @ ${price} | Steward ${asText(row.StewId)} | Cashier ${asText(row.CASHERID)} | Serial ${row.SerialNo??''} | TRACENO ${row.TRACENO??''} | KOTBOTNO ${asText(row.KOTBOTNO)} | Txn ${asText(row.TxnDate)} ${asText(row.TxnTime)} | Remarks: ${asText(row.VOIDREMARKS)}`;
+ await logActivity({actor:psession??{userId:'',loginName:''},category:'BILLING',action:'VOID_APPROVED',targetType:'void',targetId:String(row.SerialNo??''),targetName:`${asText(row.ItemCode)} void approval`,details:`Void approved at ${loc}; ${asText(row.ItemDes)||asText(row.ItemCode)} x${qty}; value ${(qty*price).toFixed(2)}; table ${asText(row.TableNo)}; steward ${asText(row.StewId)}; cashier ${asText(row.CASHERID)}; void remarks: ${asText(row.VOIDREMARKS)||'-'}.`,locationCode:loc,beforeValue:`VoidApproved: false | ${snapshot}`,afterValue:'VoidApproved: true'});
+ return NextResponse.json({success:true});
 }catch(e){if(tx)try{await tx.rollback()}catch{}return fail(e)}}

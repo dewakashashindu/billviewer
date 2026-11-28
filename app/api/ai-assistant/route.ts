@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import sql from 'mssql';
 import {getSessionFromRequest} from '@/lib/session';
+import {logActivity} from '@/lib/activityLog';
 import {requireWebPermission,AccessDeniedError} from '@/lib/webAuthorization';
 import {getAiSalesPool,aiDbConfigured,aiLoginIsReadOnly} from '@/lib/aiSalesDb';
 import {validateAiSql,aiSqlSystemPrompt} from '@/lib/aiSalesSql';
@@ -343,17 +344,20 @@ export async function POST(req:NextRequest){
   if(!modelUnsupported&&result&&typeof result==='object'&&(result as {forecast?:unknown}).forecast===true){
    const fc=validateForecast(result,today);
    if(!fc)return json({error:'I could not prepare that forecast. Try asking for next week or next month net sales.'},400);
+   await logActivity({actor:session,category:'AI',action:'AI_QUERY',targetType:'ai',targetId:'sales-forecast',details:'asked AI, action forecast'});
    return runForecast(fc,question,key);
   }
   if(!plan){
    const invPlan=validateInventoryPlan(result,today);
-   if(invPlan)return runInventory(invPlan,question,key,today);
+   if(invPlan){const pk=invPlan&&typeof invPlan==='object'&&'kind'in invPlan?String((invPlan as {kind?:unknown}).kind):invPlan&&typeof invPlan==='object'&&'metric'in invPlan?String((invPlan as {metric?:unknown}).metric):'inventory';await logActivity({actor:session,category:'AI',action:'AI_QUERY',targetType:'ai',targetId:'inventory',details:`asked AI, action ${pk}`});return runInventory(invPlan,question,key,today)}
    // Fixed templates cannot answer this: optionally fall back to a guarded
    // AI-generated SELECT (read-only-verified login only; see aiSalesSql).
    const fallback=await tryAiSql(question,today,key);
-   if(fallback)return fallback;
-   return json({error:modelUnsupported?'This question is not supported yet. Try a sales measure, or an inventory question such as stock position, items below reorder level, purchases by supplier, open POs, damage, transfers or recipe cost.':'I could not prepare a supported query. Please rephrase your question.'},400);
+   if(fallback){await logActivity({actor:session,category:'AI',action:'AI_QUERY',targetType:'ai',targetId:'guarded-sql',details:'asked AI, action guarded-sql-answer'});return fallback}
+   await logActivity({actor:session,category:'AI',action:'AI_QUERY',targetType:'ai',targetId:'unsupported',details:'asked AI, action unsupported-question'});
+      return json({error:modelUnsupported?'This question is not supported yet. Try a sales measure, or an inventory question such as stock position, items below reorder level, purchases by supplier, open POs, damage, transfers or recipe cost.':'I could not prepare a supported query. Please rephrase your question.'},400);
   }
+  await logActivity({actor:session,category:'AI',action:'AI_QUERY',targetType:'ai',targetId:String(plan.metric??'sales').slice(0,40),details:`asked AI, action sales-${String(plan.metric??'metric').slice(0,40)}`});
   const pool=await getAiSalesPool();
   const labels:Record<string,string>={netSales:'Net sales',grossSales:'Gross sales',grossAfterDiscount:'Gross after discount',discount:'Bill discount',discountPercent:'Discount % of gross',serviceCharge:'Service charge',vat:'VAT',tdl:'TDL',packingCharge:'Packing charges',deliveryCharge:'Delivery charges',salesExTax:'Sales excluding tax',bills:'Bill count',pax:'Guest count (pax)',averageBill:'Average bill value',spendPerPax:'Spend per guest',itemQuantity:'Item quantity sold',itemRevenue:'Item sales value',itemAveragePrice:'Average item price',distinctItems:'Distinct items sold',itemBillCount:'Bills containing item',voidCount:'Void entries (before settlement)',voidQuantity:'Voided quantity (before settlement)',voidValue:'Voided value (before settlement)',paymentAmount:'Payment amount',paymentCount:'Payment transactions',averagePayment:'Average payment transaction',paxPerBill:'Guests per bill',itemsPerBill:'Items per bill',itemCost:'Item cost (recorded)',itemProfit:'Item gross profit (recorded cost)',itemMarginPercent:'Item margin % (recorded cost)'};
   const currencyMetrics=new Set(['netSales','grossSales','grossAfterDiscount','discount','serviceCharge','vat','tdl','packingCharge','deliveryCharge','salesExTax','averageBill','spendPerPax','itemRevenue','itemAveragePrice','voidValue','paymentAmount','averagePayment','itemCost','itemProfit']);

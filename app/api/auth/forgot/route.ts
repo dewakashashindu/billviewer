@@ -11,6 +11,7 @@ import { createOtpToken, generateOtp, OTP_COOKIE } from "@/lib/auth";
 import { sendSms, isSmsConfigured } from "@/lib/sms";
 import { clientIp } from "@/lib/rateLimit";
 import {authLimit,createResetToken} from "@/lib/sqlAuthSecurity";
+import {logActivity} from "@/lib/activityLog";
 
 const HOUR_MS = 60 * 60_000;
 const IP_LIMIT = 12; // per IP, per hour
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
       return uniformResponse();
     }
 
+    await logActivity({actor:{userId:String(user.UserId),loginName:String(user.LoginName),userName:''},category:'SECURITY',action:'OTP_REQUESTED',targetType:'auth',targetId:String(user.UserId),locationCode:String(user.LocCode),details:`Password reset code requested for account "${String(user.LoginName)}"; SMS sent.`});
     const out = uniformResponse();
     out.cookies.set(OTP_COOKIE, otpToken, {
       httpOnly: true,

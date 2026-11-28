@@ -3,6 +3,7 @@ import sql from 'mssql';
 import {getPool} from '@/lib/db';
 import {SESSION_COOKIE,verifySessionValue} from '@/lib/auth';
 import {AccessDeniedError,requireWebPermission} from '@/lib/webAuthorization';
+import {logActivity} from '@/lib/activityLog';
 export const runtime='nodejs';
 const clean=(v:unknown)=>typeof v==='string'?v.trim():'';
 export async function GET(req:NextRequest){
@@ -24,6 +25,7 @@ export async function GET(req:NextRequest){
     ORDER BY r.LocCode,r.MenuItmID,r.MasterUnitID,r.UnitID`);
   const allowed=new Set([...access.locations].map(x=>clean(x).toUpperCase()));
   const lines=result.recordset.filter(r=>allowed.has(clean(r.location).toUpperCase()));
+  await logActivity({actor:user,category:'MASTER_DATA',action:'RECIPE_USAGE_VIEWED',targetType:'finished-recipe',targetId:item,details:`Finished-recipe usage viewed for item ${item} (${lines.length} line(s)).`});
   return NextResponse.json({lines},{headers:{'Cache-Control':'no-store'}});
  } catch(e) {
   if(!(e instanceof AccessDeniedError))console.error('Finished recipe lookup:',e);

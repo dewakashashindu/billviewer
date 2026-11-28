@@ -87,7 +87,9 @@ ALTER TABLE dbo.Tbl_UserLoginAudit ALTER COLUMN GeoSource NVARCHAR(50) NOT NULL;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_LoginAudit_LoginAt' AND object_id=OBJECT_ID(N'dbo.Tbl_UserLoginAudit'))
  CREATE INDEX IX_LoginAudit_LoginAt ON dbo.Tbl_UserLoginAudit(LoginAt DESC);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_LoginAudit_LoginName' AND object_id=OBJECT_ID(N'dbo.Tbl_UserLoginAudit'))
- CREATE INDEX IX_LoginAudit_LoginName ON dbo.Tbl_UserLoginAudit(LoginName,LoginAt DESC);`);
+ CREATE INDEX IX_LoginAudit_LoginName ON dbo.Tbl_UserLoginAudit(LoginName,LoginAt DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_LoginAudit_SessionRef' AND object_id=OBJECT_ID(N'dbo.Tbl_UserLoginAudit'))
+ CREATE INDEX IX_LoginAudit_SessionRef ON dbo.Tbl_UserLoginAudit(SessionRef);`);
   })().catch(e=>{tableReady=null;throw e});
  }
  return tableReady;

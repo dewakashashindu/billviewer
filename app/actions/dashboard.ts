@@ -11,6 +11,7 @@
 import { getPool, isDbConfigured } from "@/lib/db";
 import { requireSession, actionError } from "@/lib/actionAuth";
 import { requireWebPermission } from "@/lib/webAuthorization";
+import { logActivity } from "@/lib/activityLog";
 
 export interface PerfLocationOption {
   locCode: string;
@@ -385,7 +386,9 @@ export async function getDashboardPerformanceAction(): Promise<{
   error?: string;
 }> {
   try {
-    const access = await requireWebPermission(await requireSession(), "dashboard:VIEW");
+    const session = await requireSession();
+    const access = await requireWebPermission(session, "dashboard:VIEW");
+    await logActivity({ actor: session, category: "DASHBOARD", action: "DASHBOARD_PERFORMANCE_VIEWED", targetType: "dashboard", targetId: "performance", details: "Dashboard performance view loaded." });
     const allowed = new Set([...access.locations].map(x => x.trim().toUpperCase()));
 
     if (!isDbConfigured()) {
